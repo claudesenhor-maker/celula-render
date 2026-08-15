@@ -1,0 +1,25 @@
+{
+  "fila_id": "00000000-0000-4000-8000-000000000001",
+  "vozes": {
+    "protagonista": {"voice": "pt-BR-FabioNeural",   "rate": "+10%", "pitch": "+12Hz"},
+    "secundario":   {"voice": "pt-BR-AntonioNeural", "rate": "+4%",  "pitch": "-18Hz"}
+  },
+  "loudnorm": "loudnorm=I=-9:LRA=8:TP=-1.5",
+  "musica_url": null,
+  "musica_db": -24,
+  "trechos": [
+    {"fala": "Falei pro meu chefe que hoje eu ia chegar cedo.",
+     "perfil_voz": "protagonista", "pose": "parado_falando",
+     "pose_saida": "bracos_abertos", "expressao": "neutro", "cenario": "sala"},
+    {"fala": "Cheguei. Sete e cinquenta e nove da manha.",
+     "perfil_voz": "protagonista", "pose": "bracos_abertos",
+     "pose_saida": "maos_na_cintura", "expressao": "sorrindo", "cenario": "sala"},
+    {"fala": "Ele olhou pro relogio e falou: a reuniao foi ontem.",
+     "perfil_voz": "secundario", "pose": "maos_na_cintura",
+     "pose_saida": "pensando", "expressao": "duvida", "cenario": "mesa",
+     "quem": "ab", "pose_b": "apontando", "expressao_b": "bravo"},
+    {"fala": "Eu cheguei cedo. Vinte e quatro horas cedo.",
+     "perfil_voz": "protagonista", "pose": "pensando",
+     "pose_saida": "maos_na_cabeca", "expressao": "surpreso", "cenario": "mesa"}
+  ]
+}
