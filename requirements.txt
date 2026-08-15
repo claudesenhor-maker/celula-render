@@ -1,0 +1,9 @@
+# Dependencias do render node.
+#
+# Este arquivo tambem existe para o cache do setup-python funcionar: sem ele,
+# 'cache: pip' falha com "No file matched to **/requirements.txt".
+#
+# cairosvg precisa do libcairo2 do sistema, instalado via apt no render.yml.
+requests>=2.31
+cairosvg>=2.7
+edge-tts>=6.1
