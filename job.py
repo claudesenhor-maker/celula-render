@@ -25,12 +25,20 @@ BUCKET = os.environ.get("SUPABASE_BUCKET", "toonzueira")
 
 
 def subir(local, remoto, mime="video/mp4"):
-    r = requests.post(f"{SB}/storage/v1/object/{BUCKET}/{remoto}",
-                      data=Path(local).read_bytes(),
-                      headers={"Authorization": f"Bearer {KEY}",
-                               "Content-Type": mime, "x-upsert": "true"},
-                      timeout=300)
-    r.raise_for_status()
+    dados = Path(local).read_bytes()
+    # PUT com x-upsert e o caminho que sobrescreve. POST devolve 400/409
+    # quando o objeto ja existe, e reprocessar o mesmo fila_id e comum.
+    r = requests.put(f"{SB}/storage/v1/object/{BUCKET}/{remoto}",
+                     data=dados,
+                     headers={"apikey": KEY, "Authorization": f"Bearer {KEY}",
+                              "Content-Type": mime, "x-upsert": "true"},
+                     timeout=300)
+    if r.status_code >= 400:
+        # sem o corpo da resposta, um 400 do Storage nao diz nada: pode ser
+        # chave errada, bucket inexistente ou nome de objeto invalido
+        print(f"[upload] {r.status_code} em {remoto}: {r.text[:400]}")
+        r.raise_for_status()
+    print(f"[upload] {r.status_code}  {len(dados)/1e6:.2f} MB")
     return f"{SB}/storage/v1/object/public/{BUCKET}/{remoto}"
 
 
