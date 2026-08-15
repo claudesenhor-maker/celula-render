@@ -1,0 +1,66 @@
+name: render-palito
+
+# Disparado pelo n8n via repository_dispatch.
+# Repositorio PUBLICO = minutos ilimitados e gratuitos.
+on:
+  repository_dispatch:
+    types: [render]
+  workflow_dispatch:
+    inputs:
+      spec_url:     { description: 'URL do spec.json', required: true }
+      callback_url: { description: 'Webhook do n8n',   required: false }
+      modo_tts:     { description: 'real ou demo',     required: false, default: 'real' }
+
+jobs:
+  render:
+    runs-on: ubuntu-latest
+    # MENOR que o timeout do Wait no n8n (20 min): assim o job morre e
+    # chama o callback de erro ANTES de o n8n desistir sozinho.
+    timeout-minutes: 18
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+
+      - name: Dependencias do sistema
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq ffmpeg libcairo2
+
+      - name: Dependencias Python
+        run: pip install --quiet requests cairosvg edge-tts
+
+      - name: Render
+        env:
+          SUPABASE_URL:         ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
+          SUPABASE_BUCKET:      toonzueira
+          SPEC_URL:     ${{ github.event.client_payload.spec_url     || inputs.spec_url }}
+          CALLBACK_URL: ${{ github.event.client_payload.callback_url || inputs.callback_url }}
+          MODO_TTS:     ${{ github.event.client_payload.modo_tts     || inputs.modo_tts || 'real' }}
+          FILA_ID:      ${{ github.event.client_payload.fila_id }}
+        run: python job.py
+
+      - name: Guardar o MP4 como artefato (util para depurar)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: video
+          path: /tmp/final.mp4
+          if-no-files-found: ignore
+          retention-days: 3
+
+      - name: Avisar o n8n se o job falhou
+        # Sem isto, uma falha aqui deixa o Wait pendurado e o item preso — o
+        # mesmo bug de "item preso" do §6 do HANDOFF.
+        if: failure()
+        env:
+          CALLBACK_URL: ${{ github.event.client_payload.callback_url || inputs.callback_url }}
+        run: |
+          if [ -n "$CALLBACK_URL" ]; then
+            curl -s -X POST "$CALLBACK_URL" -H 'Content-Type: application/json' \
+              -d "{\"status\":\"erro\",\"erro_msg\":\"job ${{ github.run_id }} falhou\",\"fila_id\":\"${{ github.event.client_payload.fila_id }}\"}" || true
+          fi
