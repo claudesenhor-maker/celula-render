@@ -38,21 +38,69 @@ SR = 24000
 # =====================================================================
 # 1. VOZ  — a etapa que define a timeline
 # =====================================================================
-async def _edge(texto, cfg, out_mp3):
+_VOZES = None          # cache do catalogo real, buscado uma vez por processo
+
+
+async def _catalogo_vozes():
+    """Vozes que o servico REALMENTE oferece hoje.
+
+    A Microsoft corta vozes do Edge sem aviso. Pedir uma que nao existe nao
+    devolve erro: devolve um stream vazio, e o edge-tts levanta
+    NoAudioReceived("verifique seus parametros") - mensagem que nao ajuda em
+    nada. Foi assim que o primeiro render no GitHub morreu, pedindo
+    pt-BR-FabioNeural."""
+    global _VOZES
+    if _VOZES is None:
+        import edge_tts
+        _VOZES = {v["ShortName"] for v in await edge_tts.list_voices()}
+    return _VOZES
+
+
+async def _resolver_voz(desejada):
+    disp = await _catalogo_vozes()
+    if desejada in disp:
+        return desejada
+    # preferencia: as duas pt-BR que existem desde sempre; depois qualquer pt-BR
+    for alt in ("pt-BR-AntonioNeural", "pt-BR-FranciscaNeural"):
+        if alt in disp:
+            print(f"[voz] {desejada} indisponivel -> usando {alt}")
+            return alt
+    ptbr = sorted(v for v in disp if v.startswith("pt-BR"))
+    if ptbr:
+        print(f"[voz] {desejada} indisponivel -> usando {ptbr[0]}")
+        return ptbr[0]
+    raise RuntimeError("nenhuma voz pt-BR disponivel no servico")
+
+
+async def _edge(texto, cfg, out_mp3, tentativas=3):
     import edge_tts
-    c = edge_tts.Communicate(texto, cfg.get("voice", "pt-BR-AntonioNeural"),
-                             rate=cfg.get("rate", "+0%"), pitch=cfg.get("pitch", "+0Hz"))
-    marcas, dur = [], 0.0
-    with open(out_mp3, "wb") as f:
-        async for ch in c.stream():
-            if ch["type"] == "audio":
-                f.write(ch["data"])
-            elif ch["type"] == "WordBoundary":
-                ini = ch["offset"] / 1e7
-                fim = ini + ch["duration"] / 1e7
-                marcas.append({"palavra": ch["text"], "inicio_s": ini, "fim_s": fim})
-                dur = max(dur, fim)
-    return marcas, dur
+    voz = await _resolver_voz(cfg.get("voice", "pt-BR-AntonioNeural"))
+    ultimo = None
+    for n in range(tentativas):
+        marcas, dur, bytes_audio = [], 0.0, 0
+        try:
+            c = edge_tts.Communicate(texto, voz,
+                                     rate=cfg.get("rate", "+0%"),
+                                     pitch=cfg.get("pitch", "+0Hz"))
+            with open(out_mp3, "wb") as f:
+                async for ch in c.stream():
+                    if ch["type"] == "audio":
+                        f.write(ch["data"]); bytes_audio += len(ch["data"])
+                    elif ch["type"] == "WordBoundary":
+                        i0 = ch["offset"] / 1e7
+                        i1 = i0 + ch["duration"] / 1e7
+                        marcas.append({"palavra": ch["text"], "inicio_s": i0, "fim_s": i1})
+                        dur = max(dur, i1)
+            if bytes_audio > 0:
+                return marcas, dur
+            ultimo = "stream vazio"
+        except Exception as e:
+            ultimo = str(e)
+        # o servico tambem falha por instabilidade; esperar e tentar de novo
+        # resolve boa parte dos casos e custa segundos, nao um job inteiro
+        print(f"[voz] tentativa {n+1}/{tentativas} falhou ({ultimo})")
+        await asyncio.sleep(2 * (n + 1))
+    raise RuntimeError(f"TTS falhou em {tentativas} tentativas com {voz}: {ultimo}")
 
 
 def _demo(texto, cfg, out_wav):
