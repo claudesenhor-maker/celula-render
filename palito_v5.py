@@ -139,10 +139,56 @@ def _duracao_wav(caminho):
         return w.getnframes() / float(w.getframerate())
 
 
+def _eleven(texto, cfg, out_mp3):
+    """ElevenLabs. So entra se ELEVEN_API_KEY existir no ambiente.
+
+    Por que opcional e nao padrao: o Edge-TTS ja funciona e e gratis. Mas ele
+    e o servico de leitura do navegador Edge, nao uma API publica -- os termos
+    da Microsoft nao autorizam este uso. Antes de monetizar, precisa sair.
+
+    No volume de 90 videos/mes (~36 mil caracteres) o Multilingual v2 sai por
+    ~US$ 3,50/mes. E o maior ganho de qualidade percebida por dolar de toda a
+    stack, e com folga."""
+    import urllib.request
+    chave = os.environ["ELEVEN_API_KEY"]
+    voz = cfg.get("eleven_voice_id") or os.environ.get("ELEVEN_VOICE_ID")
+    if not voz:
+        raise RuntimeError("defina ELEVEN_VOICE_ID ou eleven_voice_id no perfil de voz")
+    corpo = json.dumps({
+        "text": texto,
+        "model_id": cfg.get("eleven_model", os.environ.get(
+            "ELEVEN_MODEL", "eleven_multilingual_v2")),
+        "voice_settings": {
+            "stability": cfg.get("stability", 0.45),
+            "similarity_boost": cfg.get("similarity", 0.8),
+            "style": cfg.get("style", 0.35),
+            "use_speaker_boost": True,
+        },
+    }).encode()
+    req = urllib.request.Request(
+        f"https://api.elevenlabs.io/v1/text-to-speech/{voz}",
+        data=corpo, method="POST",
+        headers={"xi-api-key": chave, "Content-Type": "application/json",
+                 "Accept": "audio/mpeg"})
+    with urllib.request.urlopen(req, timeout=120) as r:
+        audio = r.read()
+    if not audio:
+        raise RuntimeError("ElevenLabs devolveu audio vazio")
+    with open(out_mp3, "wb") as f:
+        f.write(audio)
+    # sem marcas de palavra: a duracao sai do arquivo, como no edge
+    return []
+
 def sintetizar(texto, cfg, destino, modo):
     if modo == "real":
         mp3 = destino + ".mp3"
-        marcas, _ = asyncio.run(_edge(texto, cfg, mp3))
+        # OPT-IN: so troca de motor se a chave existir. Sem ela, segue no
+        # Edge-TTS -- que ja funciona. Ninguem quer descobrir num domingo que
+        # a producao parou porque o motor de voz mudou sozinho.
+        if os.environ.get("ELEVEN_API_KEY"):
+            marcas = _eleven(texto, cfg, mp3)
+        else:
+            marcas, _ = asyncio.run(_edge(texto, cfg, mp3))
         subprocess.run(["ffmpeg", "-y", "-v", "error", "-i", mp3,
                         "-ar", str(SR), "-ac", "1", destino], check=True)
         # A duracao vem do ARQUIVO, nao das marcas de palavra.
