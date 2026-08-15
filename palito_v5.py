@@ -134,12 +134,24 @@ def _demo(texto, cfg, out_wav):
     return marcas, t
 
 
+def _duracao_wav(caminho):
+    with wave.open(caminho) as w:
+        return w.getnframes() / float(w.getframerate())
+
+
 def sintetizar(texto, cfg, destino, modo):
     if modo == "real":
         mp3 = destino + ".mp3"
-        marcas, dur = asyncio.run(_edge(texto, cfg, mp3))
+        marcas, _ = asyncio.run(_edge(texto, cfg, mp3))
         subprocess.run(["ffmpeg", "-y", "-v", "error", "-i", mp3,
                         "-ar", str(SR), "-ac", "1", destino], check=True)
+        # A duracao vem do ARQUIVO, nao das marcas de palavra.
+        # As marcas sao opcionais: o edge-tts as vezes devolve audio sem
+        # nenhum WordBoundary, e ai a timeline saia zerada -- foi o que
+        # produziu um video de 1,7s no lugar de 20s. O arquivo nunca mente.
+        dur = _duracao_wav(destino)
+        if dur <= 0.05:
+            raise RuntimeError(f"TTS devolveu audio vazio para: {texto[:40]!r}")
         return marcas, dur
     return _demo(texto, cfg, destino)
 
