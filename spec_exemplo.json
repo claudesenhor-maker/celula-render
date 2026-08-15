@@ -1,8 +1,9 @@
 {
   "fila_id": "00000000-0000-4000-8000-000000000001",
   "vozes": {
-    "protagonista": {"voice": "pt-BR-FabioNeural",   "rate": "+10%", "pitch": "+12Hz"},
-    "secundario":   {"voice": "pt-BR-AntonioNeural", "rate": "+4%",  "pitch": "-18Hz"}
+    "protagonista": {"voice": "pt-BR-AntonioNeural",   "rate": "+12%", "pitch": "+18Hz"},
+    "secundario":   {"voice": "pt-BR-AntonioNeural",   "rate": "+0%",  "pitch": "-22Hz"},
+    "narrador":     {"voice": "pt-BR-FranciscaNeural", "rate": "+8%",  "pitch": "+0Hz"}
   },
   "loudnorm": "loudnorm=I=-9:LRA=8:TP=-1.5",
   "musica_url": null,
