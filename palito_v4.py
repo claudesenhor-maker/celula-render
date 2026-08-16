@@ -286,10 +286,17 @@ def cenario(fr, tipo="sala"):
     return "".join(o)
 
 
-def frame_svg(rigs, fr, cen="sala"):
+def frame_svg(rigs, fr, cen="sala", fundo_raster=False):
+    """fundo_raster=True omite o cenario desenhado por codigo.
+
+    Serve para quando existe uma imagem de fundo de verdade (gerada por IA)
+    a ser composta por baixo: o SVG sai com alfa transparente e o palito_v5
+    o cola sobre o PNG. Sem isto, o retangulo de cor solida cobriria a
+    imagem inteira."""
     corpos = "".join(personagem(r, fr, cam, i) for i, (r, cam) in enumerate(rigs))
+    fundo = "" if fundo_raster else cenario(fr, cen)
     return (f'<svg xmlns="http://www.w3.org/2000/svg" width="{W}" height="{H}" '
-            f'viewBox="0 0 {W} {H}">{cenario(fr, cen)}{corpos}</svg>')
+            f'viewBox="0 0 {W} {H}">{fundo}{corpos}</svg>')
 
 
 # =====================================================================
