@@ -79,7 +79,20 @@ def avisar(payload):
 
 def main():
     t0 = time.time()
-    spec = requests.get(os.environ["SPEC_URL"], timeout=60).json()
+    # O spec pode chegar de duas formas:
+    #   SPEC_JSON  - embutido no client_payload do repository_dispatch
+    #   SPEC_URL   - baixado de uma URL publica (Storage)
+    # O inline e o preferido: o spec tem ~2 KB e cabe no payload, o que
+    # elimina o upload no Storage -- uma etapa a menos para falhar. O
+    # Storage exige apikey E Authorization juntos, e a credencial Header
+    # Auth do n8n so manda um header.
+    bruto = os.environ.get("SPEC_JSON", "").strip()
+    if bruto:
+        spec = json.loads(bruto)
+        print("[spec] inline, {} bytes".format(len(bruto)))
+    else:
+        spec = requests.get(os.environ["SPEC_URL"], timeout=60).json()
+        print("[spec] baixado de SPEC_URL")
     fila_id = spec.get("fila_id", "sem-id")
     print(f"[job] fila_id={fila_id}  trechos={len(spec['trechos'])}")
 
