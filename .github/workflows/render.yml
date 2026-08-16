@@ -42,6 +42,12 @@ jobs:
           CALLBACK_URL: ${{ github.event.client_payload.callback_url || inputs.callback_url }}
           MODO_TTS:     ${{ github.event.client_payload.modo_tts     || inputs.modo_tts || 'real' }}
           FILA_ID:      ${{ github.event.client_payload.fila_id }}
+          # Voz: opt-in. Sem ELEVEN_API_KEY o render segue no Edge-TTS.
+          # O Voice ID NAO fica aqui: vem do identidade_json do canal, porque
+          # nao e segredo e muda por canal. Este e so a rede de seguranca
+          # para quando a identidade nao trouxer nenhum.
+          ELEVEN_API_KEY:  ${{ secrets.ELEVEN_API_KEY }}
+          ELEVEN_VOICE_ID: ${{ secrets.ELEVEN_VOICE_ID }}
         run: python job.py
 
       - name: Guardar o MP4 como artefato (util para depurar)
