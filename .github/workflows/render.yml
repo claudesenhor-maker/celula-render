@@ -7,7 +7,7 @@ on:
     types: [render]
   workflow_dispatch:
     inputs:
-      spec_url:     { description: 'URL do spec.json', required: true }
+      spec_url:     { description: 'URL do spec.json (ou use o payload inline)', required: false }
       callback_url: { description: 'Webhook do n8n',   required: false }
       modo_tts:     { description: 'real ou demo',     required: false, default: 'real' }
 
@@ -39,6 +39,10 @@ jobs:
           SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
           SUPABASE_BUCKET:      toonzueira
           SPEC_URL:     ${{ github.event.client_payload.spec_url     || inputs.spec_url }}
+          # Spec embutido no repository_dispatch. Preferido: ~2 KB cabem no
+          # payload e some a etapa de upload no Storage. toJSON preserva o
+          # objeto como string JSON valida.
+          SPEC_JSON:    ${{ toJSON(github.event.client_payload.spec) }}
           CALLBACK_URL: ${{ github.event.client_payload.callback_url || inputs.callback_url }}
           MODO_TTS:     ${{ github.event.client_payload.modo_tts     || inputs.modo_tts || 'real' }}
           FILA_ID:      ${{ github.event.client_payload.fila_id }}
