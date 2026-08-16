@@ -255,6 +255,25 @@ def render_spec(spec, saida, modo="demo", tmpdir=None):
                     "-i", lista, "-ar", str(SR), "-ac", "1", voz], check=True)
     env = envelope(voz)
 
+    # ---- 3.3 fundos gerados por IA (opcional) -------------------------
+    # spec["fundos"] = {"sala": "https://.../sala.png", "mesa": "..."}
+    # Baixados UMA vez por cenario e reutilizados em todos os frames: um
+    # cenario e ativo permanente do canal, nao custo por video. Sem esta
+    # chave, o rig desenha o fundo por codigo, como antes.
+    fundos = {}
+    for nome, url in (spec.get("fundos") or {}).items():
+        try:
+            import urllib.request
+            from PIL import Image
+            tmp_bg = os.path.join(tmp, f"bg_{nome}.png")
+            urllib.request.urlretrieve(url, tmp_bg)
+            fundos[nome] = (Image.open(tmp_bg).convert("RGBA")
+                            .resize((OUT_W, OUT_H), Image.LANCZOS))
+            print(f"[fundo] {nome}: {url[:60]}")
+        except Exception as e:
+            # fundo e melhoria, nao requisito: falhar aqui nao pode custar o video
+            print(f"[fundo] {nome} falhou ({e}); usando o cenario do rig")
+
     # ---- 3.3 frames, com a boca seguindo o áudio ----------------------
     n = 0
     for tr in spec["trechos"]:
@@ -273,9 +292,25 @@ def render_spec(spec, saida, modo="demo", tmpdir=None):
             rig["boca"] = 0.10 + 0.62 * (env[n] if n < len(env) else 0.0)   # <<< áudio real
             rig["quadril"] = [rig["quadril"][0], rig["quadril"][1] + math.sin(f * 0.13) * 6]
             rigs = [(rig, "#5A6B7A")] + ([(dict(sec), "#8C5F52")] if dois else [])
-            cairosvg.svg2png(bytestring=frame_svg(rigs, fh // 2, tr.get("cenario", "sala")).encode(),
-                             write_to=os.path.join(fd, f"{n:05d}.png"),
-                             output_width=OUT_W, output_height=OUT_H)
+            cen = tr.get("cenario", "sala")
+            bg = fundos.get(cen)
+            destino = os.path.join(fd, f"{n:05d}.png")
+            svg = frame_svg(rigs, fh // 2, cen, fundo_raster=bg is not None).encode()
+            if bg is None:
+                cairosvg.svg2png(bytestring=svg, write_to=destino,
+                                 output_width=OUT_W, output_height=OUT_H)
+            else:
+                # SVG sai transparente e e colado SOBRE a imagem de fundo.
+                # Compor no PIL em vez de embutir <image> no SVG: o cairosvg
+                # degrada raster embutido (banding no ceu e em gradientes),
+                # e aqui o fundo passa intacto.
+                from io import BytesIO
+                from PIL import Image
+                png = cairosvg.svg2png(bytestring=svg, output_width=OUT_W,
+                                       output_height=OUT_H)
+                quadro = bg.copy()
+                quadro.alpha_composite(Image.open(BytesIO(png)).convert("RGBA"))
+                quadro.convert("RGB").save(destino)
             n += 1
     print(f"[rig] {n} frames ({n/FPS:.1f}s)")
 
