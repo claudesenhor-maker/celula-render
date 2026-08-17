@@ -79,20 +79,7 @@ def avisar(payload):
 
 def main():
     t0 = time.time()
-    # O spec pode chegar de duas formas:
-    #   SPEC_JSON  - embutido no client_payload do repository_dispatch
-    #   SPEC_URL   - baixado de uma URL publica (Storage)
-    # O inline e o preferido: o spec tem ~2 KB e cabe no payload, o que
-    # elimina o upload no Storage -- uma etapa a menos para falhar. O
-    # Storage exige apikey E Authorization juntos, e a credencial Header
-    # Auth do n8n so manda um header.
-    bruto = os.environ.get("SPEC_JSON", "").strip()
-    if bruto:
-        spec = json.loads(bruto)
-        print("[spec] inline, {} bytes".format(len(bruto)))
-    else:
-        spec = requests.get(os.environ["SPEC_URL"], timeout=60).json()
-        print("[spec] baixado de SPEC_URL")
+    spec = requests.get(os.environ["SPEC_URL"], timeout=60).json()
     fila_id = spec.get("fila_id", "sem-id")
     print(f"[job] fila_id={fila_id}  trechos={len(spec['trechos'])}")
 
@@ -103,9 +90,39 @@ def main():
         spec["musica"] = m
 
     out = "/tmp/final.mp4"
-    # modo 'real' = Edge-TTS. O runner do GitHub tem rede.
-    _, dur = render_spec(spec, out, modo=os.environ.get("MODO_TTS", "real"),
-                         tmpdir="/tmp/render")
+
+    # ---- ESCOLHA DO MOTOR --------------------------------------------
+    # Se existir arte do personagem (um .zip com os PNG das pecas), roda o
+    # CUT-OUT: pecas desenhadas de verdade, giradas e compostas pelo rig.
+    # Sem arte, cai no rig VETORIAL, que desenha tudo por codigo.
+    #
+    # O vetor resolve consistencia, mas nao resolve: personagem sem chao,
+    # traco oscilando, ausencia de partes moveis. O cut-out resolve os tres
+    # -- e por isso ele e o alvo. O vetor fica como rede de seguranca para
+    # o dia em que a arte faltar; melhor video feio que producao parada.
+    pecas_url = spec.get("personagem_url") or os.environ.get("PERSONAGEM_URL", "")
+    motor = "vetor"
+    if pecas_url:
+        try:
+            import zipfile, io
+            pasta = "/tmp/personagem"
+            os.makedirs(pasta, exist_ok=True)
+            dados = requests.get(pecas_url, timeout=120).content
+            zipfile.ZipFile(io.BytesIO(dados)).extractall(pasta)
+            if not os.path.exists(os.path.join(pasta, "partes.json")):
+                raise RuntimeError("o zip nao tem partes.json na raiz")
+            from palito_cutout import render as render_cutout
+            print(f"[motor] cut-out ({len(dados)/1024:.0f} KB de arte)")
+            motor = "cutout"
+            _, dur = render_cutout(pasta, spec, out, tmpdir="/tmp/render")
+        except Exception as e:
+            print(f"[motor] cut-out falhou ({e}); caindo para o rig vetorial")
+            motor = "vetor"
+    if motor == "vetor":
+        print("[motor] rig vetorial")
+        # modo 'real' = Edge-TTS. O runner do GitHub tem rede.
+        _, dur = render_spec(spec, out, modo=os.environ.get("MODO_TTS", "real"),
+                             tmpdir="/tmp/render")
 
     # guarda de duração: 15-25s é o alvo do formato
     if not (12.0 <= dur <= 30.0):

@@ -7,3 +7,6 @@
 requests>=2.31
 cairosvg>=2.7
 edge-tts>=6.1
+# Pillow: composicao do cut-out (girar e colar as pecas do personagem)
+# e a montagem do fundo gerado por IA sob o SVG.
+Pillow>=10.0
