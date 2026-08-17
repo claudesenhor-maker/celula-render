@@ -1,0 +1,46 @@
+name: preparar-assets
+
+# Recorta o fundo das pecas geradas pela Cloudflare e grava a versao com
+# alfa em assets/. Roda aqui e nao na VM porque o rembg carrega um modelo
+# em memoria — a VM tem 892 MB e o n8n precisa deles.
+on:
+  workflow_dispatch:
+    inputs:
+      tudo: { description: 'refazer tudo (sim/nao)', required: false, default: 'nao' }
+  repository_dispatch:
+    types: [assets]
+
+jobs:
+  preparar:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+
+      - name: Dependencias
+        run: pip install --quiet rembg onnxruntime pillow requests
+
+      # O modelo do rembg baixa na primeira execucao. Guardar em cache
+      # economiza ~30s e evita depender do servidor deles a cada rodada.
+      - name: Cache do modelo rembg
+        uses: actions/cache@v4
+        with:
+          path: ~/.u2net
+          key: rembg-u2netp-v1
+
+      - name: Recortar
+        env:
+          SUPABASE_URL:         ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
+          SUPABASE_BUCKET:      toonzueira
+        run: |
+          if [ "${{ github.event.inputs.tudo }}" = "sim" ]; then
+            python preparar_assets.py --tudo
+          else
+            python preparar_assets.py
+          fi
