@@ -79,7 +79,11 @@ def avisar(payload):
 
 def main():
     t0 = time.time()
-    spec = requests.get(os.environ["SPEC_URL"], timeout=60).json()
+    spec_json = os.environ.get("SPEC_JSON")
+    if spec_json:
+        spec = json.loads(spec_json)
+    else:
+        spec = requests.get(os.environ["SPEC_URL"], timeout=60).json()
     fila_id = spec.get("fila_id", "sem-id")
     print(f"[job] fila_id={fila_id}  trechos={len(spec['trechos'])}")
 
