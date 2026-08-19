@@ -45,7 +45,7 @@ Uso:
 Variaveis de ambiente:
     SUPABASE_URL, SUPABASE_SERVICE_KEY, SUPABASE_BUCKET (padrao: toonzueira)
 """
-import argparse, io, json, os, sys
+import argparse, io, json, os, sys, zipfile
 import numpy as np
 import requests
 
@@ -238,10 +238,23 @@ def gerar_partes_json(prefixo_personagem):
         "pivos": {k: [round(v[0], 1), round(v[1], 1)] for k, v in pivos.items()},
         "comprimentos": {k: round(v, 1) for k, v in comp.items()},
     }
-    subir(prefixo_personagem + "partes.json",
-          json.dumps(cfg, ensure_ascii=False, indent=2).encode("utf-8"),
-          mime="application/json")
+    partes_json_bytes = json.dumps(cfg, ensure_ascii=False, indent=2).encode("utf-8")
+    subir(prefixo_personagem + "partes.json", partes_json_bytes, mime="application/json")
     print(f"[partes.json] {prefixo_personagem}: {len(imagens)} pecas medidas e salvas")
+
+    # job.py (SELECAO DO MOTOR) so liga o cut-out se receber spec.personagem_url
+    # apontando para um .zip com partes.json + os PNG das pecas na RAIZ do
+    # arquivo. Empacota aqui, na mesma passada, para o zip nunca ficar
+    # desatualizado em relacao ao partes.json que acabou de subir.
+    buf_zip = io.BytesIO()
+    with zipfile.ZipFile(buf_zip, "w", zipfile.ZIP_DEFLATED) as zf:
+        zf.writestr("partes.json", partes_json_bytes)
+        for nome, img in imagens.items():
+            buf_png = io.BytesIO()
+            img.save(buf_png, "PNG", optimize=True)
+            zf.writestr(f"{nome}.png", buf_png.getvalue())
+    subir(prefixo_personagem + "personagem.zip", buf_zip.getvalue(), mime="application/zip")
+    print(f"[personagem.zip] {prefixo_personagem}: {len(imagens)} pecas empacotadas")
     return True
 
 
