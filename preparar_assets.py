@@ -21,10 +21,24 @@ POR QUE ESTA ETAPA EXISTE
     gerador intercambiavel -- trocar a Cloudflare por outro provedor nao
     mexe em nada deste arquivo.
 
+COMO AS PECAS NASCEM (mudou em 20/08)
+    Antes: uma geracao por peca, 13 no total. Falhou nas 13 -- voltaram
+    13 desenhos de um HOMEM INTEIRO, e o rig empilhou sete homens. Ver
+    folha_personagem.py para o diagnostico completo.
+
+    Agora: o gerador desenha UMA folha do personagem inteiro em pose T,
+    e o recorte das partes acontece aqui, por geometria. O modelo faz o
+    que sabe fazer; a anatomia vira problema nosso. De quebra, cor de
+    pele, roupa e traco ficam iguais entre as pecas porque saem todas da
+    MESMA imagem.
+
 O QUE FAZ
     1. lista assets_bruto/ no Storage (JPEG com fundo branco)
     2. roda rembg em cada um
     3. grava o PNG com alfa em assets/, que e de onde o cut-out le
+    3b. para cada folha em assets/folha_personagem/<chave>/, valida a
+       pose, fatia nas 6 pecas do corpo (+ as de rosto, se houver tira)
+       e grava tudo em assets/parte_personagem/<chave>/
     4. para cada personagem com os 6 ossos essenciais prontos (cabeca,
        tronco, braco_sup, braco_inf, perna_sup, perna_inf), calcula o
        pivo e o comprimento de cada peca por geometria (PCA no alfa para
@@ -48,6 +62,9 @@ Variaveis de ambiente:
 import argparse, io, json, os, sys, zipfile
 import numpy as np
 import requests
+
+from folha_personagem import (ESPEC_ROSTO, PARTES_ESSENCIAIS, fatiar_corpo,
+                              fatiar_rosto, validar_folha_corpo)
 
 SB = os.environ["SUPABASE_URL"].rstrip("/")
 KEY = os.environ["SUPABASE_SERVICE_KEY"]
@@ -285,6 +302,65 @@ def gerar_pontos_json(prefixo):
     return True
 
 
+def _salvar_peca(prefixo, nome, img):
+    buf = io.BytesIO()
+    img.save(buf, "PNG", optimize=True)
+    subir(f"{prefixo}{nome}.png", buf.getvalue())
+
+
+def fatiar_folha(chave):
+    """assets/folha_personagem/<chave>/ -> assets/parte_personagem/<chave>/
+
+    Refaz o recorte toda vez que roda. Recortar nao custa chamada de API
+    (o caro e gerar a folha, e a folha ja esta pronta), e assim uma folha
+    corrigida vale na passada seguinte sem ninguem lembrar de limpar as
+    pecas velhas."""
+    origem = f"assets/folha_personagem/{chave}/"
+    destino = f"assets/parte_personagem/{chave}/"
+    achados = {c.rsplit("/", 1)[-1].rsplit(".", 1)[0]: c
+               for c in listar(origem) if c.lower().endswith(".png")}
+    if "corpo" not in achados:
+        print(f"[folha] {chave}: sem corpo.png, nao fatiei")
+        return False
+
+    folha = Image.open(io.BytesIO(baixar(achados["corpo"]))).convert("RGBA")
+    problemas = validar_folha_corpo(folha)
+    if problemas:
+        # Nao sobrescreve o que ja esta la. Peca ruim que sobe so aparece
+        # 13 minutos depois, no video pronto -- foi assim que o erro de
+        # 19/08 passou batido.
+        print(f"[folha] {chave}: REPROVADA, mantive as pecas anteriores")
+        for p in problemas:
+            print(f"        - {p}")
+        return False
+
+    try:
+        pecas, marcos = fatiar_corpo(folha)
+    except ValueError as e:
+        print(f"[folha] {chave}: nao consegui fatiar ({e})")
+        return False
+
+    for nome, img in pecas.items():
+        _salvar_peca(destino, nome, img)
+        print(f"[folha] {chave}/{nome}  {img.width}x{img.height}")
+
+    # Tira de rosto: opcional. Sem ela o personagem fica sem lipsync nem
+    # piscada, mas o rig monta o frame do mesmo jeito.
+    if "rosto" in achados:
+        tira = Image.open(io.BytesIO(baixar(achados["rosto"]))).convert("RGBA")
+        try:
+            for nome, img in fatiar_rosto(tira).items():
+                _salvar_peca(destino, nome, img)
+            print(f"[folha] {chave}: {len(ESPEC_ROSTO)} pecas de rosto")
+        except ValueError as e:
+            print(f"[folha] {chave}: tira de rosto ignorada ({e})")
+    else:
+        print(f"[folha] {chave}: sem rosto.png, seguindo sem lipsync")
+
+    print(f"[folha] {chave}: OK, {len(pecas)} ossos recortados da folha")
+    return True
+
+
 def main():
     global Image
     ap = argparse.ArgumentParser()
@@ -335,18 +411,31 @@ def main():
     # agora (--tudo=False e tudo ja existia) -- garante que uma peca nova
     # pedida pelo roteirista, assim que estiver recortada, ganhe pivo e
     # comprimento sem ninguem precisar rodar nada a mais.
-    prefixos_personagem = sorted({
-        b.split("/", 2)[1] + "/" + b.split("/")[2] + "/"
-        for b in brutos
-        if b.startswith("assets_bruto/parte_personagem/") and len(b.split("/")) > 3
+    # Folha -> pecas. Roda antes do partes.json porque e ele que produz
+    # os PNG que o partes.json vai medir.
+    chaves_folha = sorted({
+        b.split("/")[2] for b in brutos
+        if b.startswith("assets_bruto/folha_personagem/") and len(b.split("/")) > 3
     })
-    for sufixo in prefixos_personagem:
-        gerar_partes_json("assets/" + sufixo)
+    for chave in chaves_folha:
+        fatiar_folha(chave)
+
+    # Personagem pode chegar por folha (o caminho novo) ou por peca solta
+    # em assets_bruto (personagem antigo, ou peca avulsa que o roteirista
+    # pediu). Os dois caminhos convergem no mesmo partes.json.
+    chaves_soltas = {
+        b.split("/")[2] for b in brutos
+        if b.startswith("assets_bruto/parte_personagem/") and len(b.split("/")) > 3
+    }
+    for chave in sorted(set(chaves_folha) | chaves_soltas):
+        gerar_partes_json(f"assets/parte_personagem/{chave}/")
 
     prefixos_outros = sorted({
         b.split("/", 2)[1] + "/" + (b.split("/")[2] if len(b.split("/")) > 3 else "geral") + "/"
         for b in brutos
-        if b.startswith("assets_bruto/") and not b.startswith("assets_bruto/parte_personagem/")
+        if b.startswith("assets_bruto/")
+        and not b.startswith("assets_bruto/parte_personagem/")
+        and not b.startswith("assets_bruto/folha_personagem/")
     })
     for sufixo in prefixos_outros:
         gerar_pontos_json("assets/" + sufixo)
