@@ -44,6 +44,7 @@ QUANDO A ARTE NÃO COLABORA
     fatiar.py antigo ou recusa a folha -- este módulo não finge que deu
     certo, porque foi exatamente fingir que produziu os vídeos ruins.
 """
+import math
 import numpy as np
 from PIL import Image
 
@@ -297,22 +298,48 @@ def nomear_rosto(regioes, cabeca):
     cx = (x0 + x1) / 2.0
     nomes = {}
 
+    # O CONTORNO NÃO É UMA FEIÇÃO. O traço preto que envolve a cabeça inteira
+    # é, para o quantizador de cor, uma região escura enorme -- e era ele que
+    # vinha sendo batizado de "cabelo", empurrando o crânio para uma tira de
+    # 68px. Cabelo é uma mancha CHEIA; contorno é uma casca: ocupa pouco da
+    # própria caixa. É essa diferença que separa os dois.
+    def _cheio(c):
+        bx0, by0, bx1, by1 = c["bbox"]
+        return c["area"] / max((bx1 - bx0 + 1) * (by1 - by0 + 1), 1)
+
+    regioes = [c for c in regioes
+               if not (sum(c["cor"]) / 3.0 < 90 and _cheio(c) < 0.35
+                       and c["area"] > cabeca["area"] * 0.08)]
+
     def lum(c):
         return sum(c["cor"]) / 3.0
 
     resto = sorted(regioes, key=lambda c: -c["area"])
     if not resto:
         return nomes
-    nomes[id(resto[0])] = "cranio"
 
-    escuras = [c for c in resto[1:] if lum(c) < 120]
+    # SÓ CHAMA DE CRÂNIO SE FOR MESMO A CARA INTEIRA. Num desenho com muito
+    # traço interno (barba, orelha, sulco do nariz) a pele chega quebrada em
+    # dez manchas, e a maior delas é um pedaço de bochecha. Batizar essa
+    # mancha de crânio joga fora o resto da cabeça. Quando nenhuma região
+    # domina, quem devolve None aqui faz o chamador usar a cabeça inteira
+    # como uma peça só -- que é a leitura honesta do que o desenho tem.
+    if resto[0]["area"] >= cabeca["area"] * 0.45:
+        nomes[id(resto[0])] = "cranio"
+        resto = resto[1:]
+
+    escuras = [c for c in resto if lum(c) < 120]
     # cabelo: a maior mancha escura que encosta no topo da cabeça
     topo = [c for c in escuras if c["bbox"][1] <= y0 + alt * 0.18]
     if topo:
         cabelo = max(topo, key=lambda c: c["area"])
         nomes[id(cabelo)] = "cabelo"
 
-    pequenas = [c for c in escuras if id(c) not in nomes]
+    # OLHOS PODEM SER CLAROS. Num traço com esclera branca o olho é a
+    # mancha CLARA cercada de contorno, não a escura; a regra antiga só
+    # olhava para manchas escuras e perdia o par inteiro.
+    pequenas = [c for c in regioes
+                if id(c) not in nomes and c["area"] < cabeca["area"] * 0.05]
     # olhos: par mais próximo em y, na metade de cima, tamanho parecido
     meio = [c for c in pequenas if y0 + alt * 0.22 < c["cy"] < y0 + alt * 0.72]
     meio.sort(key=lambda c: c["cx"])
@@ -350,7 +377,11 @@ def nomear_rosto(regioes, cabeca):
     sobrou = [c for c in regioes if id(c) not in nomes]
     perto = [c for c in sobrou if abs(c["cx"] - cx) < (x1 - x0) * 0.16
              and y0 + alt * 0.30 < c["cy"] < y0 + alt * 0.75
-             and c["area"] < cabeca["area"] * 0.05]
+             and c["area"] < cabeca["area"] * 0.05
+             # nariz é feição pequena: um traço de barba que atravessa meia
+             # cara também cai perto do eixo, e era ele que vinha sendo
+             # batizado de nariz e reprovando a folha inteira na conferência
+             and (c["bbox"][3] - c["bbox"][1]) < alt * 0.20]
     if perto:
         nomes[id(max(perto, key=lambda c: c["area"]))] = "nariz"
     return nomes
@@ -379,6 +410,33 @@ def _achar_par(cands, cx, tol_y=0.35, tol_area=2.2):
 # =====================================================================
 # Entrada principal
 # =====================================================================
+def _fundo(img, limiar=232):
+    """O FUNDO é o branco que encosta na borda da folha -- não todo pixel claro.
+
+    O gerador entrega a arte sobre branco com um halo suave em volta de cada
+    contorno: no vão entre duas peças o branco chega a ~238, longe do 255
+    ideal. Cortar por "pixel claro" resolveria o vão e apagaria junto o
+    branco do olho, que é arte. Inundar a partir da borda separa os dois: o
+    olho está cercado de contorno preto e a inundação não chega nele.
+
+    Quando a folha já vem com alfa (rembg), o transparente entra como fundo
+    do mesmo jeito.
+    """
+    a = np.asarray(img.convert("RGBA"), dtype=np.int16)
+    r, g, b, alfa = a[..., 0], a[..., 1], a[..., 2], a[..., 3]
+    claro = (r > limiar) & (g > limiar) & (b > limiar)
+    candidato = claro | (alfa <= 10)
+    if not candidato.any():
+        return np.zeros(candidato.shape, dtype=bool)
+    rot, n = _rotular(candidato)
+    fundo = np.zeros(candidato.shape, dtype=bool)
+    borda = set(rot[0, :]) | set(rot[-1, :]) | set(rot[:, 0]) | set(rot[:, -1])
+    borda.discard(0)
+    for r_ in borda:
+        fundo |= rot == r_
+    return fundo
+
+
 def segmentar_corpo(img, esqueleto, min_frac_area=0.0012):
     """Folha -> (peças, âncoras).
 
@@ -386,7 +444,7 @@ def segmentar_corpo(img, esqueleto, min_frac_area=0.0012):
     folha_personagem.py -- este módulo não conhece vocabulário de rig, só
     sabe achar ilhas e medir vãos."""
     img = img.convert("RGBA")
-    mask = np.array(img.split()[-1]) > 10
+    mask = ~_fundo(img)
     if not mask.any():
         raise FolhaGrudada("folha vazia")
     ys, xs = np.nonzero(mask)
@@ -420,6 +478,8 @@ def segmentar_corpo(img, esqueleto, min_frac_area=0.0012):
         # crânio, e as feições vêm por cima
         if "cranio" in por_nome:
             por_nome.pop("cabeca", None)
+        else:
+            por_nome["cranio"] = por_nome.pop("cabeca")
 
     # Mandíbula como peça de papel separada (o gerador deixou vão no
     # queixo): a boca está dentro dela, não dentro do crânio.
@@ -485,7 +545,41 @@ def segmentar_corpo(img, esqueleto, min_frac_area=0.0012):
             ys2, xs2 = np.nonzero(a)
             comprimentos[nome] = float(np.hypot(xs2 - piv[0], ys2 - piv[1]).max()) if len(xs2) else 1.0
 
+    # ÂNGULO DESENHADO. A folha vem em T: o braço está deitado na
+    # horizontal porque foi assim que o desenhista o desenhou, não porque o
+    # personagem esteja com o braço aberto. Sem registrar a direção em que
+    # cada peça FOI DESENHADA, o motor trata "não girar" como "braço
+    # aberto" e o boneco anda de braços abertos o vídeo inteiro.
+    #
+    # A direção é medida, não suposta: é o vetor que sai do pivô e vai ao
+    # centro de massa da peça.
+    angulos = {}
+    for nome, c in por_nome.items():
+        piv = pivos.get(nome)
+        cx0, cy0 = caixas.get(nome, (0, 0))
+        if piv is None:
+            continue
+        # pivos são locais à peça recortada; a máscara é global
+        px, py = piv[0] + cx0, piv[1] + cy0
+        ys, xs = np.nonzero(c["mask"])
+        # EIXO PRINCIPAL, não vetor até o centro de massa: o pivô cai na
+        # borda da peça e quase nunca no eixo dela, então o vetor pivô ->
+        # centro sai torto (o tronco media -130 graus e o boneco inteiro
+        # nascia inclinado). O eixo principal é a direção em que a peça é
+        # comprida -- e é isso que "a perna aponta para baixo" quer dizer.
+        dx = xs - xs.mean()
+        dy = ys - ys.mean()
+        cov = np.array([[float((dx * dx).mean()), float((dx * dy).mean())],
+                        [float((dx * dy).mean()), float((dy * dy).mean())]])
+        vals, vecs = np.linalg.eigh(cov)
+        vx, vy = vecs[:, int(np.argmax(vals))]
+        # o eixo não tem sentido; quem dá o sentido é "longe do pivô"
+        if vx * (xs.mean() - px) + vy * (ys.mean() - py) < 0:
+            vx, vy = -vx, -vy
+        angulos[nome] = round(math.degrees(math.atan2(vy, vx)), 1)
+
     ancoras = {
+        "angulos": angulos,
         "caixas": {k: [int(v[0]), int(v[1])] for k, v in caixas.items()},
         "pivos": {k: [round(v[0], 1), round(v[1], 1)] for k, v in pivos.items()},
         "comprimentos": {k: round(v, 1) for k, v in comprimentos.items()},
