@@ -153,6 +153,31 @@ FONTE_ANGULO = {
 
 
 # =====================================================================
+# CORRECAO_POSE_T — a folha é desenhada em T; a cena não é
+# =====================================================================
+# A bíblia EXIGE pose T ("arms stretched perfectly horizontal"), porque é
+# a pose em que o gerador acerta a anatomia e em que nenhuma peça encobre
+# outra. Só que ninguém fica de braço aberto o vídeo inteiro: em repouso o
+# braço cai. Esses 90 graus são contrato com a arte, não chute -- e por
+# isso ficam aqui, ao lado do texto do prompt que os garante, e não
+# escondidos no motor.
+#
+# Tronco, cabeça e pernas já vêm desenhados como ficam em pé: correção 0.
+CORRECAO_POSE_T = {
+    "braco_sup_e": -90, "braco_inf_e": -90, "mao_e": -90,
+    "braco_sup_d": 90, "braco_inf_d": 90, "mao_d": 90,
+}
+
+# feições seguem a cabeça: giram com ela, não por conta própria
+SEGUE = {
+    "cabelo": "cranio", "nariz": "cranio", "boca": "mandibula",
+    "olho_e": "cranio", "olho_d": "cranio",
+    "sobrancelha_e": "cranio", "sobrancelha_d": "cranio",
+    "mandibula": "cranio",
+}
+
+
+# =====================================================================
 # ESPEC_PARTES — o que cada peça é, para o gerador e para o validador
 # =====================================================================
 # inclui/exclui é o contrato com a ARTE: é o que o prompt precisa garantir
