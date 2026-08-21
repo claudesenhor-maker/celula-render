@@ -185,9 +185,32 @@ def sintetizar(texto, cfg, destino, modo):
         # OPT-IN: so troca de motor se a chave existir. Sem ela, segue no
         # Edge-TTS -- que ja funciona. Ninguem quer descobrir num domingo que
         # a producao parou porque o motor de voz mudou sozinho.
-        if os.environ.get("ELEVEN_API_KEY"):
-            marcas = _eleven(texto, cfg, mp3)
-        else:
+        # ESCOLHA EXPLICITA DE MOTOR.
+        #
+        # Antes bastava a chave existir no ambiente para o ElevenLabs
+        # assumir. Parecia razoavel e derrubou o render de 20/08: a chave
+        # estava configurada, mas nenhum voice_id -- o _eleven levantou
+        # excecao e o video saiu sem voz de verdade. "Ter a chave" nao e a
+        # mesma coisa que "estar configurado para usar".
+        #
+        # Agora o motor e escolhido no perfil de voz (cfg["motor"]), o
+        # padrao e o Edge (gratuito, vozes pt-BR reais, e ainda devolve
+        # marcas de palavra que o lipsync usa), e faltar voice_id no meio
+        # da producao faz cair para o Edge com aviso em vez de derrubar o
+        # job inteiro.
+        motor = (cfg.get("motor") or os.environ.get("MOTOR_TTS") or "edge").lower()
+        marcas = None
+        if motor in ("eleven", "elevenlabs"):
+            tem_voz = cfg.get("eleven_voice_id") or os.environ.get("ELEVEN_VOICE_ID")
+            if os.environ.get("ELEVEN_API_KEY") and tem_voz:
+                try:
+                    marcas = _eleven(texto, cfg, mp3)
+                except Exception as e:
+                    print(f"[voz] ElevenLabs falhou ({e}); caindo para o Edge")
+            else:
+                falta = "ELEVEN_API_KEY" if not os.environ.get("ELEVEN_API_KEY") else "voice_id"
+                print(f"[voz] motor 'eleven' pedido mas falta {falta}; usando o Edge")
+        if marcas is None:
             marcas, _ = asyncio.run(_edge(texto, cfg, mp3))
         subprocess.run(["ffmpeg", "-y", "-v", "error", "-i", mp3,
                         "-ar", str(SR), "-ac", "1", destino], check=True)
