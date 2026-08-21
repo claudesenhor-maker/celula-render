@@ -63,8 +63,9 @@ import argparse, io, json, os, sys, zipfile
 import numpy as np
 import requests
 
-from folha_personagem import (ESPEC_ROSTO, PARTES_ESSENCIAIS, fatiar_corpo,
-                              fatiar_rosto, validar_folha_corpo)
+from folha_personagem import (ESPEC_ROSTO, PARTES_ESSENCIAIS, FolhaGrudada,
+                              conferir_pecas, fatiar_rosto, segmentar_folha)
+import segmentar as SEG
 
 SB = os.environ["SUPABASE_URL"].rstrip("/")
 KEY = os.environ["SUPABASE_SERVICE_KEY"]
@@ -75,7 +76,16 @@ H = {"apikey": KEY, "Authorization": f"Bearer {KEY}"}
 # (desenhar() em palito_cutout.py chama pers.p() para estes sem checar se
 # existem antes). boca_*, olho_* e sobrancelha sao opcionais -- entram se
 # tiverem sido geradas.
-PARTES_MINIMAS = ("cabeca", "tronco", "braco_sup", "braco_inf", "perna_sup", "perna_inf")
+# Os ossos sem os quais o cut-out nao monta um frame. Vem de
+# folha_personagem para nao existirem duas listas divergindo: quando o rig
+# ganhou pulso, tornozelo e mandibula (21/08), esta lista teria ficado
+# para tras e o partes.json seria gerado sem as pecas novas.
+PARTES_MINIMAS = PARTES_ESSENCIAIS
+
+# Altura do personagem no quadro de 1080x1920. 1150px ~= 60% da altura:
+# corpo inteiro visivel com folga em cima e embaixo para o personagem
+# pular e agachar sem sair do quadro.
+ALTURA_ALVO_PX = 1150
 
 
 def listar(prefixo):
@@ -126,60 +136,6 @@ def _mascara(img):
     return np.array(img.split()[-1]) > 10
 
 
-def _medir_osso(img):
-    """PCA sobre o alfa: acha o eixo principal do 'osso' e devolve
-    (pivo, comprimento). Convencao: braco_sup/braco_inf/perna_sup/
-    perna_inf sao desenhados pendurados a partir da articulacao proximal
-    (ombro, cotovelo, quadril, joelho), entao o pivo fica na extremidade
-    de CIMA do desenho -- e essa extremidade que o rig gruda no corpo."""
-    a = _mascara(img)
-    ys, xs = np.nonzero(a)
-    if len(xs) < 2:
-        w, h = img.size
-        return (w / 2.0, 0.0), float(h)
-    pts = np.column_stack([xs, ys]).astype(float)
-    media = pts.mean(axis=0)
-    cov = np.cov((pts - media).T)
-    autovals, autovecs = np.linalg.eigh(cov)
-    eixo = autovecs[:, int(np.argmax(autovals))]
-    proj = (pts - media) @ eixo
-    faixa = proj.max() - proj.min()
-    tolerancia = max(faixa * 0.02, 1.5)   # janela pequena nas pontas
-    # Numa ponta reta (ex: topo do braco cortado na horizontal) varios
-    # pixels empatam na projecao extrema; usar so um deles jogaria o pivo
-    # pra a borda em vez do centro. Faz a media de todos os pixels dentro
-    # da tolerancia da ponta.
-    ponta_a = pts[proj <= proj.min() + tolerancia].mean(axis=0)
-    ponta_b = pts[proj >= proj.max() - tolerancia].mean(axis=0)
-    comprimento = float(np.hypot(*(ponta_b - ponta_a)))
-    pivo = ponta_a if ponta_a[1] <= ponta_b[1] else ponta_b
-    return (float(pivo[0]), float(pivo[1])), comprimento
-
-
-def _medir_tronco(img):
-    """Pivo no quadril (base da arte), comprimento ate a linha do ombro.
-    A linha do ombro e estimada a 82% da altura, de baixo pra cima --
-    sobra ~18% de peito/pescoco no topo, que e onde braco e cabeca se
-    encaixam."""
-    w, h = img.size
-    return (w / 2.0, float(h - 1)), h * 0.82
-
-
-def _linha_ombro(img, frac=0.12):
-    """Largura do alfa numa linha perto do topo do tronco: da meio_ombro
-    (metade da largura ali) e queda_ombro (o quanto essa linha esta
-    abaixo do topo da arte -- o "arredondado" natural do ombro)."""
-    a = _mascara(img)
-    h = a.shape[0]
-    linha = min(max(int(h * frac), 0), h - 1)
-    cols = np.nonzero(a[linha])[0]
-    if len(cols) == 0:
-        w = img.size[0]
-        return w * 0.35, h * frac
-    largura = float(cols.max() - cols.min())
-    return largura / 2.0, float(linha)
-
-
 def _pivo_base(img):
     """Peca sem convencao de osso propria (rosto, objeto): ancora na
     base central da arte. Serve tanto para 'apoiado no chao' (objeto)
@@ -190,47 +146,14 @@ def _pivo_base(img):
     return (w / 2.0, float(h - 1))
 
 
-def medir_partes(pecas):
-    """pecas: {nome: PIL.Image RGBA ja recortada}. Devolve (pivos, comp)
-    prontos para o partes.json.
-
-    O que da pra medir direto da silhueta: pivo e comprimento de cada
-    osso, e o pivo da cabeca e das pecas de rosto. O que NAO tem como
-    medir olhando uma peca isolada -- meio_ombro, queda_ombro, pescoco --
-    e estimado por proporcao a partir do proprio tronco e cabeca. Sao
-    heuristicas, nao anatomia exata: servem de ponto de partida e podem
-    ser corrigidas a mao depois de ver o primeiro render (o arquivo
-    continua sendo um JSON normal, editar um numero nao quebra nada)."""
-    pivos, comp = {}, {}
-
-    for nome in ("braco_sup", "braco_inf", "perna_sup", "perna_inf"):
-        if nome in pecas:
-            pivos[nome], comp[nome] = _medir_osso(pecas[nome])
-
-    if "tronco" in pecas:
-        pivos["tronco"], comp["tronco"] = _medir_tronco(pecas["tronco"])
-        meio_ombro, linha_y = _linha_ombro(pecas["tronco"])
-        comp["meio_ombro"] = meio_ombro
-        comp["queda_ombro"] = linha_y
-
-    if "cabeca" in pecas:
-        pivos["cabeca"] = _pivo_base(pecas["cabeca"])
-        # pescoco: gap entre o topo do tronco e o pivo da cabeca. Sem
-        # medida melhor disponivel, uso uma fracao pequena da altura da
-        # cabeca -- pescoco curto, que e o padrao em boneco palito.
-        comp["pescoco"] = pecas["cabeca"].size[1] * 0.15
-
-    for nome, img in pecas.items():
-        if nome.startswith("boca_") or nome in ("olho_aberto", "olho_fechado", "sobrancelha"):
-            pivos[nome] = _pivo_base(img)
-
-    return pivos, comp
-
-
 def gerar_partes_json(prefixo_personagem):
-    """Baixa tudo que existe em assets/parte_personagem/<chave>/, mede e
-    sobe o partes.json. So gera se os 6 ossos essenciais existirem --
-    caso contrario o cut-out nem consegue montar um frame."""
+    """Junta as pecas + ancoras num partes.json e num personagem.zip.
+
+    Nao mede nada: quem mediu foi o segmentador, olhando a folha inteira.
+    Aqui so se calcula a ESCALA -- a folha vem em ~1024px e o quadro do
+    Shorts tem 1920, entao sem esticar o personagem sai do tamanho de um
+    dedo no meio da tela (foi o que 'escala: 1.0' cravado produziu no
+    primeiro teste)."""
     pecas_prontas = [c for c in listar(prefixo_personagem) if c.lower().endswith(".png")]
     if not pecas_prontas:
         return False
@@ -238,6 +161,8 @@ def gerar_partes_json(prefixo_personagem):
     imagens = {}
     for caminho in pecas_prontas:
         nome = caminho.rsplit("/", 1)[-1].rsplit(".", 1)[0]
+        if nome.startswith("_"):
+            continue                      # _mapa.png e conferencia, nao peca
         try:
             imagens[nome] = Image.open(io.BytesIO(baixar(caminho))).convert("RGBA")
         except Exception as e:
@@ -248,28 +173,36 @@ def gerar_partes_json(prefixo_personagem):
         print(f"[partes.json] {prefixo_personagem}: ainda faltam {faltando}, nao gerei")
         return False
 
-    pivos, comp = medir_partes(imagens)
+    try:
+        ancoras = json.loads(baixar(prefixo_personagem + "ancoras.json"))
+    except Exception as e:
+        print(f"[partes.json] {prefixo_personagem}: sem ancoras.json ({e}); "
+              f"sem elas o rig nao tem pivo -- refaca a leitura da folha")
+        return False
+
+    alt = max(ancoras.get("altura_figura", 0), 1)
     cfg = {
-        "escala": 1.0,
+        "escala": round(ALTURA_ALVO_PX / alt, 3) if alt > 1 else 1.0,
         "partes": sorted(imagens.keys()),
-        "pivos": {k: [round(v[0], 1), round(v[1], 1)] for k, v in pivos.items()},
-        "comprimentos": {k: round(v, 1) for k, v in comp.items()},
+        "pivos": ancoras["pivos"],
+        "saidas": ancoras.get("saidas", {}),
+        "comprimentos": ancoras.get("comprimentos", {}),
+        "vaos": ancoras.get("vaos", {}),
     }
     partes_json_bytes = json.dumps(cfg, ensure_ascii=False, indent=2).encode("utf-8")
     subir(prefixo_personagem + "partes.json", partes_json_bytes, mime="application/json")
-    print(f"[partes.json] {prefixo_personagem}: {len(imagens)} pecas medidas e salvas")
+    print(f"[partes.json] {prefixo_personagem}: {len(imagens)} pecas, escala {cfg['escala']}")
 
-    # job.py (SELECAO DO MOTOR) so liga o cut-out se receber spec.personagem_url
-    # apontando para um .zip com partes.json + os PNG das pecas na RAIZ do
-    # arquivo. Empacota aqui, na mesma passada, para o zip nunca ficar
-    # desatualizado em relacao ao partes.json que acabou de subir.
+    # job.py so liga o cut-out se receber spec.personagem_url apontando
+    # para um .zip com partes.json + os PNG na RAIZ. Empacota aqui, na
+    # mesma passada, para o zip nunca ficar desatualizado.
     buf_zip = io.BytesIO()
     with zipfile.ZipFile(buf_zip, "w", zipfile.ZIP_DEFLATED) as zf:
         zf.writestr("partes.json", partes_json_bytes)
         for nome, img in imagens.items():
-            buf_png = io.BytesIO()
-            img.save(buf_png, "PNG", optimize=True)
-            zf.writestr(f"{nome}.png", buf_png.getvalue())
+            b = io.BytesIO()
+            img.save(b, "PNG", optimize=True)
+            zf.writestr(f"{nome}.png", b.getvalue())
     subir(prefixo_personagem + "personagem.zip", buf_zip.getvalue(), mime="application/zip")
     print(f"[personagem.zip] {prefixo_personagem}: {len(imagens)} pecas empacotadas")
     return True
@@ -311,10 +244,17 @@ def _salvar_peca(prefixo, nome, img):
 def fatiar_folha(chave):
     """assets/folha_personagem/<chave>/ -> assets/parte_personagem/<chave>/
 
-    Refaz o recorte toda vez que roda. Recortar nao custa chamada de API
-    (o caro e gerar a folha, e a folha ja esta pronta), e assim uma folha
-    corrigida vale na passada seguinte sem ninguem lembrar de limpar as
-    pecas velhas."""
+    Refaz a leitura toda vez que roda. Ler nao custa chamada de API (o caro
+    e gerar a folha, e a folha ja esta pronta), e assim uma folha corrigida
+    vale na passada seguinte sem ninguem lembrar de limpar as pecas velhas.
+
+    DOIS CAMINHOS, E O LOG DIZ QUAL RODOU
+        Principal: a folha veio como boneco de papel, com vao entre as
+        partes, e o segmentar.py le as pecas prontas com o pivo medido.
+        Plano B: a folha veio grudada e nao ha o que segmentar -- a peca
+        e recusada. Nao ha meio-termo silencioso, porque foi exatamente
+        aceitar folha ruim em silencio que produziu os videos errados.
+    """
     origem = f"assets/folha_personagem/{chave}/"
     destino = f"assets/parte_personagem/{chave}/"
     achados = {c.rsplit("/", 1)[-1].rsplit(".", 1)[0]: c
@@ -324,28 +264,44 @@ def fatiar_folha(chave):
         return False
 
     folha = Image.open(io.BytesIO(baixar(achados["corpo"]))).convert("RGBA")
-    problemas = validar_folha_corpo(folha)
+    try:
+        pecas, ancoras = segmentar_folha(folha)
+    except FolhaGrudada as e:
+        print(f"[folha] {chave}: RECUSADA -- {e}")
+        print(f"        a arte precisa vir com vao branco entre as partes; "
+              f"mantive as pecas anteriores")
+        return False
+
+    problemas = conferir_pecas(pecas, ancoras)
     if problemas:
         # Nao sobrescreve o que ja esta la. Peca ruim que sobe so aparece
         # 13 minutos depois, no video pronto -- foi assim que o erro de
         # 19/08 passou batido.
-        print(f"[folha] {chave}: REPROVADA, mantive as pecas anteriores")
+        print(f"[folha] {chave}: REPROVADA na conferencia, mantive as pecas anteriores")
         for p in problemas:
             print(f"        - {p}")
         return False
 
-    try:
-        pecas, marcos = fatiar_corpo(folha)
-    except ValueError as e:
-        print(f"[folha] {chave}: nao consegui fatiar ({e})")
-        return False
-
     for nome, img in pecas.items():
         _salvar_peca(destino, nome, img)
-        print(f"[folha] {chave}/{nome}  {img.width}x{img.height}")
+    print(f"[folha] {chave}: {len(pecas)} pecas lidas da folha "
+          f"({', '.join(sorted(pecas))})")
 
-    # Tira de rosto: opcional. Sem ela o personagem fica sem lipsync nem
-    # piscada, mas o rig monta o frame do mesmo jeito.
+    # MAPA DE PECAS: a conferencia que um JSON de 24 entradas nao faz.
+    # Cada peca de uma cor, o pivo marcado. Em um olhar da para ver se o
+    # ombro foi parar no cotovelo, antes dos 13 minutos de render.
+    buf = io.BytesIO()
+    SEG.mapa_de_pecas(folha, pecas, ancoras).save(buf, "PNG", optimize=True)
+    subir(destino + "_mapa.png", buf.getvalue())
+
+    # As ancoras (pivo e ponto de encaixe de cada filho) valem mais que
+    # qualquer medicao feita depois nas pecas soltas, e so existem aqui.
+    subir(destino + "ancoras.json",
+          json.dumps(ancoras, ensure_ascii=False).encode("utf-8"),
+          mime="application/json")
+
+    # Tira de rosto: opcional. Sem ela o personagem ainda fala, porque o
+    # maxilar da folha ja abre.
     if "rosto" in achados:
         tira = Image.open(io.BytesIO(baixar(achados["rosto"]))).convert("RGBA")
         try:
@@ -354,10 +310,7 @@ def fatiar_folha(chave):
             print(f"[folha] {chave}: {len(ESPEC_ROSTO)} pecas de rosto")
         except ValueError as e:
             print(f"[folha] {chave}: tira de rosto ignorada ({e})")
-    else:
-        print(f"[folha] {chave}: sem rosto.png, seguindo sem lipsync")
 
-    print(f"[folha] {chave}: OK, {len(pecas)} ossos recortados da folha")
     return True
 
 
