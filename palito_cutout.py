@@ -64,7 +64,8 @@ from PIL import Image
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from palito_v4 import REST, POSES, EXPRESSOES, merge, blend, pt
 import acoes as ACOES
-from folha_personagem import ESQUELETO, ORDEM_Z, FONTE_ANGULO
+from folha_personagem import (ESQUELETO, ORDEM_Z, FONTE_ANGULO,
+                              CORRECAO_POSE_T, SEGUE)
 
 W, H, FPS = 1080, 1920, 24
 
@@ -130,6 +131,10 @@ class Personagem:
         self.saidas = cfg.get("saidas", {})
         self.escala = cfg.get("escala", 1.0)
         self.comp = cfg.get("comprimentos", {})
+        # CORREÇÃO DE FOLHA: a arte vem em pose T; em cena o braço cai.
+        self.corr = dict(CORRECAO_POSE_T)
+        for filho, dono in SEGUE.items():
+            self.corr.setdefault(filho, self.corr.get(dono, 0.0))
         self.img, self.piv = {}, {}
         for nome in cfg["partes"]:
             caminho = os.path.join(pasta, nome + ".png")
@@ -213,8 +218,9 @@ def desenhar_personagem(pers, rig, boca_nivel=0.0, piscando=False, objeto=None):
     pos, ang = {}, {}
     raiz = next((n for n, p in ESQUELETO.items() if p is None), "abdomen")
     fila = [raiz]
+    corr = getattr(pers, "corr", {})
     pos[raiz] = tuple(rig["quadril"])
-    ang[raiz] = _angulo(raiz, rig, boca_nivel)
+    ang[raiz] = _angulo(raiz, rig, boca_nivel) + corr.get(raiz, 0.0)
     filhos = {}
     for n, pai in ESQUELETO.items():
         filhos.setdefault(pai, []).append(n)
@@ -230,7 +236,7 @@ def desenhar_personagem(pers, rig, boca_nivel=0.0, piscando=False, objeto=None):
             pv = pers.pivos[pai]
             d = _girar(((saida[0] - pv[0]) * e, (saida[1] - pv[1]) * e), ang[pai])
             pos[f] = (pos[pai][0] + d[0], pos[pai][1] + d[1])
-            ang[f] = _angulo(f, rig, boca_nivel)
+            ang[f] = _angulo(f, rig, boca_nivel) + corr.get(f, 0.0)
             fila.append(f)
 
     # A boca abre por QUEDA do queixo, não por rotação: de frente, girar a
