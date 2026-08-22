@@ -255,10 +255,26 @@ def fatiar_folha(chave):
         e recusada. Nao ha meio-termo silencioso, porque foi exatamente
         aceitar folha ruim em silencio que produziu os videos errados.
     """
-    origem = f"assets/folha_personagem/{chave}/"
+    # LÊ A FOLHA CRUA, NÃO A DO REMBG. O rembg é um segmentador de objeto
+    # saliente: ele marca a PESSOA inteira como frente, e os vãos entre as
+    # peças -- que são o desenho todo -- vêm preenchidos junto. A folha
+    # recortada por ele volta como uma mancha só e a segmentação morre com
+    # "1 peça solta".
+    #
+    # Na folha crua o branco do fundo encosta na borda da imagem, e é
+    # justamente isso que o segmentador usa para separar as peças: ele
+    # inunda a partir da borda e o vão some junto com o fundo. Ou seja, o
+    # recorte que interessa aqui já é feito por segmentar.py, de graça.
+    origem = f"assets_bruto/folha_personagem/{chave}/"
     destino = f"assets/parte_personagem/{chave}/"
     achados = {c.rsplit("/", 1)[-1].rsplit(".", 1)[0]: c
-               for c in listar(origem) if c.lower().endswith(".png")}
+               for c in listar(origem)
+               if c.lower().endswith((".png", ".jpg", ".jpeg"))}
+    if "corpo" not in achados:
+        # folha antiga, que só existe já recortada
+        achados = {c.rsplit("/", 1)[-1].rsplit(".", 1)[0]: c
+                   for c in listar(f"assets/folha_personagem/{chave}/")
+                   if c.lower().endswith(".png")}
     if "corpo" not in achados:
         print(f"[folha] {chave}: sem corpo.png, nao fatiei")
         return False
