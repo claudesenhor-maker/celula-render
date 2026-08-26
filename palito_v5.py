@@ -26,7 +26,11 @@ Uso:
 """
 import argparse, asyncio, json, math, os, subprocess, sys, tempfile, wave
 import struct, random
-import cairosvg
+# cairosvg e importado DENTRO de render_spec, nao aqui: ele exige libcairo
+# do sistema, e palito_cutout importa deste modulo `sintetizar` e `envelope`
+# -- duas funcoes de audio que nao tem nada com SVG. Com o import no topo,
+# rodar o motor cut-out numa maquina sem libcairo era impossivel, e conferir
+# frames antes de gastar 13 minutos de Action tambem.
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from palito_v4 import (W, H, OUT_W, OUT_H, FPS, REST, POSES, EXPRESSOES, merge, blend,
@@ -72,6 +76,29 @@ async def _resolver_voz(desejada):
     raise RuntimeError("nenhuma voz pt-BR disponivel no servico")
 
 
+def _falar(edge_tts, texto, voz, cfg):
+    """Communicate pedindo marca por PALAVRA.
+
+    O edge-tts 7.x passou a mandar `sentenceBoundaryEnabled` por padrao: sem
+    este kwarg o servico devolve UM SentenceBoundary por frase e nenhum
+    WordBoundary, e o tempo de cada palavra -- que a legenda usa -- some.
+    Conferido em 27/08 contra o servico real: 29 chunks de audio e um unico
+    SentenceBoundary. Ninguem tinha percebido porque as marcas eram
+    descartadas de qualquer jeito.
+
+    O kwarg nao existe no edge-tts 6.x, e o requirements aceita >=6.1;
+    entao se ele nao for aceito, segue sem -- a legenda cai no reparto
+    proporcional em vez de o job inteiro morrer."""
+    try:
+        return edge_tts.Communicate(texto, voz, rate=cfg.get("rate", "+0%"),
+                                    pitch=cfg.get("pitch", "+0Hz"),
+                                    boundary="WordBoundary")
+    except TypeError:
+        print("[voz] edge-tts sem o parametro 'boundary'; sem marca de palavra")
+        return edge_tts.Communicate(texto, voz, rate=cfg.get("rate", "+0%"),
+                                    pitch=cfg.get("pitch", "+0Hz"))
+
+
 async def _edge(texto, cfg, out_mp3, tentativas=3):
     import edge_tts
     voz = await _resolver_voz(cfg.get("voice", "pt-BR-AntonioNeural"))
@@ -79,9 +106,7 @@ async def _edge(texto, cfg, out_mp3, tentativas=3):
     for n in range(tentativas):
         marcas, dur, bytes_audio = [], 0.0, 0
         try:
-            c = edge_tts.Communicate(texto, voz,
-                                     rate=cfg.get("rate", "+0%"),
-                                     pitch=cfg.get("pitch", "+0Hz"))
+            c = _falar(edge_tts, texto, voz, cfg)
             with open(out_mp3, "wb") as f:
                 async for ch in c.stream():
                     if ch["type"] == "audio":
@@ -137,6 +162,51 @@ def _demo(texto, cfg, out_wav):
 def _duracao_wav(caminho):
     with wave.open(caminho) as w:
         return w.getnframes() / float(w.getframerate())
+
+
+def silencio(caminho, dur_s, sr=SR):
+    """Grava um WAV de silencio no MESMO formato das faixas de voz.
+
+    Mesmo sample rate, mono, 16 bits: o concat do ffmpeg (demuxer) exige
+    formato identico entre as partes, senao emenda errado ou recusa."""
+    n = max(0, int(round(dur_s * sr)))
+    with wave.open(caminho, "w") as w:
+        w.setnchannels(1); w.setsampwidth(2); w.setframerate(sr)
+        w.writeframes(b"\x00\x00" * n)
+    return caminho
+
+
+def juntar_com_respiro(faixas, respiros, destino, tmp, sr=SR):
+    """Concatena as falas INSERINDO o respiro como silencio de verdade.
+
+    POR QUE ISTO EXISTE (bug achado em 26/08, no run #13)
+        O respiro sempre entrou na timeline de VIDEO -- `tr["dur"] = dur +
+        respiro_s` -- e nunca no AUDIO, que era a concatenacao crua dos
+        WAVs. O ffmpeg fecha o arquivo com `-shortest`, entao o fluxo mais
+        curto (o audio) mandava: 3 x 0,45s = 1,35s de animacao renderizada
+        e jogada fora, com a CAUDA DO ULTIMO TRECHO DECEPADA -- no teste, o
+        `acenar` final simplesmente sumiu. Pior, `render()` devolvia a
+        duracao COM respiro (15,25s) enquanto o arquivo tinha 13,88s, entao
+        a guarda de duracao do job.py validava um numero que nao existia.
+
+        O respiro existe para dar uma batida depois de cada fala. Uma batida
+        e silencio: ele tem que estar no som tambem, e ai video e audio
+        voltam a concordar sozinhos."""
+    partes = []
+    for i, faixa in enumerate(faixas):
+        partes.append(faixa)
+        r = float(respiros[i] if i < len(respiros) else 0.0)
+        if r > 0.001:
+            partes.append(silencio(os.path.join(tmp, f"resp{i:02d}.wav"), r, sr))
+    lista = os.path.join(tmp, "a.txt")
+    with open(lista, "w") as f:
+        for p in partes:
+            # o caminho vai entre aspas simples: apostrofo em nome de pasta
+            # quebraria o demuxer, e o tmp costuma vir de tempfile
+            f.write("file '%s'\n" % p.replace("'", "'\\''"))
+    subprocess.run(["ffmpeg", "-y", "-v", "error", "-f", "concat", "-safe", "0",
+                    "-i", lista, "-ar", str(sr), "-ac", "1", destino], check=True)
+    return destino
 
 
 def _eleven(texto, cfg, out_mp3):
@@ -256,26 +326,24 @@ def render_spec(spec, saida, modo="demo", tmpdir=None):
     vozes = spec.get("vozes", {})
 
     # ---- 3.1 VOZ PRIMEIRO: a duração real vira a timeline -------------
-    faixas, total = [], 0.0
+    faixas, respiros, total = [], [], 0.0
     for i, tr in enumerate(spec["trechos"]):
         wav = os.path.join(tmp, f"v{i:02d}.wav")
         cfg = vozes.get(tr.get("perfil_voz", "narrador"), {})
         marcas, dur = sintetizar(tr["fala"], cfg, wav, modo)
-        dur += tr.get("respiro_s", 0.45)
+        respiro = float(tr.get("respiro_s", 0.45))
+        dur += respiro
         tr["dur"] = dur                      # <<< SAÍDA do TTS, nunca entrada
         faixas.append(wav)
+        respiros.append(respiro)
         total += dur
         print(f"  trecho {i}: {dur:5.2f}s  {len(marcas):2d} palavras  \"{tr['fala'][:44]}\"")
     print(f"[voz] timeline real: {total:.2f}s")
 
     # ---- 3.2 áudio concatenado + envoltória ---------------------------
-    lista = os.path.join(tmp, "a.txt")
-    with open(lista, "w") as f:
-        for a in faixas:
-            f.write(f"file '{a}'\n")
-    voz = os.path.join(tmp, "voz.wav")
-    subprocess.run(["ffmpeg", "-y", "-v", "error", "-f", "concat", "-safe", "0",
-                    "-i", lista, "-ar", str(SR), "-ac", "1", voz], check=True)
+    # com o respiro DENTRO do audio: sem ele, o -shortest do fim decepava a
+    # cauda de cada trecho renderizado (ver juntar_com_respiro)
+    voz = juntar_com_respiro(faixas, respiros, os.path.join(tmp, "voz.wav"), tmp)
     env = envelope(voz)
 
     # ---- 3.3 fundos gerados por IA (opcional) -------------------------
@@ -283,6 +351,7 @@ def render_spec(spec, saida, modo="demo", tmpdir=None):
     # Baixados UMA vez por cenario e reutilizados em todos os frames: um
     # cenario e ativo permanente do canal, nao custo por video. Sem esta
     # chave, o rig desenha o fundo por codigo, como antes.
+    import cairosvg              # so aqui: exige libcairo do sistema
     fundos = {}
     for nome, url in (spec.get("fundos") or {}).items():
         try:
