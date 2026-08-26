@@ -65,6 +65,8 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from palito_v4 import REST, POSES, EXPRESSOES, merge, blend, pt
 import acoes as ACOES
 import expressao as EXPR
+import cenarios as CENARIOS
+import sfx as SFX
 from folha_personagem import (ESQUELETO, ORDEM_Z, FONTE_ANGULO,
                               CORRECAO_POSE_T, SEGUE)
 
@@ -225,6 +227,18 @@ def _tapar_entalhe(img, cor=None):
     faixa = np.zeros(np.asarray(larga).shape, dtype=np.uint8)
     faixa[:, max(0, bx0 - g):min(img.width, bx1 + g + 1)] = 255
     larga = ImageChops.multiply(larga, Image.fromarray(faixa))
+    # E NUNCA COME O CONTORNO EXTERNO. O entalhe da boca desce até a base do
+    # queixo, e a tapa levava junto o traço preto de lá: o rosto ficava com
+    # o queixo aberto, sem linha, como se a cabeça vazasse para o pescoço.
+    # Erodir o alfa pela espessura do traço deixa o anel de contorno fora do
+    # alcance da tapa.
+    # Erode-se a SILHUETA FECHADA, não o alfa: o entalhe é um vazio, e
+    # erodir o alfa protegeria justamente a borda dele -- que é o que a
+    # tapa precisa cobrir. O fechamento já não tem o entalhe, então o que
+    # sobra protegido é só o perímetro de fora.
+    esp_traco = max(2, int(min(img.width, img.height) * 0.022))
+    larga = ImageChops.multiply(
+        larga, fechado.filter(ImageFilter.MinFilter(2 * esp_traco + 1)))
 
     # COR AMOSTRADA AO REDOR DO ENTALHE, não a mediana da peça inteira: a
     # bochecha tem sombreado próprio, e a mediana global deixava um
@@ -254,6 +268,33 @@ def _tapar_entalhe(img, cor=None):
         pele = cor or _cor_em_volta(img, larga, so_boca) or _cor_da_pele(img)
     a[m, :3] = pele
     a[m, 3] = 255
+
+    # SOMBREADO, E NÃO COR CHAPADA. Uma cor só deixa um retângulo mais claro
+    # no queixo -- ele aparece em todos os frames do vídeo de 28/08, e foi a
+    # segunda queixa sobre o rosto. O queixo do Pal escurece de cima para
+    # baixo; a bochecha, de onde a cor é amostrada, não. Preencher cada
+    # coluna interpolando entre o pixel logo ACIMA e o logo ABAIXO da tapa
+    # reproduz o gradiente que a arte tem naquele ponto, em vez de inventar
+    # um tom médio para a área inteira.
+    # Coluna a coluna NÃO serve: o que está logo acima da tapa é ora pele,
+    # ora o traço escuro do lábio, e a tapa sai listrada de vertical (foi a
+    # primeira tentativa, conferida em 29/08). O gradiente é medido uma vez,
+    # entre a MÉDIA da pele acima e a MÉDIA da pele abaixo do remendo, e
+    # aplicado à área inteira.
+    ys_m, _xs_m = np.nonzero(m)
+    if len(ys_m):
+        ya, yb = int(ys_m.min()), int(ys_m.max())
+        # Amostrar o pixel ACIMA e o ABAIXO do remendo para montar o
+        # gradiente foi tentado e sai pior: os dois vizinhos são o traço do
+        # lábio e o contorno do queixo, e a tapa saiu cinza-esverdeada
+        # (medido em 29/08: 200,184,159 contra os 220,204,184 da bochecha).
+        # A bochecha é a única vizinhança que é pele de verdade -- então a
+        # cor vem dela, e o sombreado é uma queda suave de 6% até a base,
+        # que é o que um queixo faz e o que tira o aspecto de adesivo.
+        n = max(1, yb - ya)
+        k = ((np.arange(img.height) - ya) / float(n)).clip(0.0, 1.0)
+        escala = (1.0 - 0.06 * k)[ys_m][:, None]
+        a[m, :3] = (np.array(pele, dtype=np.float32)[None, :] * escala).astype(np.uint8)
     tapado = Image.fromarray(a)
 
     # borda macia: mesmo com a cor certa, a emenda dura entrega o remendo.
@@ -315,6 +356,176 @@ def _boca_desenhada(larg, alt_max, nivel, curva, cor_traco, cor_dentro=None):
         caixa = [x0, cyy - alt / 2.0, x1, cyy + alt / 2.0]
         d.ellipse(caixa, fill=cor_dentro, outline=cor_traco + (255,), width=esp)
     return tela, (tela.width / 2.0, cy)
+
+
+def _extrair_feicoes(img, piv):
+    """Recorta olhos e sobrancelhas de DENTRO da peça do crânio.
+
+    POR QUE (o defeito nº 3 da lista de 29/08: "adicionar expressões faciais")
+        expressao.py existe desde 28/08 e o rosto continuou parado. A causa
+        não estava nele: a folha do Pal não entrega olho nem sobrancelha
+        como peça. O segmentador devolve `olho_e` com 11x21 px e
+        `sobrancelha_d` com 59x15 -- fiapos do contorno --, o carregador os
+        descarta com razão, e sobra um `cranio` de 215x210 com o rosto
+        inteiro desenhado dentro. Ou seja: `sobrancelha_rot` e `olho_sy`
+        eram aplicados a peças que não estavam em cena, e a única coisa que
+        se mexia na cara era a inclinação da cabeça.
+
+        Gerar uma folha nova com feições separadas é a solução de arte, e
+        ela está em aberto desde 27/08 (§7.1 do HANDOFF) porque o gerador
+        não desenha os vãos. Enquanto isso, as feições ESTÃO desenhadas --
+        só que dentro de outra peça. Recortá-las de lá é a mesma manobra
+        que a boca já usa: nada é inventado por código, só se move o que o
+        desenhista entregou.
+
+    COMO
+        Dentro do crânio, longe da borda (para não pegar o contorno nem a
+        orelha), tudo o que não é da cor da pele é feição. Cada mancha vira
+        um componente, e a classificação é a que a arte cut-out permite:
+
+          * OLHO -- tem branco (a esclera) e tem preto (a pupila) na mesma
+            mancha. Nenhuma outra parte do rosto tem os dois.
+          * SOBRANCELHA -- quase toda escura, mais larga que alta, e ACIMA
+            de um olho.
+
+        Só vale se saírem DOIS olhos em lados opostos e na mesma altura. Um
+        olho só, ou dois na mesma metade, é detecção errada -- e detecção
+        errada aqui apagaria metade do rosto. Nesse caso devolve nada e o
+        motor segue com a cara parada, que é o comportamento de antes.
+
+    Devolve (crânio com as feições apagadas, {nome: sprite}) ou (img, None).
+    Cada sprite: {"img": RGBA recortado, "dx","dy": centro da feição
+    relativo ao PIVÔ da peça, "larg","alt"}. Relativo ao pivô, e não ao
+    centro da imagem, porque a peça do crânio ainda vai ser recomposta com
+    o cabelo depois disto -- o centro muda, o pivô não.
+    """
+    from segmentar import _componentes
+    a = np.asarray(img.convert("RGBA"))
+    alfa = a[..., 3]
+    dentro = alfa > 128
+    if dentro.sum() < 400:
+        return img, None
+
+    # afasta-se da borda: o contorno preto externo e a orelha encostam nela
+    r = max(3, int(min(img.width, img.height) * 0.045))
+    nucleo = np.asarray(img.split()[3].filter(ImageFilter.MinFilter(2 * r + 1))) > 128
+    if nucleo.sum() < 200:
+        return img, None
+
+    rgb = a[..., :3].astype(np.int16)
+    # a PELE é a cor mais comum do núcleo (quantizada): mediana não serve,
+    # porque metade do núcleo pode ser cabelo num personagem de franja
+    q = (rgb[nucleo] // 24)
+    chaves, contas = np.unique(q.reshape(-1, 3), axis=0, return_counts=True)
+    pele = chaves[contas.argmax()].astype(np.int16) * 24 + 12
+    tinta = nucleo & (np.abs(rgb - pele).sum(axis=2) > 90)
+    if tinta.sum() < 40:
+        return img, None
+
+    ys, xs = np.nonzero(dentro)
+    x0, x1 = float(xs.min()), float(xs.max())
+    y0, y1 = float(ys.min()), float(ys.max())
+    larg_r, alt_r = x1 - x0 + 1, y1 - y0 + 1
+    cx_rosto = (x0 + x1) / 2.0
+    lum = rgb.sum(axis=2)
+
+    olhos, cenhos = [], []
+    for c in _componentes(tinta, area_min=max(30, int(tinta.sum() * 0.02))):
+        bx0, by0, bx1, by1 = c["bbox"]
+        w, h = bx1 - bx0 + 1, by1 - by0 + 1
+        m = c["mask"].astype(bool)
+        if w > larg_r * 0.55 or h > alt_r * 0.55:
+            continue                       # cabelo, contorno: grande demais
+        # a feição vive na METADE DE CIMA do rosto; o que está embaixo é
+        # boca, queixo ou sombra de pescoço
+        if (by0 + by1) / 2.0 > y0 + alt_r * 0.62:
+            continue
+        claro = float((lum[m] > 620).mean())
+        escuro = float((lum[m] < 260).mean())
+        reg = {"c": c, "w": w, "h": h, "cx": (bx0 + bx1) / 2.0, "cy": (by0 + by1) / 2.0}
+        if claro > 0.15 and escuro > 0.08:
+            olhos.append(reg)
+        elif escuro > 0.55 and w >= h * 1.6:
+            # AS DUAS SOBRANCELHAS PODEM SER UM COMPONENTE SÓ: nesta folha
+            # elas se tocam pelo contorno e saíram como uma mancha de 104px
+            # atravessando o rosto inteiro. Girada como peça única, ela vira
+            # uma barra preta cruzando a testa -- foi o que apareceu em
+            # `bravo` no primeiro teste. Cortar pelo eixo do rosto devolve
+            # as duas, que é o que a arte desenha.
+            if bx0 < cx_rosto < bx1 and w > larg_r * 0.32:
+                for lado in (m & (np.arange(m.shape[1]) < cx_rosto),
+                             m & (np.arange(m.shape[1]) >= cx_rosto)):
+                    if lado.sum() < 20:
+                        continue
+                    ys_l, xs_l = np.nonzero(lado)
+                    cb = (int(xs_l.min()), int(ys_l.min()), int(xs_l.max()), int(ys_l.max()))
+                    cenhos.append({"c": {"mask": lado, "area": int(lado.sum()), "bbox": cb},
+                                   "w": cb[2] - cb[0] + 1, "h": cb[3] - cb[1] + 1,
+                                   "cx": (cb[0] + cb[2]) / 2.0, "cy": (cb[1] + cb[3]) / 2.0})
+            else:
+                cenhos.append(reg)
+
+    # DOIS olhos, um de cada lado, na mesma altura. Qualquer outra coisa é
+    # engano do detector, e engano aqui apaga rosto.
+    olhos = sorted(olhos, key=lambda r: -r["c"]["area"])[:2]
+    if len(olhos) != 2:
+        return img, None
+    esq, dir_ = sorted(olhos, key=lambda r: r["cx"])
+    if not (esq["cx"] < cx_rosto < dir_["cx"]):
+        return img, None
+    if abs(esq["cy"] - dir_["cy"]) > alt_r * 0.10:
+        return img, None
+
+    achados = {"olho_e": esq, "olho_d": dir_}
+    for reg in sorted(cenhos, key=lambda r: -r["c"]["area"])[:2]:
+        alvo = "olho_e" if reg["cx"] < cx_rosto else "olho_d"
+        nome = "sobrancelha_" + alvo[-1]
+        # tem que estar ACIMA do olho daquele lado, e perto dele
+        if reg["cy"] < achados[alvo]["cy"] and nome not in achados:
+            achados[nome] = reg
+
+    # --- recorta cada feição e apaga o lugar dela com a cor da pele
+    limpo = a.copy()
+    sprites = {}
+    cx_p, cy_p = float(piv[0]), float(piv[1])
+    for nome, reg in achados.items():
+        bx0, by0, bx1, by1 = reg["c"]["bbox"]
+        folga = 2
+        cx0, cy0 = max(0, bx0 - folga), max(0, by0 - folga)
+        cx1, cy1 = min(img.width, bx1 + folga + 1), min(img.height, by1 + folga + 1)
+        # QUANTA TESTA EXISTE ACIMA DESTA FEIÇÃO. A sobrancelha erguida é o
+        # traço mais forte do espanto, e sem limite ela sobe para cima do
+        # cabelo: no primeiro teste, `chocado` colou a sobrancelha na
+        # franja e deixou uma mancha de pele onde ela estava. A medida sai
+        # da arte -- personagem de testa alta ganha mais curso, o de franja
+        # baixa ganha menos, sem ninguém recalibrar constante nenhuma.
+        col = int(min(max(reg["cx"], 0), img.width - 1))
+        livre, y = 0, int(by0) - 1
+        while y >= 0 and nucleo[y, col] and not tinta[y, col]:
+            livre += 1
+            y -= 1
+        sprites[nome] = {
+            "img": img.crop((cx0, cy0, cx1, cy1)),
+            "dx": (cx0 + cx1) / 2.0 - cx_p,
+            "dy": (cy0 + cy1) / 2.0 - cy_p,
+            "larg": cx1 - cx0, "alt": cy1 - cy0,
+            "teto": max(0.0, livre - 2.0),
+        }
+        m = reg["c"]["mask"].astype(np.uint8) * 255
+        m = np.asarray(Image.fromarray(m).filter(ImageFilter.MaxFilter(5))) > 8
+        limpo[m, :3] = pele
+        limpo[m, 3] = 255
+
+    # emenda macia, pelo mesmo motivo da tapa da boca: cor certa com borda
+    # dura ainda se lê como remendo
+    tapa = np.zeros(alfa.shape, dtype=np.uint8)
+    for nome, reg in achados.items():
+        m = np.asarray(Image.fromarray(reg["c"]["mask"].astype(np.uint8) * 255)
+                       .filter(ImageFilter.MaxFilter(5)))
+        tapa = np.maximum(tapa, m)
+    suave = Image.composite(Image.fromarray(limpo), img,
+                            Image.fromarray(tapa).filter(ImageFilter.GaussianBlur(2)))
+    return suave, sprites
 
 
 def _cor_em_volta(img, tapa_mask, nucleo_mask, folga=6):
@@ -483,6 +694,145 @@ class Personagem:
                       f"ignorando")
                 self.img.pop(f, None)
 
+        # --- as feições estão desenhadas DENTRO do crânio? ---------------
+        # Quando a folha não entrega olho e sobrancelha como peça (é o caso
+        # do Pal), elas são recortadas de lá e passam a se mexer como se
+        # fossem peças. Ver _extrair_feicoes.
+        self.feicoes = None
+        self._cache_cara = {}
+        if "cranio" in self.img and not (self.tem("olho_e") and self.tem("olho_d")):
+            limpo, feic = _extrair_feicoes(self.img["cranio"], self.piv["cranio"])
+            if feic:
+                self.img["cranio"] = limpo
+                self.feicoes = feic
+                print(f"[rosto] feicoes recortadas do cranio: "
+                      f"{', '.join(sorted(feic))} -- a cara passa a se mexer")
+            else:
+                print("[rosto] nao consegui separar olhos e sobrancelhas do "
+                      "cranio; a expressao fica so na cabeca e na boca")
+
+        self._fundir_cabelo()
+
+    def _fundir_cabelo(self):
+        """O cabelo vira PARTE do crânio, uma peça só.
+
+        POR QUE (defeito visto em 29/08, ao ligar a expressão facial)
+            Bastava `cabeca_rot` valer 2 graus para o cabelo escorregar e
+            abrir uma faixa de pele na testa. A causa é o encaixe: o crânio
+            gira em torno do pivô dele (a base, no pescoço) e o cabelo em
+            torno do DELE (no meio da franja), e os dois só coincidem se o
+            pivô do cabelo cair exatamente no ponto de saída marcado no
+            crânio. O segmentador não mediu vão entre cabelo e crânio
+            (`vaos["cabelo"] == 0`), então esse ponto é estimado -- e alguns
+            pixels de erro viram um degrau visível assim que a cabeça
+            inclina.
+
+            Não há nada a ganhar em manter os dois separados: cabelo não
+            articula. Fundidos, giram como um bloco por construção, e o
+            erro de encaixe deixa de existir em vez de ser calibrado.
+
+        O pivô do crânio é preservado -- é ele que o esqueleto usa para
+        pendurar a cabeça no pescoço.
+        """
+        if "cabelo" not in self.img or "cranio" not in self.img:
+            return
+        saida = (self.saidas.get("cranio") or {}).get("cabelo")
+        if not saida:
+            return
+        pc = self.pivos["cranio"]
+        # vetor do pivô do crânio até o ponto onde o cabelo encaixa, medido
+        # na arte original: deslocamento é invariante a recorte e a
+        # centralização, então vale igual na peça já processada
+        dx, dy = float(saida[0]) - float(pc[0]), float(saida[1]) - float(pc[1])
+        cranio, pcr = self.img["cranio"], self.piv["cranio"]
+        cab, pcb = self.img["cabelo"], self.piv["cabelo"]
+        x0 = pcr[0] + dx - pcb[0]
+        y0 = pcr[1] + dy - pcb[1]
+        minx, miny = min(0.0, x0), min(0.0, y0)
+        maxx = max(float(cranio.width), x0 + cab.width)
+        maxy = max(float(cranio.height), y0 + cab.height)
+        tela = Image.new("RGBA", (int(math.ceil(maxx - minx)),
+                                  int(math.ceil(maxy - miny))), (0, 0, 0, 0))
+        tela.alpha_composite(cranio, (int(round(-minx)), int(round(-miny))))
+        tela.alpha_composite(cab, (int(round(x0 - minx)), int(round(y0 - miny))))
+        self.img["cranio"], self.piv["cranio"] = _centralizar(
+            tela, (pcr[0] - minx, pcr[1] - miny))
+        self.img.pop("cabelo", None)
+        self.piv.pop("cabelo", None)
+
+    def cranio_com_cara(self, ex, piscando=False):
+        """O crânio com as feições nas posições que a expressão pede.
+
+        Compor DENTRO da peça, e não colar cada feição na cena, é o que faz
+        a cara acompanhar a cabeça de graça: o crânio já é girado e
+        posicionado pelo esqueleto, e tudo o que estiver desenhado nele vai
+        junto. Também é o que mantém a ordem de sobreposição correta sem
+        acrescentar peça nenhuma ao ORDEM_Z.
+
+        Com cache pela expressão arredondada: um vídeo de 20 segundos tem
+        ~430 frames e não mais que algumas dezenas de caras distintas."""
+        base_img, base_piv = self.img["cranio"], self.piv["cranio"]
+        if not self.feicoes:
+            return base_img, base_piv
+        chave = (round(float(ex.get("sobrancelha_dy", 0.0)), 3),
+                 round(float(ex.get("sobrancelha_rot", 0.0)), 1),
+                 round(float(ex.get("olho_sx", 1.0)), 2),
+                 round(float(ex.get("olho_sy", 1.0)), 2),
+                 round(float(ex.get("olho_dy", 0.0)), 3),
+                 bool(piscando))
+        if chave in self._cache_cara:
+            return self._cache_cara[chave], base_piv
+
+        hc = self.altura_cranio()
+        cara = base_img.copy()
+        # as feições são medidas contra o PIVÔ: o crânio foi recomposto com
+        # o cabelo dentro depois de elas serem recortadas, e o centro da
+        # imagem mudou nessa hora. O pivô, não.
+        cx, cy = float(base_piv[0]), float(base_piv[1])
+        # ordem: sobrancelha depois do olho, para o cenho baixo poder
+        # encostar na pálpebra sem ficar por baixo dela
+        for nome in ("olho_e", "olho_d", "sobrancelha_e", "sobrancelha_d"):
+            spr = self.feicoes.get(nome)
+            if spr is None:
+                continue
+            im = spr["img"]
+            dx, dy = spr["dx"], spr["dy"]
+            if nome.startswith("olho"):
+                if piscando:
+                    # PISCAR sem peça de olho fechado: um traço da largura do
+                    # olho, na cor do contorno da própria arte. É o que a
+                    # animação cut-out faz -- e some junto com este remendo
+                    # no dia em que a folha trouxer o olho como peça.
+                    im = Image.new("RGBA", (spr["larg"], max(3, spr["alt"] // 3)),
+                                   (0, 0, 0, 0))
+                    d = ImageDraw.Draw(im)
+                    esp = max(2, spr["alt"] // 7)
+                    d.line([(1, im.height // 2), (im.width - 2, im.height // 2)],
+                           fill=_cor_da_casca(spr["img"]) + (255,), width=esp)
+                else:
+                    sx, sy = float(ex.get("olho_sx", 1.0)), float(ex.get("olho_sy", 1.0))
+                    if abs(sx - 1) > 0.02 or abs(sy - 1) > 0.02:
+                        im = im.resize((max(2, int(im.width * sx)),
+                                        max(2, int(im.height * sy))), Image.LANCZOS)
+                    dy += float(ex.get("olho_dy", 0.0)) * hc
+            else:
+                # sobe no máximo até onde há testa (ver `teto` em
+                # _extrair_feicoes): passar disso põe a sobrancelha dentro
+                # do cabelo, e o espanto vira defeito
+                d = float(ex.get("sobrancelha_dy", 0.0)) * hc
+                dy += max(d, -float(spr.get("teto", hc)))
+                rot = float(ex.get("sobrancelha_rot", 0.0))
+                if abs(rot) > 0.5:
+                    # sinal oposto nos dois lados: o que se lê como raiva é a
+                    # ponta INTERNA descendo nas duas, não as duas girando
+                    # para o mesmo lado
+                    g = rot if nome.endswith("_e") else -rot
+                    im = im.rotate(-g, resample=Image.BICUBIC, expand=True)
+            cara.alpha_composite(im, (int(round(cx + dx - im.width / 2.0)),
+                                      int(round(cy + dy - im.height / 2.0))))
+        self._cache_cara[chave] = cara
+        return cara, base_piv
+
     def p(self, nome):
         return self.img[nome], self.piv[nome]
 
@@ -530,8 +880,15 @@ def _tri(v):
 
 ABERTURA_MAXILAR = 0.38     # fração da altura do queixo que a boca desce
 
-# Peças que fecham a junta mesmo sem vão medido (ver Personagem.__init__)
-FECHA_MESMO_SEM_MEDIDA = ("mandibula",)
+# Peças que fecham a junta mesmo sem vão medido (ver Personagem.__init__).
+#
+# `abdomen` entrou em 29/08: ele é a RAIZ do esqueleto, e o segmentador só
+# mede vão entre uma peça e o pai dela -- a raiz não tem pai, então nunca
+# ganhou medida. O efeito aparecia como uma faixa branca contornando o
+# quadril: o peito e as coxas engrossavam em direção a ele, e ele não
+# engrossava para lado nenhum, deixando meio vão aberto na cintura e na
+# virilha em todos os frames.
+FECHA_MESMO_SEM_MEDIDA = ("mandibula", "abdomen")
 
 # Interior da boca: o que se vê quando o maxilar desce. Cor de dentro de
 # boca de desenho -- escura o bastante para ler como buraco, quente o
@@ -694,7 +1051,12 @@ def desenhar_personagem(pers, rig, boca_nivel=0.0, piscando=False, objeto=None,
             dentro.putalpha(img.split()[3])
             colar(base, dentro, piv, repouso_mandibula, ang[nome], e)
 
-        if nome in var:
+        if nome == "cranio" and getattr(pers, "feicoes", None):
+            # a cara vem montada dentro da própria peça (ver
+            # Personagem.cranio_com_cara): é assim que olho e sobrancelha se
+            # mexem numa folha que não os entregou separados
+            img, piv = pers.cranio_com_cara(ex, piscando)
+        elif nome in var:
             img, piv = pers.variar(nome, *var[nome])
         else:
             img, piv = pers.p(nome)
@@ -940,6 +1302,25 @@ def _achar_arte(pastas, nome, exts=(".png", ".jpg", ".jpeg", ".webp")):
     return None
 
 
+def _inventario(pastas, exts=(".png", ".jpg", ".jpeg", ".webp")):
+    """Nomes de arte que existem nessas pastas, sem extensão.
+
+    O motor precisa saber o que TEM antes de decidir o que usar: sem isso
+    a única resposta possível a um cenário faltante é a cor chapada, que
+    foi o defeito de 28/08. Arquivo começado por `_` fica de fora -- é a
+    convenção dos artefatos de conferência (`_mapa.png`)."""
+    fora = set()
+    for p in pastas:
+        try:
+            for f in os.listdir(p):
+                base, ext = os.path.splitext(f)
+                if ext.lower() in exts and not base.startswith("_"):
+                    fora.add(base.lower())
+        except OSError:
+            continue
+    return fora
+
+
 def _acoes_por_ator(tr, chaves, falante):
     """Distribui as ações do trecho entre os atores.
 
@@ -997,15 +1378,26 @@ def render(pasta_partes, spec, saida, tmpdir=None):
 
     # VOZ PRIMEIRO: a duração real vira a timeline (igual ao palito_v5)
     faixas, respiros, marcas_por_trecho, total = [], [], [], 0.0
+    n_trechos = len(spec["trechos"])
     for i, tr in enumerate(spec["trechos"]):
         wav = os.path.join(tmp, f"v{i:02d}.wav")
         perfil = tr.get("perfil_voz") or tr.get("ator") or "narrador"
         cfg = spec.get("vozes", {}).get(perfil, {})
+        # A EMOÇÃO DO TRECHO TAMBÉM MUDA A VOZ. Até 28/08 a cara mudava e a
+        # voz não: o mesmo rate e o mesmo pitch do começo ao fim, quatro
+        # falas com a mesma entonação. O rótulo é um só (`expressao`), e
+        # daqui saem os dois -- ver expressao.PROSODIA.
+        cfg = EXPR.prosodia(tr.get("expressao"), tr.get("intensidade", 1.0), cfg)
+        for k in ("rate", "pitch", "volume"):    # o trecho pode cravar
+            if tr.get(k):
+                cfg[k] = tr[k]
         # as MARCAS de palavra deixam de ser descartadas: sao elas que dao
         # o tempo exato de cada palavra para a legenda (ver legendas.py)
         marcas, dur = sintetizar(tr["fala"], cfg, wav,
                                  spec.get("modo_tts", os.environ.get("MODO_TTS", "real")))
-        respiro = float(tr.get("respiro_s", 0.45))
+        # pausa depois da fala: a longa é a que separa a montagem da piada
+        # da piada (expressao.respiro_sugerido)
+        respiro = float(tr.get("respiro_s", EXPR.respiro_sugerido(i, n_trechos)))
         tr["dur"] = dur + respiro
         tr["_inicio_s"] = total          # tempo global em que este trecho começa
         tr["_dur_voz"] = dur             # sem o respiro: é o que tem som
@@ -1018,7 +1410,19 @@ def render(pasta_partes, spec, saida, tmpdir=None):
     # -shortest do fim decepava a cauda de cada trecho -- o vídeo saía
     # 1,35s mais curto do que o log dizia (ver juntar_com_respiro)
     voz = juntar_com_respiro(faixas, respiros, os.path.join(tmp, "voz.wav"), tmp)
+    # O LIPSYNC SAI DA VOZ PURA, e é por isso que o envelope é medido AQUI,
+    # antes da mixagem: com efeito e trilha dentro, a boca do personagem
+    # abriria no baque da queda e no arpejo da marimba.
     env = envelope(voz)
+
+    # EFEITOS E TRILHA (ver sfx.py). O spec pode desligar com
+    # "musica": false / "sfx": false; ligados é o padrão, porque um Short de
+    # humor com faixa de voz seca soa como recado de secretária eletrônica.
+    audio = voz
+    if spec.get("sfx", True) is not False or spec.get("musica", True):
+        eventos = SFX.eventos_do_spec(spec) if spec.get("sfx", True) is not False else []
+        audio = SFX.mixar(voz, eventos, os.path.join(tmp, "mix.wav"),
+                          musica=spec.get("musica", True), dur_s=total)
 
     # LEGENDA: opcional, mas ligada por padrão. Short se assiste no mudo.
     leg = None
@@ -1046,6 +1450,13 @@ def render(pasta_partes, spec, saida, tmpdir=None):
         print(f"[chao] nao consegui medir ({e}); seguindo sem sombra de contato")
 
     pastas_cenario = _pastas(spec, pasta_partes, "pasta_cenarios", ("cenarios", "cenario"))
+    # O QUE EXISTE DE VERDADE, medido uma vez. É contra esta lista que o
+    # pedido do roteiro é resolvido: pedir `padaria` chega em `comercio`,
+    # pedir um cenário que ninguém gerou chega no interior mais parecido --
+    # e a cor chapada volta a ser o que sempre deveria ter sido, o último
+    # recurso quando NÃO HÁ arte nenhuma (ver cenarios.py).
+    inventario = _inventario(pastas_cenario)
+    print(f"[cenario] disponiveis: {', '.join(sorted(inventario)) or '(nenhum)'}")
     cenarios = {}
     # A CARA. Um Rosto por render: ele guarda com que expressão cada ator
     # terminou o trecho para o seguinte começar dali, em vez de pular de
@@ -1055,20 +1466,23 @@ def render(pasta_partes, spec, saida, tmpdir=None):
     n = 0
     pan = 0.0            # o quanto o fundo já andou; NÃO zera entre trechos
     for tr in spec["trechos"]:
-        cen = tr.get("cenario", "sala")
-        if cen not in cenarios:
-            cam_path = _achar_arte(pastas_cenario, cen)
-            if cam_path:
-                print(f"[cenario] {cen}: {cam_path}")
-                img = Image.open(cam_path)
-            else:
-                # fundo chapado é o ÚLTIMO recurso, e agora ele avisa. Foi
-                # esta cor saindo calada que fez o cenário faltante passar
-                # por "cenário ainda não existe" durante duas sessões.
-                print(f"[cenario] {cen}: nao achei arte em "
+        pedido = tr.get("cenario") or CENARIOS.escolher(tr.get("fala", ""))
+        cen, motivo = CENARIOS.resolver(pedido, inventario, tr.get("fala"))
+        if cen is None:
+            # fundo chapado é o ÚLTIMO recurso, e agora ele avisa alto. Foi
+            # esta cor saindo calada que fez o cenário faltante passar
+            # por "cenário ainda não existe" durante duas sessões.
+            cen = "_chapado"
+            if cen not in cenarios:
+                print(f"[cenario] SEM ARTE NENHUMA em "
                       f"{[os.path.normpath(p) for p in pastas_cenario]}; cor chapada")
-                img = Image.new("RGB", (W, H), "#A5A893")
-            cenarios[cen] = Cenario(img)
+                cenarios[cen] = Cenario(Image.new("RGB", (W, H), "#A5A893"))
+        elif cen not in cenarios:
+            cam_path = _achar_arte(pastas_cenario, cen)
+            print(f"[cenario] {pedido} -> {cen} ({motivo}): {cam_path}")
+            cenarios[cen] = Cenario(Image.open(cam_path))
+        elif motivo != "pedido":
+            print(f"[cenario] {pedido} -> {cen} ({motivo})")
         falante = tr.get("ator") if tr.get("ator") in elenco else padrao_ator
         por_ator = _acoes_por_ator(tr, chaves, falante)
         nf = max(1, int(tr["dur"] * FPS))
@@ -1122,7 +1536,7 @@ def render(pasta_partes, spec, saida, tmpdir=None):
     print(f"[cara] {' -> '.join(caras)}")
 
     subprocess.run(["ffmpeg", "-y", "-v", "error", "-framerate", str(FPS),
-                    "-i", os.path.join(fd, "%05d.png"), "-i", voz,
+                    "-i", os.path.join(fd, "%05d.png"), "-i", audio,
                     "-af", spec.get("loudnorm", "loudnorm=I=-9:LRA=8:TP=-1.5"),
                     "-c:v", "libx264", "-preset", "medium", "-crf", "21",
                     "-pix_fmt", "yuv420p", "-c:a", "aac", "-b:a", "192k",
