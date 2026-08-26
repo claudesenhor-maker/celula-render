@@ -137,6 +137,14 @@ class Personagem:
             self.corr.setdefault(filho, self.corr.get(dono, 0.0))
         self.img, self.piv = {}, {}
         for nome in cfg["partes"]:
+            if nome not in self.pivos:
+                # Rede de seguranca contra partes.json desatualizado: sem pivo
+                # medido o rig nao sabe onde a peca gira, entao ela nao entra
+                # em cena. Pular e' muito melhor que derrubar o render -- foi
+                # um KeyError('boca_0') aqui que mandou o run #12 inteiro para
+                # o rig vetorial.
+                print(f"[personagem] '{nome}' nao tem pivo medido; ignorando")
+                continue
             caminho = os.path.join(pasta, nome + ".png")
             if not os.path.exists(caminho):
                 raise FileNotFoundError(f"parte '{nome}.png' nao existe em {pasta}")
