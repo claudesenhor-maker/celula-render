@@ -1,0 +1,61 @@
+{
+  "_leia_me": "CONTRATO do formato novo, executavel. Movimento por acoes com motivo, cenario por nome, legenda ligada. E isto que o no '3 Producao' do n8n precisa passar a emitir -- hoje ele ainda manda pose/pose_saida, que o motor aceita por compatibilidade mas nao produz caminhada nem gesto com causa. Campo comecado por _ e comentario; o motor ignora.",
+  "fila_id": "teste-cutout-2708",
+  "_fila_id": "id NAO-uuid de proposito: job.py reconhece como render de teste, pula a fila_producao e o Dispatcher nunca repesca. O MP4 sobe no bucket e NADA e publicado.",
+  "personagem_url": "https://fejivjwyadbawjdhldbj.supabase.co/storage/v1/object/public/toonzueira/assets/parte_personagem/pal/personagem.zip",
+  "vozes": {
+    "protagonista": {"voice": "pt-BR-AntonioNeural", "rate": "+12%", "pitch": "+18Hz"}
+  },
+  "cenarios": {
+    "rua":  "https://fejivjwyadbawjdhldbj.supabase.co/storage/v1/object/public/toonzueira/assets_bruto/cenario/geral/rua.jpg",
+    "sala": "https://fejivjwyadbawjdhldbj.supabase.co/storage/v1/object/public/toonzueira/assets_bruto/cenario/geral/sala.jpg"
+  },
+  "_cenarios": "URL do BRUTO, nao da versao em assets/: a de assets/ passou pelo rembg e voltou lavada. Sem esta chave, job.py monta a URL padrao do bucket a partir do nome citado em cada trecho, entao um spec antigo tambem ganha fundo.",
+  "legenda": true,
+  "legenda_palavras": 3,
+  "loudnorm": "loudnorm=I=-9:LRA=8:TP=-1.5",
+  "trechos": [
+    {
+      "fala": "Fui no banco resolver uma coisa de cinco minutos.",
+      "perfil_voz": "protagonista",
+      "cenario": "rua",
+      "acoes": [
+        {"nome": "entrar_correndo", "de": 0.0, "ate": 0.5, "sentido": 1,
+         "motivo": "entra correndo porque acha que resolve rapido e ainda da tempo"},
+        {"nome": "apontar", "de": 0.62, "ate": 1.0, "altura": -20,
+         "motivo": "aponta para o banco no instante exato em que cita o banco"}
+      ]
+    },
+    {
+      "fala": "A moça olhou o sistema e falou: só um instante.",
+      "perfil_voz": "protagonista",
+      "cenario": "rua",
+      "acoes": [
+        {"nome": "encolher_ombros", "de": 0.45, "ate": 1.0,
+         "motivo": "da de ombros ao repetir a resposta que nao explica nada"}
+      ]
+    },
+    {
+      "fala": "Instante. Duas horas depois eu já conhecia a família inteira da fila.",
+      "perfil_voz": "protagonista",
+      "cenario": "sala",
+      "acoes": [
+        {"nome": "maos_na_cabeca", "de": 0.28, "ate": 0.8,
+         "motivo": "leva as maos a cabeca ao dizer duas horas, que e onde a piada vira"},
+        {"nome": "apontar", "de": 0.82, "ate": 1.0, "altura": 10,
+         "motivo": "aponta para a fila ao lado quando fala da familia inteira"}
+      ]
+    },
+    {
+      "fala": "Saí de lá com aniversário marcado e o problema do mesmo jeito.",
+      "perfil_voz": "protagonista",
+      "cenario": "sala",
+      "acoes": [
+        {"nome": "andar", "de": 0.0, "ate": 0.55, "sentido": -1, "passos_por_s": 1.5,
+         "motivo": "vai embora andando enquanto conta como saiu de la"},
+        {"nome": "acenar", "de": 0.6, "ate": 1.0,
+         "motivo": "acena de tchau para a fila, que virou conhecida"}
+      ]
+    }
+  ]
+}
