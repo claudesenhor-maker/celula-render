@@ -209,17 +209,52 @@ def juntar_com_respiro(faixas, respiros, destino, tmp, sr=SR):
     return destino
 
 
+def _palavras_do_alinhamento(texto, chars, ini, fim):
+    """Marcas por PALAVRA a partir do alinhamento por CARACTERE.
+
+    O ElevenLabs devolve tempo de cada caractere; a legenda (legendas.py)
+    trabalha por palavra, no mesmo formato que o edge-tts entrega. Agrupar
+    caractere em palavra e ficar com o primeiro início e o último fim de
+    cada grupo dá exatamente a mesma coisa -- com resolução melhor, porque
+    o alinhamento vem do áudio sintetizado e não de uma estimativa.
+
+    Sem isto, trocar de motor de voz custava a legenda palavra a palavra
+    (a de §6.5, que foi trabalho de uma sessão inteira): `_eleven` devolvia
+    lista vazia e a legenda caía no reparto proporcional."""
+    marcas, atual, t0, t1 = [], [], None, None
+    for c, a, b in zip(chars, ini, fim):
+        if str(c).strip() == "":
+            if atual:
+                marcas.append({"palavra": "".join(atual), "inicio_s": t0, "fim_s": t1})
+                atual, t0, t1 = [], None, None
+            continue
+        atual.append(c)
+        t0 = a if t0 is None else t0
+        t1 = b
+    if atual:
+        marcas.append({"palavra": "".join(atual), "inicio_s": t0, "fim_s": t1})
+    return marcas
+
+
 def _eleven(texto, cfg, out_mp3):
     """ElevenLabs. So entra se ELEVEN_API_KEY existir no ambiente.
 
-    Por que opcional e nao padrao: o Edge-TTS ja funciona e e gratis. Mas ele
-    e o servico de leitura do navegador Edge, nao uma API publica -- os termos
-    da Microsoft nao autorizam este uso. Antes de monetizar, precisa sair.
+    Por que ele existe: o Edge-TTS e o servico de leitura do navegador Edge,
+    nao uma API publica -- os termos da Microsoft nao autorizam este uso.
+    Antes de monetizar, precisa sair. E a voz e o item da stack em que a
+    diferenca de qualidade e mais audivel: entonacao, respiracao e enfase
+    no fim da frase, que e onde a piada aterrissa.
 
     No volume de 90 videos/mes (~36 mil caracteres) o Multilingual v2 sai por
     ~US$ 3,50/mes. E o maior ganho de qualidade percebida por dolar de toda a
-    stack, e com folga."""
-    import urllib.request
+    stack, e com folga.
+
+    ENDPOINT COM TIMESTAMPS (28/08). Antes esta funcao chamava
+    /text-to-speech/{voz}, que devolve so o audio, e voltava com `[]` de
+    marcas -- ou seja, ligar o ElevenLabs DESLIGAVA a legenda por palavra.
+    O endpoint /with-timestamps devolve o mesmo audio (em base64) mais o
+    alinhamento por caractere, e sai pelo mesmo preco."""
+    import base64, urllib.request
     chave = os.environ["ELEVEN_API_KEY"]
     voz = cfg.get("eleven_voice_id") or os.environ.get("ELEVEN_VOICE_ID")
     if not voz:
@@ -236,18 +271,25 @@ def _eleven(texto, cfg, out_mp3):
         },
     }).encode()
     req = urllib.request.Request(
-        f"https://api.elevenlabs.io/v1/text-to-speech/{voz}",
+        f"https://api.elevenlabs.io/v1/text-to-speech/{voz}/with-timestamps",
         data=corpo, method="POST",
         headers={"xi-api-key": chave, "Content-Type": "application/json",
-                 "Accept": "audio/mpeg"})
-    with urllib.request.urlopen(req, timeout=120) as r:
-        audio = r.read()
+                 "Accept": "application/json"})
+    with urllib.request.urlopen(req, timeout=180) as r:
+        resp = json.loads(r.read().decode())
+    audio = base64.b64decode(resp.get("audio_base64") or "")
     if not audio:
         raise RuntimeError("ElevenLabs devolveu audio vazio")
     with open(out_mp3, "wb") as f:
         f.write(audio)
-    # sem marcas de palavra: a duracao sai do arquivo, como no edge
-    return []
+
+    al = resp.get("alignment") or resp.get("normalized_alignment") or {}
+    marcas = _palavras_do_alinhamento(
+        texto, al.get("characters") or [],
+        al.get("character_start_times_seconds") or [],
+        al.get("character_end_times_seconds") or [])
+    print(f"[voz] eleven: {len(audio)/1024:.0f} KB, {len(marcas)} palavras alinhadas")
+    return marcas
 
 def sintetizar(texto, cfg, destino, modo):
     if modo == "real":
