@@ -117,19 +117,27 @@ PARTES_ESSENCIAIS = ("abdomen", "peito", "cranio",
                      "perna_sup_e", "perna_inf_e",
                      "perna_sup_d", "perna_inf_d")
 
-# ORDEM DE DESENHO, de trás para frente. É ela que define quem tapa quem,
-# e é a única coisa que impede o braço da frente de sumir atrás do tronco.
-# O lado "d" é o de trás por convenção: o personagem fica levemente de
-# três quartos mesmo desenhado de frente, e isso já dá alguma profundidade
-# de graça.
+# ORDEM DE DESENHO, de trás para frente. É ela que define quem tapa quem.
+#
+# OS DOIS BRAÇOS FICAM NA FRENTE (26/08). A ordem anterior punha o braço
+# direito atrás do tronco para dar um ar de três quartos. O que ela deu, na
+# prática, foi um braço que SOME: em repouso ele cai colado ao corpo e o
+# tronco o engole até o cotovelo, e em qualquer gesto que cruze a frente do
+# peito o antebraço desaparece no meio do movimento. Com a folha desenhada
+# de frente não há três quartos para preservar -- a profundidade vem do
+# gesto, não da ordem de pilha.
+#
+# As pernas mantêm o lado "d" atrás: elas não cruzam o corpo (ver o passo
+# lateral em acoes.py) e a diferença de plano ali é o que separa uma perna
+# da outra quando as duas estão embaixo do quadril.
 ORDEM_Z = (
-    "braco_sup_d", "braco_inf_d", "mao_d",
     "perna_sup_d", "perna_inf_d", "pe_d",
     "perna_sup_e", "perna_inf_e", "pe_e",
     "abdomen", "peito", "pescoco",
     "mandibula", "boca",
     "cranio", "nariz", "olho_e", "olho_d",
     "sobrancelha_e", "sobrancelha_d", "cabelo",
+    "braco_sup_d", "braco_inf_d", "mao_d",
     "braco_sup_e", "braco_inf_e", "mao_e",
 )
 
@@ -311,7 +319,14 @@ def conferir_pecas(pecas, ancoras):
     Roda DEPOIS da segmentação, não antes: o validador antigo checava a
     folha inteira por proporção e não tinha como saber se o ombro foi
     parar no cotovelo. Aqui cada peça já existe e cada pivô já foi medido,
-    então dá para cobrar o contrato de verdade."""
+    então dá para cobrar o contrato de verdade.
+
+    Devolve só o que REPROVA a folha. O estado do rosto sai por
+    `conferir_rosto` e é AVISO: uma folha que desenha a cara dentro do
+    crânio (as duas do Pal, a de 21/08 e a de 26/08) rende vídeo com
+    expressão -- o motor recorta as feições em tempo de carga
+    (`palito_cutout._extrair_feicoes`). Enquanto os dois vinham na mesma
+    lista, o `preparar_assets` recusava por aviso e a arte boa não subia."""
     problemas = []
     alt = max(ancoras.get("altura_figura", 1), 1)
 
@@ -337,7 +352,6 @@ def conferir_pecas(pecas, ancoras):
                 f"o vão entre {nome} e o pai dela é de {vao:.0f}px "
                 f"({vao / alt:.0%} da figura): as duas não são vizinhas")
 
-    problemas += conferir_rosto(pecas)
     return problemas
 
 
