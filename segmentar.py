@@ -158,7 +158,16 @@ def pivo_entre(a, b, amostra=1400):
     fica a 82% da meia-largura do tronco") e errava sempre que a arte não
     era simétrica -- a manga jogava o ombro para fora do osso e o braço
     saía descolado. Agora o pivô sai do desenho: onde a arte deixou o vão,
-    é ali que a peça gira."""
+    é ali que a peça gira.
+
+    PEÇAS QUE SE TOCAM (folha sem vão naquela junta, ver `_dividir_por_cor`)
+        Quando as duas bordas se encostam, o par mais próximo tem distância
+        zero -- e existem centenas deles ao longo de toda a fronteira. Pegar
+        o primeiro joga o pivô para a ponta do contato: com a cabeça colada
+        no peito, o pescoço nascia no canto do ombro e a cabeça girava como
+        uma placa pendurada. Com contato, o pivô é o CENTRO da fronteira,
+        que é onde um pescoço fica.
+    """
     pa, pb = _borda(a["mask"]), _borda(b["mask"])
     # subamostra: a distância mínima entre dois contornos não muda de forma
     # relevante com 1400 pontos em vez de 12 mil, e o par a par fica barato
@@ -168,7 +177,99 @@ def pivo_entre(a, b, amostra=1400):
         pb = pb[np.linspace(0, len(pb) - 1, amostra).astype(int)]
     d2 = ((pa[:, None, :] - pb[None, :, :]) ** 2).sum(axis=2)
     i, j = np.unravel_index(int(np.argmin(d2)), d2.shape)
-    return ((pa[i][0] + pb[j][0]) / 2.0, (pa[i][1] + pb[j][1]) / 2.0), float(np.sqrt(d2[i, j]))
+    dmin = float(np.sqrt(d2[i, j]))
+    if dmin < 3.0:
+        # tolerância de 2px sobre o mínimo: pega a faixa de contato inteira
+        # sem deixar entrar o resto do contorno
+        perto = d2 <= (dmin + 2.0) ** 2
+        ia, ib = np.nonzero(perto)
+        meio = (pa[ia] + pb[ib]) / 2.0
+        return (float(meio[:, 0].mean()), float(meio[:, 1].mean())), dmin
+    return ((pa[i][0] + pb[j][0]) / 2.0, (pa[i][1] + pb[j][1]) / 2.0), dmin
+
+
+# =====================================================================
+# Peça que a arte deixou grudada: separar pela FRONTEIRA DE COR
+# =====================================================================
+def _dilatar(m):
+    """Dilatação por 4-vizinhança, em numpy puro (não há scipy no runner)."""
+    d = m.copy()
+    d[1:, :] |= m[:-1, :]
+    d[:-1, :] |= m[1:, :]
+    d[:, 1:] |= m[:, :-1]
+    d[:, :-1] |= m[:, 1:]
+    return d
+
+
+def _dividir_por_cor(img, comp, min_frac=0.10, iteracoes=200):
+    """Uma peça grudada -> duas peças, cortadas onde a ARTE troca de cor.
+
+    POR QUE ISTO EXISTE (folha de 26/08)
+        A folha nova consertou a boca -- ela vem fechada, sem o entalhe
+        vazado que fazia o Pal parecer que gritava o vídeo inteiro -- mas
+        veio sem o vão do pescoço: cabeça, pescoço e camisa saíram como uma
+        peça de papel só. Com um bloco desses, a cabeça não gira, e sem giro
+        de cabeça não há inclinação, não há reação e a expressão facial
+        perde metade da leitura.
+
+        Recusar a folha devolveria a boca aberta; aceitá-la como está
+        devolveria um boneco de cabeça soldada. A terceira saída é olhar
+        para o que a arte TEM: entre o pescoço e a camisa existe uma
+        fronteira desenhada -- a pele acaba, o azul começa, com o traço
+        preto da gola no meio. Essa fronteira é tão explícita quanto um vão
+        branco; só não é vazia.
+
+    O QUE NÃO É
+        Não é o recorte por geometria que o projeto abandonou. Ali a peça
+        terminava numa RETA inventada por proporção; aqui ela termina na
+        linha que o desenhista traçou. Nenhuma medida é chutada.
+
+    COMO
+        Duas sementes: a maior mancha de cor de cima (pele: cabeça e
+        pescoço, que são a mesma cor e estão ligadas pelo queixo) e a maior
+        de baixo (a camisa). As duas crescem ao mesmo tempo dentro da peça,
+        um pixel por rodada, até cobrir tudo. O traço preto que as separa
+        acaba dividido ao meio, que é o resultado certo: cada peça fica com
+        a metade do contorno que lhe pertence.
+
+    Devolve (peça_de_cima, peça_de_baixo) ou None se não houver duas
+    manchas de cor grandes e empilhadas -- e aí a folha é grudada mesmo.
+    """
+    m = comp["mask"]
+    regioes = [c for c in _regioes_de_cor(img, comp, min_frac=min_frac)
+               if c["area"] >= comp["area"] * min_frac]
+    if len(regioes) < 2:
+        return None
+    # as duas maiores manchas de cor; têm que estar EMPILHADAS (uma acima da
+    # outra), senão não são "cabeça e tronco" e sim duas metades laterais
+    regioes.sort(key=lambda c: -c["area"])
+    a, b = sorted(regioes[:2], key=lambda c: c["cy"])
+    if a["bbox"][3] > b["bbox"][3] or abs(a["cy"] - b["cy"]) < comp["area"] ** 0.5 * 0.25:
+        return None
+
+    cima, baixo = a["mask"].copy(), b["mask"].copy()
+    livre = m & ~cima & ~baixo
+    for _ in range(iteracoes):
+        if not livre.any():
+            break
+        da = _dilatar(cima) & livre
+        db = _dilatar(baixo) & livre & ~da
+        if not (da.any() or db.any()):
+            break
+        cima |= da
+        baixo |= db
+        livre &= ~(da | db)
+    baixo |= livre            # sobra (ilha isolada dentro da peça) fica embaixo
+
+    fora = []
+    for mask in (cima, baixo):
+        ys, xs = np.nonzero(mask)
+        if len(xs) == 0:
+            return None
+        fora.append({"mask": mask, "area": int(mask.sum()),
+                     "bbox": (int(xs.min()), int(ys.min()), int(xs.max()), int(ys.max())),
+                     "cx": float(xs.mean()), "cy": float(ys.mean())})
+    return fora[0], fora[1]
 
 
 # =====================================================================
@@ -214,8 +315,13 @@ def nomear_corpo(comps, figura):
             and (resto[i]["bbox"][3] - resto[i]["bbox"][1]) < alt * 0.12:
         nomes[id(resto[i])] = "mandibula"
         i += 1
-    # pescoço: a peça mais estreita da coluna acima do tronco
-    if i < len(resto):
+    # pescoço: a peça mais estreita da coluna acima do tronco. Só existe se
+    # AINDA SOBRAREM peito e abdômen depois dele -- numa folha que grudou o
+    # pescoço na cabeça (26/08) a coluna tem três peças, e promover a
+    # primeira a pescoço fazia o peito virar pescoço, o abdômen virar peito
+    # e o quadril desaparecer.
+    if i < len(resto) - 2 and \
+            (resto[i]["bbox"][2] - resto[i]["bbox"][0]) < larg_cab * 0.7:
         nomes[id(resto[i])] = "pescoco"
         i += 1
     # peito e abdômen: as duas maiores que sobram na coluna, de cima
@@ -461,6 +567,44 @@ def _fundo(img, limiar=232):
     return fundo
 
 
+def _abrir_coluna_grudada(img, comps, figura):
+    """Se a coluna central vier com menos de três peças, tenta abri-la.
+
+    A coluna precisa de cabeça, peito e abdômen para o rig existir. Quando a
+    arte gruda cabeça e tronco (folha de 26/08), a peça maior é cortada pela
+    fronteira de cor -- ver `_dividir_por_cor`. Uma tentativa só: se a
+    divisão não render duas peças plausíveis, quem chama levanta
+    FolhaGrudada como antes, e a folha volta para a arte."""
+    x0, _, x1, _ = figura
+    centro_x = (x0 + x1) / 2.0
+    centrais = [c for c in comps if c["bbox"][0] <= centro_x <= c["bbox"][2]]
+    if len(centrais) >= 3:
+        return comps
+    alvo = max(centrais, key=lambda c: c["area"], default=None)
+    if alvo is None:
+        return comps
+    par = _dividir_por_cor(img, alvo)
+    if not par:
+        return comps
+    print(f"[segmentar] a coluna central veio com {len(centrais)} peça(s): "
+          f"a maior foi separada pela fronteira de cor em duas "
+          f"({par[0]['area']}px e {par[1]['area']}px)")
+    return [c for c in comps if c is not alvo] + list(par)
+
+
+def _ancestral_presente(nome, esqueleto, presentes):
+    """O pai mais próximo que existe de fato como peça.
+
+    Uma peça que a arte não separou (o pescoço, nesta folha) não pode
+    quebrar a cadeia: sem isto, `cranio` fica com o pai ausente, ninguém
+    grava a saída do peito para ele e a cabeça simplesmente não é
+    desenhada."""
+    pai = esqueleto.get(nome)
+    while pai is not None and pai not in presentes:
+        pai = esqueleto.get(pai)
+    return pai
+
+
 def segmentar_corpo(img, esqueleto, min_frac_area=0.0012):
     """Folha -> (peças, âncoras).
 
@@ -482,6 +626,7 @@ def segmentar_corpo(img, esqueleto, min_frac_area=0.0012):
             f"tem pelo menos 14. O gerador provavelmente ignorou os vãos "
             f"entre as partes")
 
+    comps = _abrir_coluna_grudada(img, comps, figura)
     nomes = nomear_corpo(comps, figura)
     por_nome = {n: c for c, n in ((c, nomes.get(id(c))) for c in comps) if n}
 
@@ -531,9 +676,10 @@ def segmentar_corpo(img, esqueleto, min_frac_area=0.0012):
 
     # --- pivôs: o meio do vão entre cada peça e o pai dela
     pivos, vaos = {}, {}
-    for nome, pai in esqueleto.items():
+    for nome in esqueleto:
         if nome not in por_nome:
             continue
+        pai = _ancestral_presente(nome, esqueleto, por_nome)
         if pai is None or pai not in por_nome:
             # raiz (ou pai ausente): ancora na base central da própria peça
             p = pecas[nome]
