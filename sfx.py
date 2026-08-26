@@ -1,0 +1,588 @@
+#!/usr/bin/env python3
+"""
+sfx — efeitos sonoros e trilha, SINTETIZADOS AQUI.
+
+POR QUE ISTO EXISTE
+    O vídeo de 28/08 tinha uma faixa de áudio só: a voz. Um Short de humor
+    com voz seca soa como recado de secretária eletrônica -- a piada chega
+    sem sublinhado nenhum, e o silêncio entre as falas (o respiro de 0,45s
+    que o motor insere) vira buraco em vez de virar tempo cômico. Foi a
+    queixa do usuário em 29/08, junto com "voz sem emoção".
+
+    Efeito sonoro em desenho animado não é enfeite: é o que diz ao
+    espectador ONDE está a piada. A batida seca quando o boneco leva as
+    mãos à cabeça é o que transforma um gesto em reação.
+
+POR QUE SINTETIZADO, E NÃO BAIXADO
+    Uma biblioteca de SFX seria melhor de ouvir e pior de manter: são
+    dezenas de arquivos com licenças diferentes, que precisam viver no
+    bucket, ser baixados no runner e conferidos um a um. A regra do
+    projeto (§1 do HANDOFF) é que o que roda automático prioriza o
+    GRÁTIS -- e um efeito de desenho animado é, acusticamente, uma coisa
+    simples: um envelope rápido sobre um oscilador que varre frequência.
+    Isso cabe em numpy, roda offline, é determinístico e não tem licença.
+
+    O spec continua podendo apontar `musica_url` para uma faixa de
+    verdade no dia em que houver uma; a trilha sintética é o padrão, não
+    a única opção.
+
+COMO SE LIGA AO VÍDEO
+    Duas fontes de evento, na mesma lógica das expressões faciais:
+
+      1. AUTOMÁTICA -- cada ação do vocabulário (acoes.py) tem um som que
+         lhe é próprio: `susto` estala, `cair` bate, `pular` faz boing. O
+         roteirista não precisa saber que áudio existe.
+      2. EXPLÍCITA -- `sfx: [{"nome": "rimshot", "em": 0.95}]` no trecho,
+         com `em` em fração do trecho, igual a `de`/`ate` das ações.
+
+    A mixagem final devolve UM wav: voz + efeitos + trilha, com a trilha
+    abaixando sozinha embaixo da fala (ducking). O ffmpeg do render
+    continua recebendo um arquivo de áudio só, como antes.
+"""
+import math
+import os
+import wave
+
+import numpy as np
+
+SR = 24000                     # o mesmo do palito_v5; misturar exige igualdade
+
+# Ganhos de mixagem, em dB relativos à voz. A voz manda: efeito que compete
+# com a fala faz o espectador perder a piada, que é o oposto do objetivo.
+GANHO_SFX_DB = -7.0
+GANHO_MUSICA_DB = -21.0
+DUCK_DB = -9.0                 # o quanto a trilha abaixa quando há voz
+
+
+def _db(x):
+    return 10.0 ** (x / 20.0)
+
+
+# =====================================================================
+# Blocos de síntese
+# =====================================================================
+def _t(dur, sr=SR):
+    return np.arange(int(max(1, dur * sr))) / float(sr)
+
+
+def _fade(x, ms=6.0, sr=SR):
+    """Rampa nas duas pontas. Sem ela todo efeito começa e termina com um
+    clique -- o degrau de amplitude é um impulso, e impulso se ouve."""
+    n = int(sr * ms / 1000.0)
+    if n < 2 or len(x) < 2 * n:
+        return x
+    r = np.linspace(0.0, 1.0, n)
+    x = x.copy()
+    x[:n] *= r
+    x[-n:] *= r[::-1]
+    return x
+
+
+def _exp(t, tau):
+    return np.exp(-t / max(tau, 1e-4))
+
+
+def _ruido(n, semente=0):
+    return np.random.default_rng(semente).uniform(-1.0, 1.0, n)
+
+
+def _passa_baixa(x, corte, sr=SR):
+    """One-pole. Vetorizar isto exigiria scipy; o laço roda sobre alguns
+    milhares de amostras por efeito, uma vez por processo (tudo é cacheado),
+    e some no tempo de render de um único frame."""
+    a = math.exp(-2.0 * math.pi * corte / sr)
+    y = np.empty_like(x)
+    z = 0.0
+    for i in range(len(x)):
+        z = (1.0 - a) * x[i] + a * z
+        y[i] = z
+    return y
+
+
+def _passa_alta(x, corte, sr=SR):
+    return x - _passa_baixa(x, corte, sr)
+
+
+def _varredura(f0, f1, dur, curva=3.0, sr=SR):
+    """Seno que varre de f0 a f1. A varredura é EXPONENCIAL porque altura
+    percebida é logarítmica: uma varredura linear de 400 a 100 Hz passa
+    quase todo o tempo dela na parte aguda e o ouvido lê como buzina, não
+    como queda."""
+    t = _t(dur, sr)
+    k = np.exp(-curva * t / max(t[-1], 1e-6))
+    f = f1 + (f0 - f1) * k
+    fase = 2.0 * np.pi * np.cumsum(f) / sr
+    return np.sin(fase)
+
+
+# =====================================================================
+# O catálogo
+# =====================================================================
+def _thud():
+    """Batida seca: corpo caindo, mão batendo na testa, objeto no chão."""
+    t = _t(0.30)
+    corpo = _varredura(150, 42, 0.30, curva=5.0) * _exp(t, 0.055)
+    estalo = _passa_baixa(_ruido(len(t), 1), 900) * _exp(t, 0.018) * 0.7
+    return _fade(corpo * 0.9 + estalo)
+
+
+def _boing():
+    """Mola de desenho animado. O vibrato é o que faz ler como MOLA e não
+    como assobio: é a oscilação em torno da frequência que dá a elasticidade."""
+    t = _t(0.45)
+    f = 420 * np.exp(-2.6 * t) + 110
+    f = f * (1.0 + 0.42 * np.sin(2 * np.pi * 11.0 * t) * np.exp(-3.0 * t))
+    x = np.sin(2 * np.pi * np.cumsum(f) / SR)
+    return _fade(x * _exp(t, 0.13) * 0.85)
+
+
+def _whoosh():
+    """Passagem rápida: alguém entra correndo, um braço cruza o quadro.
+    Ruído com o corte do filtro subindo e descendo -- é o Doppler de
+    banda larga que o ouvido reconhece como algo passando."""
+    n = int(0.38 * SR)
+    t = _t(0.38)
+    env = np.sin(np.pi * np.linspace(0, 1, n)) ** 1.6
+    base = _ruido(n, 7)
+    grave = _passa_baixa(base, 700)
+    agudo = _passa_alta(base, 2200)
+    k = np.sin(np.pi * np.linspace(0, 1, n))
+    return _fade(_fade(grave * (1 - k) + agudo * k) * env * 0.8)
+
+
+def _sting_susto():
+    """O susto. Três notas juntas a meio tom de distância batem entre si e
+    produzem a aspereza que se lê como alarme; a varredura para cima e o
+    tremolo são a parte 'desenho animado' -- sem eles vira trilha de terror,
+    que não é o tom do canal."""
+    t = _t(0.55)
+    x = np.zeros_like(t)
+    for k, f0 in enumerate((523.0, 554.0, 587.0)):
+        f = f0 * (1.0 + 0.55 * (1.0 - np.exp(-6.0 * t)))
+        x += np.sin(2 * np.pi * np.cumsum(f) / SR + k) / 3.0
+    tremolo = 1.0 + 0.35 * np.sin(2 * np.pi * 17.0 * t)
+    return _fade(x * tremolo * _exp(t, 0.16) * 0.9)
+
+
+def _pop():
+    """Pontuação curtinha: dedo que aponta, olho que arregala."""
+    t = _t(0.12)
+    x = _varredura(180, 900, 0.12, curva=-4.0) * _exp(t, 0.030)
+    return _fade(x * 0.7, ms=3)
+
+
+def _plim():
+    """Sino: a ideia que acende. Parciais inarmônicos, que é o que
+    diferencia sino de flauta."""
+    t = _t(0.9)
+    x = sum(a * np.sin(2 * np.pi * f * t) * _exp(t, d)
+            for f, a, d in ((1046.5, 0.6, 0.35), (2093.0, 0.25, 0.22),
+                            (2960.0, 0.15, 0.14)))
+    return _fade(x * 0.8)
+
+
+def _erro():
+    """O 'errou'. Duas quadradas desafinadas em terça menor: o intervalo é o
+    mesmo do interfone de prédio, e o cérebro brasileiro já sabe que
+    significa negativa."""
+    t = _t(0.42)
+    q = lambda f: np.sign(np.sin(2 * np.pi * f * t))
+    x = (q(196.0) + q(233.0)) * 0.5
+    env = np.where(t < 0.18, 1.0, np.where(t < 0.22, 0.0, 1.0)) * _exp(t, 0.5)
+    return _fade(_passa_baixa(x, 1800) * env * 0.5)
+
+
+def _rimshot():
+    """Ba-dum-tss. O carimbo de piada -- e o motivo pelo qual ele existe
+    aqui: o punchline precisa de uma marca sonora, senão a última fala soa
+    igual às outras três e ninguém sabe que acabou."""
+    total = int(1.5 * SR)
+    x = np.zeros(total)
+
+    def por(sinal, em):
+        i = int(em * SR)
+        n = min(len(sinal), total - i)
+        x[i:i + n] += sinal[:n]
+
+    t1 = _t(0.25)
+    tom = _varredura(300, 150, 0.25, curva=6.0) * _exp(t1, 0.07)
+    tom2 = _varredura(260, 130, 0.25, curva=6.0) * _exp(t1, 0.07)
+    # a caixa é mais curta que o tom, então cada uma entra por conta
+    # própria em vez de serem somadas antes (arrays de tamanhos diferentes)
+    caixa = lambda: _passa_alta(_ruido(int(0.18 * SR), 3), 1200) * _exp(_t(0.18), 0.05)
+    por(tom * 0.8, 0.00); por(caixa() * 0.5, 0.00)          # ba
+    por(tom2 * 0.8, 0.17); por(caixa() * 0.5, 0.17)         # dum
+    t3 = _t(1.1)
+    prato = _passa_alta(_ruido(len(t3), 11), 5000) * _exp(t3, 0.34)
+    por(prato * 0.42, 0.34)                                 # tss
+    return _fade(x * 0.9)
+
+
+def _passo():
+    t = _t(0.09)
+    return _fade(_passa_baixa(_ruido(len(t), 5), 1400) * _exp(t, 0.02) * 0.45, ms=3)
+
+
+def _tremido():
+    """Tremor de indecisão/coceira: útil em `cocar_cabeca` e `duvida`."""
+    t = _t(0.5)
+    f = 230 + 40 * np.sin(2 * np.pi * 9.0 * t)
+    x = np.sin(2 * np.pi * np.cumsum(f) / SR)
+    return _fade(x * _exp(t, 0.22) * 0.35)
+
+
+CATALOGO = {
+    "thud": _thud, "batida": _thud,
+    "boing": _boing, "mola": _boing,
+    "whoosh": _whoosh, "passagem": _whoosh,
+    "susto": _sting_susto, "sting": _sting_susto, "surpresa": _sting_susto,
+    "pop": _pop,
+    "plim": _plim, "ideia": _plim, "ding": _plim,
+    "erro": _erro, "errou": _erro,
+    "rimshot": _rimshot, "piada": _rimshot,
+    "passo": _passo,
+    "tremido": _tremido,
+}
+
+# Peso de cada efeito na mistura, depois de todos serem levados ao mesmo
+# pico. É aqui que se decide o que é PONTUAÇÃO e o que é ACONTECIMENTO: o
+# baque de uma queda tem que assustar, o pop de um dedo apontando não pode
+# tirar o ouvido da fala. Um lugar só para calibrar.
+GANHO_BASE = {
+    "susto": 1.00, "thud": 1.00, "boing": 0.85, "whoosh": 0.70,
+    "rimshot": 0.95, "erro": 0.80, "plim": 0.70,
+    "pop": 0.40, "tremido": 0.35, "passo": 0.30,
+}
+
+_CACHE = {}
+
+
+def efeito(nome):
+    """A onda do efeito, sintetizada uma vez por processo.
+
+    Nunca levanta: efeito faltando é vídeo sem um som, efeito que derruba o
+    render é vídeo nenhum -- a mesma regra de expressao.normalizar."""
+    n = str(nome or "").strip().lower()
+    if n not in CATALOGO:
+        return None
+    if n not in _CACHE:
+        x = CATALOGO[n]().astype(np.float32)
+        # PICO IGUAL PARA TODOS. Sem isto o ganho de cada efeito dependeria
+        # de quantos osciladores a receita dele soma, e equilibrar a mistura
+        # viraria adivinhação: o rimshot saía em 1,05 e o passo em 0,22.
+        p = float(np.max(np.abs(x))) or 1.0
+        _CACHE[n] = x * (0.9 / p)
+    return _CACHE[n]
+
+
+# =====================================================================
+# De AÇÃO para SOM
+# =====================================================================
+# Cada entrada: (efeito, onde na janela da ação, ganho).
+# `onde` é fração da janela `de`..`ate`: o baque de `cair` toca no fim da
+# queda, o boing de `pular` no impulso, o whoosh de quem entra correndo
+# junto com a entrada.
+DA_ACAO = {
+    "susto":          ("susto", 0.05, 1.0),
+    "pular":          ("boing", 0.12, 0.9),
+    "cair":           ("thud", 0.75, 1.0),
+    "tropecar":       ("thud", 0.45, 0.7),
+    "entrar_correndo": ("whoosh", 0.05, 0.8),
+    "sair_andando":   ("whoosh", 0.60, 0.5),
+    "maos_na_cabeca": ("thud", 0.25, 0.8),
+    "apontar":        ("pop", 0.15, 0.6),
+    "cocar_cabeca":   ("tremido", 0.20, 0.6),
+    "encolher_ombros": ("pop", 0.30, 0.4),
+    "virar":          ("whoosh", 0.20, 0.4),
+    "acenar":         ("pop", 0.20, 0.35),
+}
+
+# Expressões que merecem marca sonora própria, quando entram como JANELA de
+# reação no meio da fala (`expressoes: []`). Cara que muda sem som muda
+# menos: é o mesmo motivo pelo qual o susto tem sting.
+DA_EXPRESSAO = {
+    "chocado": ("susto", 0.9),
+    "surpreso": ("susto", 0.6),
+    "desesperado": ("erro", 0.6),
+    "duvida": ("tremido", 0.5),
+    "pensando": ("tremido", 0.4),
+}
+
+
+def eventos_do_spec(spec):
+    """Percorre os trechos e devolve [{nome, t, ganho}] em tempo GLOBAL.
+
+    Depende de `_inicio_s` e `_dur_voz`, que `palito_cutout.render` grava em
+    cada trecho quando sintetiza a voz -- ou seja, roda depois da voz e
+    antes do vídeo, que é exatamente onde a timeline real já existe.
+    """
+    fora = []
+    trechos = spec.get("trechos") or []
+    for i, tr in enumerate(trechos):
+        t0 = float(tr.get("_inicio_s", 0.0))
+        dur = float(tr.get("_dur_voz", 0.0))
+        if dur <= 0.0:
+            continue
+
+        for a in (tr.get("acoes") or []):
+            reg = DA_ACAO.get(str(a.get("nome", "")).strip().lower())
+            if not reg:
+                continue
+            nome, onde, g = reg
+            de, ate = float(a.get("de", 0.0)), float(a.get("ate", 1.0))
+            fora.append({"nome": nome, "t": t0 + (de + (ate - de) * onde) * dur,
+                         "ganho": g * float(a.get("forca", 1.0))})
+
+        for j in (tr.get("expressoes") or []):
+            reg = DA_EXPRESSAO.get(str(j.get("nome") or j.get("valor") or "").strip().lower())
+            if not reg:
+                continue
+            nome, g = reg
+            fora.append({"nome": nome, "t": t0 + float(j.get("de", 0.0)) * dur, "ganho": g})
+
+        # explícitos: sempre por último, para o roteirista poder pôr um som
+        # exatamente onde quiser sem lutar contra o automático
+        for s in (tr.get("sfx") or []):
+            nome = s.get("nome") if isinstance(s, dict) else s
+            em = float(s.get("em", 0.0)) if isinstance(s, dict) else 0.0
+            g = float(s.get("ganho", 1.0)) if isinstance(s, dict) else 1.0
+            fora.append({"nome": nome, "t": t0 + em * dur, "ganho": g})
+
+    # DOIS SONS QUASE JUNTOS viram barulho, não ênfase. Fica o de maior
+    # ganho. A janela é de 250ms porque o caso real não é empate exato: o
+    # `susto` que o motor injeta como gancho e o `susto` que o roteirista
+    # escreveu caíram a 200ms um do outro no teste de 29/08, e o resultado
+    # foi um estalo duplo que soa como defeito de áudio.
+    fora.sort(key=lambda e: e["t"])
+    limpos = []
+    for e in fora:
+        if limpos and e["t"] - limpos[-1]["t"] < 0.25:
+            if e["ganho"] > limpos[-1]["ganho"]:
+                limpos[-1] = e
+            continue
+        limpos.append(e)
+    return limpos
+
+
+# =====================================================================
+# TRILHA
+# =====================================================================
+# Progressão I-V-vi-IV: a mesma de metade da música pop do século, e por um
+# motivo -- ela não resolve em lugar nenhum, então dá para cortar em
+# qualquer compasso sem soar interrompida. Um Short dura 20 segundos e
+# termina no meio de tudo.
+_GRAUS = {
+    "leve":  [(0, 4, 7), (7, 11, 14), (9, 12, 16), (5, 9, 12)],
+    "tenso": [(0, 3, 7), (8, 12, 15), (5, 8, 12), (7, 11, 14)],
+}
+_TONICA = 261.63          # dó central
+
+
+def _nota(f, dur, sr=SR, brilho=0.30):
+    """Uma nota de marimba: fundamental, oitava e uma quinta acima, com
+    envelope percussivo. Instrumento de barra é quase só fundamental --
+    é por isso que ele não briga com a voz, que vive nos harmônicos."""
+    t = _t(dur, sr)
+    x = (np.sin(2 * np.pi * f * t)
+         + brilho * np.sin(2 * np.pi * 2 * f * t)
+         + brilho * 0.35 * np.sin(2 * np.pi * 3 * f * t))
+    ataque = np.minimum(1.0, t / 0.006)
+    return x * ataque * _exp(t, 0.16 + 0.4 * (200.0 / max(f, 60.0)))
+
+
+def trilha(dur_s, estilo="leve", bpm=104.0, semente=3, sr=SR):
+    """Bed instrumental do tamanho exato do vídeo.
+
+    Não é música para se ouvir: é chão. Fica 21 dB abaixo da voz e abaixa
+    mais ainda quando alguém fala. O que ela faz é tirar o silêncio de
+    estúdio de trás da fala -- que é o que fazia o vídeo soar como áudio de
+    WhatsApp em vez de desenho."""
+    n = int(dur_s * sr)
+    out = np.zeros(n + sr, dtype=np.float32)
+    acordes = _GRAUS.get(estilo, _GRAUS["leve"])
+    compasso = 4 * 60.0 / bpm
+    colcheia = compasso / 8.0
+    rng = np.random.default_rng(semente)
+
+    def por(sinal, em, g=1.0):
+        i = int(em * sr)
+        if i >= len(out):
+            return
+        m = min(len(sinal), len(out) - i)
+        out[i:i + m] += sinal[:m].astype(np.float32) * g
+
+    c = 0
+    t = 0.0
+    while t < dur_s:
+        grau = acordes[c % len(acordes)]
+        raiz = _TONICA * 2 ** (grau[0] / 12.0)
+        # baixo nos tempos 1 e 3: o mínimo que dá sensação de compasso
+        por(_nota(raiz / 2.0, compasso * 0.5, sr, brilho=0.12), t, 0.55)
+        por(_nota(raiz / 2.0, compasso * 0.4, sr, brilho=0.12), t + compasso * 0.5, 0.35)
+        # arpejo de colcheias, com uma nota trocada de vez em quando para o
+        # laço de 4 compassos não ficar óbvio num vídeo de 20 segundos
+        ordem = [0, 1, 2, 1, 2, 1, 0, 1]
+        for k, idx in enumerate(ordem):
+            if rng.random() < 0.12:
+                continue
+            semi = grau[idx] + (12 if rng.random() < 0.18 else 0)
+            por(_nota(_TONICA * 2 ** (semi / 12.0), colcheia * 2.2, sr),
+                t + k * colcheia, 0.30 if k % 2 else 0.42)
+        t += compasso
+        c += 1
+
+    out = out[:n]
+    # pico previsível: o número de notas que se sobrepõem varia com o
+    # sorteio, e sem normalizar o ganho de -21 dB significaria uma coisa
+    # diferente a cada render
+    p = float(np.max(np.abs(out))) or 1.0
+    out *= 0.8 / p
+    # entrada e saída: a trilha nasce e morre fora do quadro
+    fi, fo = int(0.9 * sr), int(1.4 * sr)
+    if n > fi + fo:
+        out[:fi] *= np.linspace(0, 1, fi)
+        out[-fo:] *= np.linspace(1, 0, fo)
+    return out
+
+
+# =====================================================================
+# MIXAGEM
+# =====================================================================
+def _ler_wav(caminho):
+    with wave.open(caminho) as w:
+        sr, n, larg, canais = (w.getframerate(), w.getnframes(),
+                               w.getsampwidth(), w.getnchannels())
+        raw = w.readframes(n)
+    if larg != 2:
+        raise RuntimeError(f"{caminho}: esperava 16 bits, veio {larg * 8}")
+    x = np.frombuffer(raw, dtype="<i2").astype(np.float32) / 32768.0
+    if canais > 1:
+        x = x.reshape(-1, canais).mean(axis=1)
+    return x, sr
+
+
+def _escrever_wav(caminho, x, sr=SR):
+    x = np.clip(x, -1.0, 1.0)
+    with wave.open(caminho, "w") as w:
+        w.setnchannels(1)
+        w.setsampwidth(2)
+        w.setframerate(sr)
+        w.writeframes((x * 32000.0).astype("<i2").tobytes())
+    return caminho
+
+
+def _ducking(voz, sr, ataque=0.05, saida=0.32):
+    """Ganho 0..1 para a trilha, a partir de onde há voz.
+
+    Envelope com ATAQUE rápido e SAÍDA lenta: a trilha tem que sumir na
+    hora em que a fala começa e voltar devagar depois que ela termina. Se
+    subir rápido, ela bombeia dentro das pausas entre palavras e o
+    resultado chama mais atenção do que a trilha inteira."""
+    jan = max(1, int(0.02 * sr))
+    n = len(voz) // jan
+    if n < 2:
+        return np.ones(len(voz), dtype=np.float32)
+    blocos = np.abs(voz[:n * jan]).reshape(n, jan).max(axis=1)
+    piso = max(blocos.max() * 0.06, 0.01)
+    alvo = np.where(blocos > piso, 1.0, 0.0)
+    ka = math.exp(-jan / (ataque * sr))
+    ks = math.exp(-jan / (saida * sr))
+    suave = np.empty(n, dtype=np.float32)
+    z = 0.0
+    for i, v in enumerate(alvo):
+        k = ka if v > z else ks
+        z = v + (z - v) * k
+        suave[i] = z
+    g = 1.0 + (_db(DUCK_DB) - 1.0) * suave
+    return np.repeat(g, jan)[:len(voz)]
+
+
+def mixar(voz_wav, eventos, destino, musica=None, dur_s=None, sr=SR):
+    """Voz + efeitos + trilha -> um WAV só, que é o que o ffmpeg recebe.
+
+    `musica` é o bloco `musica` do spec (ou None/False para desligar):
+        {"estilo": "leve", "bpm": 104, "ganho_db": -21, "url": "..."}
+    Com `url` a faixa é lida do disco (job.py baixa); sem ela, sintetizada.
+
+    Devolve o caminho do mix. Falha em qualquer etapa devolve a voz
+    original: o vídeo pode sair sem trilha, não pode sair sem voz."""
+    try:
+        voz, sr_voz = _ler_wav(voz_wav)
+    except Exception as e:
+        print(f"[sfx] nao consegui ler a voz ({e}); seguindo sem mixagem")
+        return voz_wav
+    if sr_voz != sr:
+        sr = sr_voz
+    n = len(voz)
+    if dur_s:
+        n = max(n, int(dur_s * sr))
+    mix = np.zeros(n, dtype=np.float32)
+    mix[:len(voz)] += voz
+
+    usados = []
+    g_sfx = _db(GANHO_SFX_DB)
+    for e in (eventos or []):
+        onda = efeito(e.get("nome"))
+        if onda is None:
+            print(f"[sfx] efeito desconhecido: {e.get('nome')!r}")
+            continue
+        i = int(max(0.0, float(e.get("t", 0.0))) * sr)
+        if i >= n:
+            continue
+        m = min(len(onda), n - i)
+        base = GANHO_BASE.get(str(e.get("nome", "")).strip().lower(), 0.7)
+        mix[i:i + m] += onda[:m] * (g_sfx * base * float(e.get("ganho", 1.0)))
+        usados.append(f"{e['nome']}@{float(e.get('t', 0)):.1f}s")
+    if usados:
+        print(f"[sfx] {len(usados)} efeitos: {', '.join(usados)}")
+
+    if musica:
+        cfg = musica if isinstance(musica, dict) else {}
+        try:
+            caminho = cfg.get("arquivo")
+            if caminho and os.path.exists(caminho):
+                faixa, sr_m = _ler_wav(caminho)
+                if sr_m != sr:
+                    # reamostragem linear: a trilha é bed, não solo -- o
+                    # erro de interpolação some 21 dB abaixo da voz
+                    faixa = np.interp(np.arange(n) * sr_m / float(sr),
+                                      np.arange(len(faixa)), faixa).astype(np.float32)
+                while len(faixa) < n:                    # loop até cobrir
+                    faixa = np.concatenate([faixa, faixa])
+                faixa = faixa[:n]
+                print(f"[musica] faixa do disco: {os.path.basename(caminho)}")
+            else:
+                faixa = trilha(n / float(sr), cfg.get("estilo", "leve"),
+                               float(cfg.get("bpm", 104.0)), sr=sr)
+                print(f"[musica] trilha sintetizada ({cfg.get('estilo', 'leve')}, "
+                      f"{float(cfg.get('bpm', 104.0)):.0f} bpm)")
+            g = _db(float(cfg.get("ganho_db", GANHO_MUSICA_DB)))
+            duck = _ducking(np.pad(voz, (0, max(0, n - len(voz)))), sr)
+            mix += faixa[:n] * g * duck
+        except Exception as e:
+            print(f"[musica] falhou ({e}); seguindo sem trilha")
+
+    # LIMITADOR, não normalizador. Escalar a mistura inteira para caber
+    # abaixaria a voz sempre que houvesse um efeito alto -- e a voz é o que
+    # não pode variar. A tangente só dobra os picos que passariam de 1.
+    pico = float(np.max(np.abs(mix))) if len(mix) else 0.0
+    if pico > 0.98:
+        mix = np.tanh(mix * 0.9) / np.tanh(0.9)
+    return _escrever_wav(destino, mix, sr)
+
+
+if __name__ == "__main__":
+    # Demonstração: um wav com todos os efeitos em fila, para ouvir de uma
+    # vez o que existe. `python sfx.py [saida.wav]`
+    import sys
+    saida = sys.argv[1] if len(sys.argv) > 1 else "sfx_demo.wav"
+    nomes = ["susto", "thud", "boing", "whoosh", "pop", "plim", "erro",
+             "tremido", "passo", "rimshot"]
+    dur = len(nomes) * 1.6 + 2.0
+    x = trilha(dur, "leve") * _db(GANHO_MUSICA_DB + 8)
+    for i, nm in enumerate(nomes):
+        onda = efeito(nm)
+        j = int((1.0 + i * 1.6) * SR)
+        x[j:j + len(onda)] += onda[:max(0, len(x) - j)] * _db(GANHO_SFX_DB + 6)
+    _escrever_wav(saida, x)
+    print(f"[ok] {saida}  ({dur:.0f}s)  ordem: {', '.join(nomes)}")
