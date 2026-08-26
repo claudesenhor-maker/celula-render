@@ -168,11 +168,6 @@ def gerar_partes_json(prefixo_personagem):
         except Exception as e:
             print(f"[partes.json] nao consegui baixar {caminho}: {e}")
 
-    faltando = [p for p in PARTES_MINIMAS if p not in imagens]
-    if faltando:
-        print(f"[partes.json] {prefixo_personagem}: ainda faltam {faltando}, nao gerei")
-        return False
-
     try:
         ancoras = json.loads(baixar(prefixo_personagem + "ancoras.json"))
     except Exception as e:
@@ -180,11 +175,30 @@ def gerar_partes_json(prefixo_personagem):
               f"sem elas o rig nao tem pivo -- refaca a leitura da folha")
         return False
 
+    # SO entra em partes.json o que o segmentador MEDIU. A pasta do bucket
+    # acumula PNG de rodadas antigas: o recorte geometrico deixou la boca_0..3,
+    # olho_aberto, tronco, braco_sup, perna_inf... -- nomes que nem existem no
+    # ESQUELETO de hoje. Nenhum deles tem pivo, e sem pivo o rig nao sabe onde
+    # a peca gira: o cut-out morria com KeyError na primeira que encontrava.
+    # Peca sem pivo medido nao e peca. Filtrar ANTES de conferir as essenciais,
+    # senao uma sobra antiga faz a conferencia passar por engano.
+    pivos = ancoras["pivos"]
+    sobras = sorted(n for n in imagens if n not in pivos)
+    if sobras:
+        print(f"[partes.json] {prefixo_personagem}: {len(sobras)} peca(s) sem "
+              f"pivo medido, ficam de fora: {', '.join(sobras)}")
+        imagens = {n: im for n, im in imagens.items() if n in pivos}
+
+    faltando = [p for p in PARTES_MINIMAS if p not in imagens]
+    if faltando:
+        print(f"[partes.json] {prefixo_personagem}: ainda faltam {faltando}, nao gerei")
+        return False
+
     alt = max(ancoras.get("altura_figura", 0), 1)
     cfg = {
         "escala": round(ALTURA_ALVO_PX / alt, 3) if alt > 1 else 1.0,
         "partes": sorted(imagens.keys()),
-        "pivos": ancoras["pivos"],
+        "pivos": pivos,
         "saidas": ancoras.get("saidas", {}),
         "comprimentos": ancoras.get("comprimentos", {}),
         "vaos": ancoras.get("vaos", {}),
