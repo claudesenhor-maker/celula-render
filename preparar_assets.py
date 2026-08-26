@@ -370,6 +370,26 @@ def main():
             continue
         try:
             img = Image.open(io.BytesIO(baixar(bruto))).convert("RGB")
+
+            # CENARIO NAO PASSA PELO REMBG.
+            #
+            # rembg e segmentador de OBJETO SALIENTE: decide qual e a figura
+            # principal e apaga o resto. Num cenario nao ha figura principal
+            # -- e essa a graca, o centro fica vazio para o personagem
+            # ocupar -- entao ele apaga quase tudo e devolve um fantasma
+            # lavado. Conferido em assets/cenario/geral/sala.png: a sala
+            # inteira voltou como linha palida sobre transparencia.
+            #
+            # E fundo nao precisa de alfa: ele fica ATRAS de tudo. Aqui o
+            # bruto so e reembalado como PNG, sem recorte nenhum.
+            if bruto.startswith("assets_bruto/cenario/"):
+                buf = io.BytesIO()
+                img.save(buf, "PNG", optimize=True)
+                subir(final, buf.getvalue())
+                print(f"[ok] {final}  {img.width}x{img.height}  (cenario, sem rembg)")
+                feitos += 1
+                continue
+
             recortada = remove(img, session=sessao).convert("RGBA")
 
             # Corta a moldura vazia: o gerador centraliza a peca num quadrado
