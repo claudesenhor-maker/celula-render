@@ -10,3 +10,8 @@ edge-tts>=6.1
 # Pillow: composicao do cut-out (girar e colar as pecas do personagem)
 # e a montagem do fundo gerado por IA sob o SVG.
 Pillow>=10.0
+# numpy: palito_cutout e segmentar leem as pecas como array (mascara do vao,
+# medida do pivo, envoltoria do audio). Sem ele o import do cut-out estoura e
+# job.py cai calado no rig vetorial -- foi o que matou o render do run #11.
+# assets.yml nunca sentiu falta porque o rembg ja traz numpy junto.
+numpy>=1.24
