@@ -300,13 +300,20 @@ def render_spec(spec, saida, modo="demo", tmpdir=None):
     # ---- 3.3 frames, com a boca seguindo o áudio ----------------------
     n = 0
     for tr in spec["trechos"]:
-        p1 = merge(REST, POSES[tr["pose"]], EXPRESSOES[tr["expressao"]])
-        p2 = merge(REST, POSES[tr.get("pose_saida", tr["pose"])], EXPRESSOES[tr["expressao"]])
+        # .get com padrao, como em palito_cutout._rig_do_trecho: o spec novo
+        # descreve movimento por `acoes` e nao traz mais `pose`/`expressao`.
+        # Indexar direto fazia o rig vetorial -- que e a REDE DE SEGURANCA --
+        # morrer de KeyError justamente quando era a ultima chance de sair
+        # video. Sem pose declarada o boneco fica parado, que e o certo.
+        _pose = tr.get("pose", "parado_falando")
+        _expr = tr.get("expressao", "neutro")
+        p1 = merge(REST, POSES.get(_pose, {}), EXPRESSOES.get(_expr, {}))
+        p2 = merge(REST, POSES.get(tr.get("pose_saida", _pose), {}), EXPRESSOES.get(_expr, {}))
         dois = tr.get("quem") == "ab"
         if dois:
             p1, p2 = merge(p1, {"dx": -230}), merge(p2, {"dx": -230})
-            sec = merge(REST, POSES[tr.get("pose_b", "parado_falando")],
-                        EXPRESSOES[tr.get("expressao_b", "neutro")],
+            sec = merge(REST, POSES.get(tr.get("pose_b", "parado_falando"), {}),
+                        EXPRESSOES.get(tr.get("expressao_b", "neutro"), {}),
                         {"dx": 250, "cabeca_r": 112, "boca": 0.18})
         for f in range(max(1, int(tr["dur"] * FPS))):
             fh = (f // 2) * 2
