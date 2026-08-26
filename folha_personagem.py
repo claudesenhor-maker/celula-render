@@ -336,4 +336,65 @@ def conferir_pecas(pecas, ancoras):
             problemas.append(
                 f"o vão entre {nome} e o pai dela é de {vao:.0f}px "
                 f"({vao / alt:.0%} da figura): as duas não são vizinhas")
+
+    problemas += conferir_rosto(pecas)
+    return problemas
+
+
+# Rosto: o que precisa existir para haver EXPRESSÃO e LIPSYNC.
+# Não entra em PARTES_ESSENCIAIS de propósito -- uma folha sem rosto
+# articulado ainda rende vídeo, só rende vídeo de cara parada. É aviso,
+# não impedimento; quem decide se aceita é quem olha a conferência.
+PARTES_DE_ROSTO = ("mandibula", "olho_e", "olho_d",
+                   "sobrancelha_e", "sobrancelha_d")
+
+
+def conferir_rosto(pecas):
+    """A cara veio em peças de verdade, ou em fiapos?
+
+    POR QUE ISTO EXISTE (28/08)
+        A folha do Pal foi aprovada em produção com 23 peças e passou por
+        toda a conferência. Só que `cranio.png` era a CARA INTEIRA -- olhos,
+        sobrancelhas, nariz e orelhas desenhados dentro dela -- e as peças
+        `olho_e` (11x21), `sobrancelha_e` (40x12) e `mandibula` eram
+        pedaços do contorno do cabelo e um punhado de pixels de pele.
+
+        A conferência antiga não pegou porque só media a FRAÇÃO DA ALTURA
+        da figura, e um fiapo de 12px de altura cai dentro da faixa
+        legítima de uma sobrancelha. O que denuncia o fiapo é outra coisa:
+        ele é RALO -- ocupa pouco da própria caixa -- e é minúsculo em área
+        perto do que uma feição de verdade tem.
+
+        Sem esta checagem, a folha nova (a de boca fechada, §7.1) pode ser
+        aceita com o mesmo defeito, e a expressão facial continuaria sem
+        peça em que agir.
+    """
+    problemas = []
+    from PIL import Image  # noqa: F401  (só para deixar a dependência explícita)
+    import numpy as np
+
+    faltando = [p for p in PARTES_DE_ROSTO if p not in pecas]
+    if len(faltando) == len(PARTES_DE_ROSTO):
+        problemas.append(
+            "o rosto não foi segmentado: nenhuma feição saiu como peça. O "
+            "personagem não terá expressão facial nem lipsync de queixo -- a "
+            "arte precisa desenhar olhos, sobrancelhas e queixo como formas "
+            "separadas, com vão entre elas")
+        return problemas
+    if faltando:
+        problemas.append("faltam peças de rosto: " + ", ".join(faltando)
+                         + " (sem elas a expressão facial fica pela metade)")
+
+    for nome in PARTES_DE_ROSTO:
+        p = pecas.get(nome)
+        if p is None:
+            continue
+        a = np.asarray(p.convert("RGBA"))[..., 3] > 10
+        area = int(a.sum())
+        densidade = area / max(a.size, 1)
+        if densidade < 0.22:
+            problemas.append(
+                f"{nome} é um fiapo: só {densidade:.0%} da própria caixa tem "
+                f"desenho. Feição de verdade é uma mancha cheia; isto é um "
+                f"pedaço de contorno que foi batizado errado")
     return problemas
