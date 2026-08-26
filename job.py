@@ -77,6 +77,79 @@ def atualizar_fila(fila_id, campos):
     r.raise_for_status()
 
 
+def _baixar_para(url, pasta, nome):
+    """Baixa uma arte e devolve o caminho local, ou None se nao veio.
+
+    A extensao sai da URL: o Cenario abre a imagem pelo conteudo, mas quem
+    PROCURA o arquivo procura por extensao, entao gravar um JPEG como .png
+    faria o motor nao achar o unico cenario que presta."""
+    ext = os.path.splitext(url.split("?")[0])[1].lower()
+    if ext not in (".png", ".jpg", ".jpeg", ".webp"):
+        ext = ".png"
+    os.makedirs(pasta, exist_ok=True)
+    destino = os.path.join(pasta, nome + ext)
+    try:
+        r = requests.get(url, timeout=120)
+        r.raise_for_status()
+        Path(destino).write_bytes(r.content)
+        print(f"[arte] {nome}{ext}  {len(r.content)/1024:.0f} KB")
+        return destino
+    except Exception as e:
+        # arte de fundo e melhoria, nao requisito: falhar aqui nao pode
+        # custar o video -- o motor cai na cor chapada e avisa no log
+        print(f"[arte] {nome} falhou ({e}); seguindo sem ela")
+        return None
+
+
+def buscar_cenarios_e_objetos(spec):
+    """Poe cenario e objeto no disco, que e onde o motor cut-out procura.
+
+    ISTO FALTAVA, e e a causa real do fundo chapado. palito_cutout sempre
+    leu cenario de `<pasta_partes>/../cenarios/` e objeto de `../objetos/`,
+    mas NADA no pipeline escrevia nessas pastas -- o zip do personagem so
+    traz as pecas do corpo. O `#A5A893` saiu em todo video e passou duas
+    sessoes sendo lido como "cenario ainda nao existe", enquanto rua.jpg e
+    sala.jpg estavam no bucket.
+
+    Duas fontes, nesta ordem:
+      1. o que o spec mandar em `cenarios`/`objetos` (URL explicita)
+      2. o padrao do bucket, montado a partir do nome citado nos trechos
+
+    O passo 2 existe porque o no que monta o spec ("3 Producao") ainda nao
+    emite `cenarios`. Sem ele, consertar o motor nao mudaria nada nos
+    videos de producao ate alguem mexer no n8n.
+
+    Cenario vem do BRUTO (JPEG) de proposito. A versao em `assets/` passou
+    pelo rembg, que e segmentador de objeto SALIENTE: num cenario nao ha
+    objeto saliente, entao ele apaga quase tudo e devolve um fantasma
+    lavado -- conferido em sala.png. Para fundo, alfa nao serve para nada."""
+    pasta_cen, pasta_obj = "/tmp/cenarios", "/tmp/objetos"
+    publico = f"{SB}/storage/v1/object/public/{BUCKET}"
+
+    urls = dict(spec.get("cenarios") or {})
+    for tr in spec.get("trechos") or []:
+        nome = tr.get("cenario")
+        if nome and nome not in urls:
+            urls[nome] = None                    # marca para tentar o padrao
+    for nome, url in urls.items():
+        for c in ([url] if url else
+                  [f"{publico}/assets_bruto/cenario/geral/{nome}.jpg",
+                   f"{publico}/assets/cenario/geral/{nome}.png"]):
+            if _baixar_para(c, pasta_cen, nome):
+                break
+    spec["pasta_cenarios"] = pasta_cen
+
+    objetos = spec.get("objetos") or {}
+    locais = {}
+    for nome, ref in objetos.items():
+        alvo = (ref if isinstance(ref, str) and ref.startswith("http")
+                else f"{publico}/assets/objeto/geral/{ref or nome}.png")
+        locais[nome] = nome if _baixar_para(alvo, pasta_obj, nome) else ref
+    if objetos:
+        spec["objetos"] = locais
+    spec["pasta_objetos"] = pasta_obj
+
+
 def avisar(payload):
     """Callback opcional. Se o certificado do n8n estiver ok, avisa tambem."""
     cb = os.environ.get("CALLBACK_URL")
@@ -119,6 +192,11 @@ def main():
     pecas_url = spec.get("personagem_url") or os.environ.get("PERSONAGEM_URL", "")
     motor = "vetor"
     if pecas_url:
+        # FORA do try do cut-out: cada download ja falha sozinho e segue.
+        # Se estivesse dentro, um erro aqui derrubaria o motor inteiro para
+        # o rig vetorial por causa de um FUNDO -- trocar o video certo pelo
+        # video da rede de seguranca e o pior desfecho possivel.
+        buscar_cenarios_e_objetos(spec)
         try:
             import zipfile, io
             pasta = "/tmp/personagem"
