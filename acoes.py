@@ -381,14 +381,16 @@ def gesticular(u, rig, dur, a):
     if f < 0.01:
         return {}
     w = 2 * math.pi * 0.62 * u * dur          # ~0,6 gesto por segundo
-    # antebraços um pouco à frente do corpo (dobra para DENTRO), subindo e
-    # descendo em contratempo: é o gesto de quem conta um caso, não o de
-    # quem apresenta o telejornal
-    _braco(rig, "e", 104.0 + 5.0 * f * math.sin(w),
-           74.0 - 26.0 * f * (0.5 + 0.5 * math.sin(w + 0.9)),
+    # Antebraços LEVEMENTE para dentro, subindo e descendo em contratempo.
+    # A primeira versão dobrava 26 graus para dentro e as duas mãos se
+    # encontravam na frente da barriga -- lido como mãos postas, ou pior,
+    # como algemado. O limite é a mão não cruzar o eixo do corpo: o gesto
+    # de quem conta um caso acontece na frente do PRÓPRIO ombro.
+    _braco(rig, "e", 102.0 + 5.0 * f * math.sin(w),
+           92.0 - 13.0 * f * (0.5 + 0.5 * math.sin(w + 0.9)),
            5.0 * f * math.sin(w + 1.6))
-    _braco(rig, "d", 76.0 - 5.0 * f * math.sin(w + 2.3),
-           106.0 + 26.0 * f * (0.5 + 0.5 * math.sin(w + 3.1)),
+    _braco(rig, "d", 78.0 - 5.0 * f * math.sin(w + 2.3),
+           88.0 + 13.0 * f * (0.5 + 0.5 * math.sin(w + 3.1)),
            -5.0 * f * math.sin(w + 3.9))
     return {}
 
@@ -419,19 +421,27 @@ def _braco(rig, lado, sup, ante, pulso=0.0, k=1.0):
 
 
 def maos_na_cintura(u, rig, dur, a):
-    """Mão na cintura: cobrança, impaciência, "eu avisei"."""
+    """Mão na cintura: cobrança, impaciência, "eu avisei".
+
+    O antebraço aponta para BAIXO e um pouco para dentro, não para o meio
+    do corpo: com dobra demais as duas mãos se encontravam na barriga."""
     k = _suave(min(1.0, u * 2.5))
-    _braco(rig, "e", 112.0, 34.0, 8.0, k)
-    _braco(rig, "d", 68.0, 146.0, -8.0, k)
+    _braco(rig, "e", 118.0, 62.0, 10.0, k)
+    _braco(rig, "d", 62.0, 118.0, -10.0, k)
     rig["tronco"] = -90.0
     return {}
 
 
 def bracos_cruzados(u, rig, dur, a):
-    """Fechado, na defensiva, ou esperando explicação."""
+    """Fechado, na defensiva, ou esperando explicação.
+
+    O ombro abre para o lado antes de o antebraço cruzar: é isso que põe o
+    cotovelo alto o bastante para os braços se cruzarem no PEITO. Com o
+    ombro caído os dois antebraços se encontram na barriga e a pose lê como
+    mãos postas."""
     k = _suave(min(1.0, u * 2.5))
-    _braco(rig, "e", 104.0, 8.0, 4.0, k)
-    _braco(rig, "d", 76.0, 168.0, -4.0, k)
+    _braco(rig, "e", 136.0, -14.0, 4.0, k)
+    _braco(rig, "d", 44.0, 194.0, -4.0, k)
     rig["tronco"] = -90.0 - 1.5 * k
     return {}
 
