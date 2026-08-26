@@ -156,6 +156,44 @@ def buscar_cenarios_e_objetos(spec):
     spec["pasta_objetos"] = pasta_obj
 
 
+def baixar_musica(spec):
+    """Poe a trilha no disco, em WAV, quando o spec apontar uma faixa.
+
+    A trilha PADRAO e sintetizada no proprio render (sfx.trilha) e nao
+    precisa de download nenhum -- esta funcao so existe para o dia em que
+    houver uma faixa de verdade no bucket. Duas grafias sao aceitas: o
+    `musica.url` do formato de 29/08 e o `musica_url` solto que o job ja
+    lia antes.
+
+    Converte para WAV porque o mixador (sfx.mixar) trabalha em PCM, com o
+    mesmo sample rate da voz -- entregar um MP3 ali faria o modulo desistir
+    da trilha e o video sair so com voz e efeitos, calado sobre o motivo.
+    """
+    cfg = spec.get("musica")
+    url = spec.get("musica_url")
+    if isinstance(cfg, dict):
+        url = cfg.get("url") or url
+    elif isinstance(cfg, str) and cfg.startswith("http"):
+        url, cfg = cfg, {}
+    if not url:
+        return
+    bruto, wav = "/tmp/musica_bruta", "/tmp/musica.wav"
+    try:
+        Path(bruto).write_bytes(requests.get(url, timeout=180).content)
+        import subprocess
+        subprocess.run(["ffmpeg", "-y", "-v", "error", "-i", bruto,
+                        "-ar", "24000", "-ac", "1", wav], check=True)
+        cfg = dict(cfg) if isinstance(cfg, dict) else {}
+        cfg["arquivo"] = wav
+        spec["musica"] = cfg
+        print(f"[musica] faixa baixada de {url.rsplit('/', 1)[-1]}")
+    except Exception as e:
+        # trilha e melhoria, nao requisito: sem ela o render usa a sintetica
+        print(f"[musica] download falhou ({e}); usando a trilha sintetizada")
+        if isinstance(spec.get("musica"), str):
+            spec["musica"] = True
+
+
 def avisar(payload):
     """Callback opcional. Se o certificado do n8n estiver ok, avisa tambem."""
     cb = os.environ.get("CALLBACK_URL")
@@ -178,11 +216,7 @@ def main():
     fila_id = spec.get("fila_id", "sem-id")
     print(f"[job] fila_id={fila_id}  trechos={len(spec['trechos'])}")
 
-    # trilha opcional, vinda do bucket
-    if spec.get("musica_url"):
-        m = "/tmp/mus.mp3"
-        Path(m).write_bytes(requests.get(spec["musica_url"], timeout=120).content)
-        spec["musica"] = m
+    baixar_musica(spec)
 
     out = "/tmp/final.mp4"
 
