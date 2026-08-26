@@ -64,7 +64,8 @@ import numpy as np
 import requests
 
 from folha_personagem import (ESPEC_ROSTO, PARTES_ESSENCIAIS, FolhaGrudada,
-                              conferir_pecas, fatiar_rosto, segmentar_folha)
+                              conferir_pecas, conferir_rosto, fatiar_rosto,
+                              segmentar_folha)
 import segmentar as SEG
 
 SB = os.environ["SUPABASE_URL"].rstrip("/")
@@ -311,6 +312,12 @@ def fatiar_folha(chave):
         for p in problemas:
             print(f"        - {p}")
         return False
+
+    # Rosto e' aviso, nao reprovacao: a cara desenhada dentro do cranio
+    # ainda rende expressao (o motor recorta as feicoes na carga). Enquanto
+    # os dois vinham juntos, uma folha boa era recusada por aviso.
+    for a in conferir_rosto(pecas):
+        print(f"[folha] {chave}: aviso -- {a}")
 
     for nome, img in pecas.items():
         _salvar_peca(destino, nome, img)
