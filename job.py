@@ -132,9 +132,15 @@ def buscar_cenarios_e_objetos(spec):
         if nome and nome not in urls:
             urls[nome] = None                    # marca para tentar o padrao
     for nome, url in urls.items():
-        for c in ([url] if url else
-                  [f"{publico}/assets_bruto/cenario/geral/{nome}.jpg",
-                   f"{publico}/assets/cenario/geral/{nome}.png"]):
+        # a URL do spec primeiro; sem ela, as grafias possiveis do bucket.
+        # O `.png` do BRUTO entrou em 28/08: o gerador de imagem devolve ora
+        # JPEG ora PNG e o preparar_assets guarda com a extensao que veio,
+        # entao procurar so `.jpg` no bruto fazia um cenario novo passar por
+        # inexistente e o motor cair na cor chapada.
+        for c in ([url] if url else []) + [
+                f"{publico}/assets_bruto/cenario/geral/{nome}.jpg",
+                f"{publico}/assets_bruto/cenario/geral/{nome}.png",
+                f"{publico}/assets/cenario/geral/{nome}.png"]:
             if _baixar_para(c, pasta_cen, nome):
                 break
     spec["pasta_cenarios"] = pasta_cen
