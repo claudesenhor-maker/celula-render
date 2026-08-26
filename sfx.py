@@ -471,6 +471,23 @@ def _escrever_wav(caminho, x, sr=SR):
     return caminho
 
 
+def _ajustar(x, n):
+    """Exatamente n amostras: corta o que sobra, completa o que falta.
+
+    POR QUE (run #15, 29/08): a trilha morreu com "operands could not be
+    broadcast together with shapes (486960,) (486720,)" e o vídeo saiu sem
+    música, com a falha registrada só numa linha do log. Três comprimentos
+    passam por aqui -- a voz, a trilha e a curva de ducking -- e cada um é
+    calculado de um jeito (duração x taxa, blocos inteiros de 20ms,
+    arredondamento de float). Bater sozinhos é coincidência; 240 amostras
+    de diferença, um centésimo de segundo, custaram a trilha inteira."""
+    if len(x) == n:
+        return x
+    if len(x) > n:
+        return x[:n]
+    return np.pad(x, (0, n - len(x)), mode="edge" if len(x) else "constant")
+
+
 def _ducking(voz, sr, ataque=0.05, saida=0.32):
     """Ganho 0..1 para a trilha, a partir de onde há voz.
 
@@ -494,7 +511,9 @@ def _ducking(voz, sr, ataque=0.05, saida=0.32):
         z = v + (z - v) * k
         suave[i] = z
     g = 1.0 + (_db(DUCK_DB) - 1.0) * suave
-    return np.repeat(g, jan)[:len(voz)]
+    # np.repeat devolve blocos inteiros: o resto da divisão fica de fora, e
+    # a curva sai mais curta que a voz. _ajustar completa com o último valor
+    return _ajustar(np.repeat(g, jan), len(voz))
 
 
 def mixar(voz_wav, eventos, destino, musica=None, dur_s=None, sr=SR):
@@ -557,8 +576,8 @@ def mixar(voz_wav, eventos, destino, musica=None, dur_s=None, sr=SR):
                 print(f"[musica] trilha sintetizada ({cfg.get('estilo', 'leve')}, "
                       f"{float(cfg.get('bpm', 104.0)):.0f} bpm)")
             g = _db(float(cfg.get("ganho_db", GANHO_MUSICA_DB)))
-            duck = _ducking(np.pad(voz, (0, max(0, n - len(voz)))), sr)
-            mix += faixa[:n] * g * duck
+            duck = _ducking(_ajustar(voz, n), sr)
+            mix += _ajustar(faixa, n) * g * _ajustar(duck, n)
         except Exception as e:
             print(f"[musica] falhou ({e}); seguindo sem trilha")
 
