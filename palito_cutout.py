@@ -306,7 +306,8 @@ def _tapar_entalhe(img, cor=None):
     return suave, caixa
 
 
-def _boca_desenhada(larg, alt_max, nivel, curva, cor_traco, cor_dentro=None):
+def _boca_desenhada(larg, alt_max, nivel, curva, cor_traco, cor_dentro=None,
+                    espessura=None):
     """A boca, quando a folha não traz queixo articulado.
 
     É a única coisa do personagem desenhada por código, e é assim de
@@ -327,7 +328,9 @@ def _boca_desenhada(larg, alt_max, nivel, curva, cor_traco, cor_dentro=None):
     cor_dentro = cor_dentro or COR_BOCA
     larg = max(6, int(larg))
     alt = max(3, int(alt_max * max(0.0, min(1.0, nivel))))
-    esp = max(2, int(larg * 0.065))                 # espessura do traço
+    # espessura: a medida da linha que a arte tinha, quando existe. A
+    # fração da largura é o palpite de quando não há arte de boca nenhuma.
+    esp = max(2, int(espessura if espessura else larg * 0.065))
     # SINAL: y cresce para baixo, então sorriso (curva > 0) tem que empurrar
     # o MEIO da linha para baixo. A primeira versão fazia o contrário e
     # `sorrindo` saía com cara de choro.
@@ -399,6 +402,7 @@ def _extrair_feicoes(img, piv):
     centro da imagem, porque a peça do crânio ainda vai ser recomposta com
     o cabelo depois disto -- o centro muda, o pivô não.
     """
+    from PIL import ImageChops
     from segmentar import _componentes
     a = np.asarray(img.convert("RGBA"))
     alfa = a[..., 3]
@@ -504,16 +508,36 @@ def _extrair_feicoes(img, piv):
         while y >= 0 and nucleo[y, col] and not tinta[y, col]:
             livre += 1
             y -= 1
+        # RECORTE PELA FORMA, não pelo retângulo. Com o retângulo vinha
+        # junto uma moldura de pele, invisível enquanto a feição está no
+        # lugar e denunciada assim que ela se move: a sobrancelha erguida
+        # de `surpreso` levava um pedaço de bochecha para cima da franja e
+        # deixava uma mancha clara no cabelo. Recortada pela própria
+        # máscara, ela sobe sozinha.
+        forma = np.zeros(alfa.shape, dtype=np.uint8)
+        forma[reg["c"]["mask"].astype(bool)] = 255
+        forma = Image.fromarray(forma).filter(ImageFilter.MaxFilter(3)) \
+                                      .filter(ImageFilter.GaussianBlur(0.6))
+        recorte = img.crop((cx0, cy0, cx1, cy1)).copy()
+        recorte.putalpha(ImageChops.multiply(recorte.split()[3],
+                                             forma.crop((cx0, cy0, cx1, cy1))))
         sprites[nome] = {
-            "img": img.crop((cx0, cy0, cx1, cy1)),
+            "img": recorte,
             "dx": (cx0 + cx1) / 2.0 - cx_p,
             "dy": (cy0 + cy1) / 2.0 - cy_p,
             "larg": cx1 - cx0, "alt": cy1 - cy0,
             "teto": max(0.0, livre - 2.0),
         }
+        # A COR DA TAPA VEM DE ENCOSTO, não do rosto inteiro. A cor
+        # dominante do crânio é um tom quantizado (a caixa de 24 níveis em
+        # que a pele caiu), e a testa tem sombreado próprio: com ela, o
+        # lugar de onde a sobrancelha saiu ficava mais claro que a testa em
+        # volta e virava uma sobrancelha FANTASMA -- visível em toda
+        # expressão que ergue o cenho. O anel de pixels em volta da feição é
+        # a própria testa, no tom exato daquele ponto.
         m = reg["c"]["mask"].astype(np.uint8) * 255
         m = np.asarray(Image.fromarray(m).filter(ImageFilter.MaxFilter(5))) > 8
-        limpo[m, :3] = pele
+        limpo[m, :3] = _cor_do_anel(a, m, alfa) or pele
         limpo[m, 3] = 255
 
     # emenda macia, pelo mesmo motivo da tapa da boca: cor certa com borda
@@ -526,6 +550,154 @@ def _extrair_feicoes(img, piv):
     suave = Image.composite(Image.fromarray(limpo), img,
                             Image.fromarray(tapa).filter(ImageFilter.GaussianBlur(2)))
     return suave, sprites
+
+
+def _cor_do_anel(arr, mascara, alfa, folga=5):
+    """A cor da pele que ENCOSTA na mancha a ser tapada.
+
+    Mesmo princípio de `_cor_em_volta`, mas trabalhando direto no array (é
+    chamado uma vez por feição, dentro de `_extrair_feicoes`). Só entram
+    pixels claros: o traço preto que cerca olho e sobrancelha faria a
+    mediana escurecer e a tapa sairia como um borrão cinza."""
+    fora = np.asarray(Image.fromarray((mascara * 255).astype(np.uint8))
+                      .filter(ImageFilter.MaxFilter(2 * folga + 1))) > 8
+    anel = fora & ~mascara & (alfa > 200)
+    if anel.sum() < 20:
+        return None
+    px = arr[anel][:, :3].astype(np.int16)
+    claros = px[px.sum(axis=1) > 300]
+    base = claros if len(claros) > 12 else px
+    return tuple(int(v) for v in np.median(base, axis=0))
+
+
+def _tapar_boca_desenhada(img):
+    """Apaga a boca que a ARTE desenhou e devolve onde ela estava.
+
+    POR QUE (folha de 26/08)
+        A folha nova consertou o defeito nº 1: a boca não é mais um entalhe
+        vazado, é uma linha desenhada, fechada, com um sorriso de leve. Só
+        que `_tapar_entalhe` procura um BURACO no alfa -- e não há mais
+        buraco nenhum. Sem entalhe, `self.boca` ficava None, e com ela ia
+        embora o lipsync inteiro: o Pal passaria o vídeo com a mesma boca
+        parada, agora fechada em vez de aberta.
+
+        A boca da arte precisa sair de cena pelo mesmo motivo que as feições
+        saem do crânio em `_extrair_feicoes`: o que fica parado no desenho
+        não pode ser animado. Apagada ela, `_boca_desenhada` põe no lugar
+        exato dela uma boca que abre com o som e curva com a emoção -- e o
+        traço em repouso é praticamente o mesmo que o desenhista fez.
+
+    COMO
+        Dentro do crânio, longe da borda, o que não é pele é traço. A boca
+        é o traço DEITADO (mais largo que alto) do terço de baixo, perto do
+        eixo do rosto. O queixo (um U que desce até a base) e as linhas
+        verticais das bochechas ficam de fora pela mesma régua que as
+        distingue: eles não são deitados, ou não estão no eixo.
+
+    Devolve (crânio sem a boca, caixa da boca) ou (img, None).
+    """
+    from segmentar import _componentes
+    a = np.asarray(img.convert("RGBA"))
+    alfa = a[..., 3]
+    dentro = alfa > 128
+    if dentro.sum() < 400:
+        return img, None, None
+    r = max(3, int(min(img.width, img.height) * 0.045))
+    nucleo = np.asarray(img.split()[3].filter(ImageFilter.MinFilter(2 * r + 1))) > 128
+    if nucleo.sum() < 200:
+        return img, None, None
+
+    rgb = a[..., :3].astype(np.int16)
+    q = (rgb[nucleo] // 24)
+    chaves, contas = np.unique(q.reshape(-1, 3), axis=0, return_counts=True)
+    pele = chaves[contas.argmax()].astype(np.int16) * 24 + 12
+    tinta = nucleo & (np.abs(rgb - pele).sum(axis=2) > 90)
+    if tinta.sum() < 20:
+        return img, None, None
+
+    ys, xs = np.nonzero(dentro)
+    x0, x1 = float(xs.min()), float(xs.max())
+    y0, y1 = float(ys.min()), float(ys.max())
+    larg_r, alt_r = x1 - x0 + 1, y1 - y0 + 1
+    cx_rosto = (x0 + x1) / 2.0
+
+    cands = []
+    for c in _componentes(tinta, area_min=max(20, int(tinta.sum() * 0.01))):
+        bx0, by0, bx1, by1 = c["bbox"]
+        w, h = bx1 - bx0 + 1, by1 - by0 + 1
+        cy = (by0 + by1) / 2.0
+        if cy < y0 + alt_r * 0.52 or cy > y0 + alt_r * 0.92:
+            continue                       # olho/sobrancelha em cima, base embaixo
+        if abs((bx0 + bx1) / 2.0 - cx_rosto) > larg_r * 0.22:
+            continue                       # fora do eixo: bochecha, orelha
+        if w < h * 1.4 or w < larg_r * 0.10 or w > larg_r * 0.75:
+            continue                       # a boca é deitada, e não atravessa a cara
+        cands.append(c)
+    if not cands:
+        return img, None, None
+
+    # a boca é a maior delas; o que estiver logo abaixo e mais estreito é o
+    # lábio inferior e sai junto -- sobrando, ele vira um risco solto sob a
+    # boca nova
+    boca = max(cands, key=lambda c: c["area"])
+    bx0, by0, bx1, by1 = boca["bbox"]
+    m = boca["mask"].copy()
+    for c in cands:
+        if c is boca:
+            continue
+        cx0, cy0, cx1, cy1 = c["bbox"]
+        if cy0 > by0 and cy1 < by1 + (by1 - by0 + 1) * 1.2 and (cx1 - cx0) <= (bx1 - bx0):
+            m |= c["mask"]
+            bx0, by0 = min(bx0, cx0), min(by0, cy0)
+            bx1, by1 = max(bx1, cx1), max(by1, cy1)
+
+    limpo = a.copy()
+    grosso = np.asarray(Image.fromarray((m * 255).astype(np.uint8))
+                        .filter(ImageFilter.MaxFilter(5))) > 8
+    grosso &= dentro
+    limpo[grosso, :3] = pele
+    limpo[grosso, 3] = 255
+    suave = Image.composite(
+        Image.fromarray(limpo), img,
+        Image.fromarray((grosso * 255).astype(np.uint8)).filter(ImageFilter.GaussianBlur(2)))
+
+    # O SORRISO DO DESENHISTA NÃO SE PERDE. A boca que entra no lugar é
+    # desenhada por código, e desenhada reta ela apaga a única expressão que
+    # a folha já trazia de fábrica -- a cara em repouso fica com um traço
+    # de régua no meio. Medir a curva da linha original (o meio dela está
+    # acima ou abaixo das pontas?) e usá-la como repouso devolve o mesmo
+    # rosto, agora animável. A espessura sai pela mesma régua: é a altura
+    # média da mancha, não uma fração inventada da largura.
+    so = np.asarray(_altura_por_coluna(m, bx0, bx1))
+    curva, esp = 0.0, 0.0
+    val = so[so[:, 1] > 0]
+    if len(val) >= 6:
+        n = len(val)
+        pontas = np.concatenate([val[:max(1, n // 5)], val[-max(1, n // 5):]])
+        meio = val[n // 3: 2 * n // 3]
+        if len(meio):
+            # Mesma convenção de `_boca_desenhada`: curva > 0 empurra o MEIO
+            # da linha para baixo, e é isso que se lê como sorriso -- num
+            # traço de boca são as PONTAS que sobem. y cresce para baixo,
+            # então meio - pontas > 0 é sorriso.
+            larg_b = max(bx1 - bx0 + 1, 1)
+            curva = float((meio[:, 0].mean() - pontas[:, 0].mean()) / (larg_b * 0.16))
+            esp = float(val[:, 1].mean())
+    return suave, (int(bx0), int(by0), int(bx1), int(by1)), \
+        {"curva": max(-1.0, min(1.0, curva)), "esp": esp}
+
+
+def _altura_por_coluna(mask, x0, x1):
+    """(y do centro, espessura) de cada coluna da mancha -- a linha da boca
+    lida como função, que é o que permite medir curva e espessura."""
+    fora = []
+    for x in range(int(x0), int(x1) + 1):
+        col = np.nonzero(mask[:, x])[0]
+        if len(col):
+            fora.append(((float(col.min()) + float(col.max())) / 2.0, float(len(col))))
+        else:
+            fora.append((0.0, 0.0))
+    return fora
 
 
 def _cor_em_volta(img, tapa_mask, nucleo_mask, folga=6):
@@ -664,6 +836,8 @@ class Personagem:
 
         # --- o queixo existe mesmo? -----------------------------------
         self.boca = None            # (dx, dy, largura) relativos ao pivô do crânio
+        # curva e espessura de REPOUSO, medidas da boca que a arte desenhou
+        self.boca_estilo = {"curva": 0.0, "esp": 0.0}
         if "mandibula" not in self.img or _e_fiapo(self.img["mandibula"]):
             self.rosto_articulado = False
             self.img.pop("mandibula", None)     # fiapo em cena é sujeira solta
@@ -683,8 +857,27 @@ class Personagem:
                           f"({int(bx1 - bx0)}px de largura). Lipsync mantido, "
                           f"agora pela linha da boca")
                 else:
-                    print("[rosto] sem mandibula segmentada e sem entalhe "
-                          "detectado; seguindo com a cara como veio")
+                    # Sem entalhe: ou a folha nunca teve um, ou (folha de
+                    # 26/08) a boca virou uma LINHA desenhada. No segundo
+                    # caso ela é apagada e redesenhada animada, senão o
+                    # lipsync some junto com o buraco.
+                    limpo, caixa, estilo = _tapar_boca_desenhada(self.img["cranio"])
+                    if caixa:
+                        self.img["cranio"] = limpo
+                        px, py = self.piv["cranio"]
+                        bx0, by0, bx1, by1 = caixa
+                        self.boca = ((bx0 + bx1) / 2.0 - px,
+                                     (by0 + by1) / 2.0 - py,
+                                     (bx1 - bx0) * 1.02)
+                        self.boca_estilo = estilo
+                        print(f"[rosto] boca DESENHADA na arte "
+                              f"({int(bx1 - bx0)}px, curva "
+                              f"{estilo['curva']:+.2f}): apagada e "
+                              f"substituida por uma que abre com o som e "
+                              f"curva com a emocao")
+                    else:
+                        print("[rosto] sem mandibula segmentada e sem boca "
+                              "detectada; seguindo com a cara como veio")
         # feições que sobraram como fiapo saem de cena pelo mesmo motivo: em
         # repouso elas caem sobre o próprio desenho e somem, mas qualquer
         # movimento de expressão as descola e vira traço solto no rosto
@@ -971,8 +1164,17 @@ def desenhar_personagem(pers, rig, boca_nivel=0.0, piscando=False, objeto=None,
     corr = getattr(pers, "corr", {})
     pos[raiz] = tuple(rig["quadril"])
     ang[raiz] = _angulo(raiz, rig, boca_nivel) + corr.get(raiz, 0.0)
+    # ÁRVORE EFETIVA: peça que a arte não separou não pode quebrar a cadeia.
+    # A folha de 26/08 traz o pescoço grudado na cabeça, e com a árvore
+    # literal do ESQUELETO o crânio ficava pendurado num `pescoco` que não
+    # existe -- ninguém o visitava e o personagem saía SEM CABEÇA. O
+    # segmentador já grava a saída no ancestral presente (ver
+    # segmentar._ancestral_presente); aqui a travessia faz o mesmo salto.
     filhos = {}
-    for n, pai in ESQUELETO.items():
+    for n in ESQUELETO:
+        pai = ESQUELETO[n]
+        while pai is not None and not pers.tem(pai):
+            pai = ESQUELETO.get(pai)
         filhos.setdefault(pai, []).append(n)
 
     while fila:
@@ -1067,9 +1269,14 @@ def desenhar_personagem(pers, rig, boca_nivel=0.0, piscando=False, objeto=None,
         # queixo articulado (ver Personagem.__init__).
         if nome == "cranio" and getattr(pers, "boca", None):
             bdx, bdy, blarg = pers.boca
+            estilo = getattr(pers, "boca_estilo", None) or {}
+            # a curva da emoção SOMA à curva de repouso que o desenhista deu
+            # à boca: a cara neutra continua sendo a que ele desenhou
             bimg, bpiv = _boca_desenhada(
                 blarg * e, blarg * e * 0.55, boca_nivel,
-                ex["boca_curva"], _cor_da_casca(pers.img["cranio"]))
+                max(-1.0, min(1.0, ex["boca_curva"] + float(estilo.get("curva", 0.0)))),
+                _cor_da_casca(pers.img["cranio"]),
+                espessura=float(estilo.get("esp", 0.0)) * e or None)
             d = _girar((bdx * e, bdy * e), ang[nome])
             colar(base, bimg, bpiv,
                   (pos[nome][0] + d[0], pos[nome][1] + d[1]), ang[nome])
@@ -1217,21 +1424,32 @@ def montar_frame(camada, cenario, cam, quadril_x=W / 2):
 
 
 # =====================================================================
-def _rig_do_trecho(tr, t, pan_base, acoes_do_ator, x_base):
+def _rig_do_trecho(tr, t, pan_base, acoes_do_ator, x_base, falando=True):
     """Ângulos do frame de UM ator. Dois caminhos:
 
     AÇÕES (novo)  -- verbos com janela, somados por cima do repouso.
     POSE (velho)  -- interpolação entre duas poses estáticas. Fica só
                      para não quebrar spec antigo; não produz caminhada.
+
+    A pilha do caminho novo, de baixo para cima:
+
+        postura da emoção -> parado -> gesticular -> ações do roteiro
+
+    Postura e gesto de fala são o CORPO da emoção que o trecho já declarou
+    (ver acoes.POSTURA); ficam embaixo porque tudo que o roteirista pedir
+    de propósito tem que ganhar deles.
     """
     rig = merge(REST, EXPRESSOES.get(tr.get("expressao", "neutro"), {}))
     rig["quadril"] = [x_base, REST["quadril"][1]]
 
-    if acoes_do_ator:
-        lista = [{"nome": "parado", "de": 0.0, "ate": 1.0}] + list(acoes_do_ator)
-        cam = ACOES.aplicar(lista, t, rig, tr["dur"])
-    elif tr.get("acoes"):
-        cam = ACOES.aplicar([{"nome": "parado", "de": 0.0, "ate": 1.0}], t, rig, tr["dur"])
+    if acoes_do_ator or tr.get("acoes"):
+        ACOES.aplicar_postura(rig, tr.get("expressao"), tr.get("intensidade", 1.0))
+        lista = [{"nome": "parado", "de": 0.0, "ate": 1.0}]
+        if falando:
+            lista.append({"nome": "gesticular", "de": 0.0, "ate": 1.0,
+                          "forca": ACOES.energia_gesto(tr.get("expressao"),
+                                                       tr.get("intensidade", 1.0))})
+        cam = ACOES.aplicar(lista + list(acoes_do_ator or []), t, rig, tr["dur"])
     else:
         p1 = merge(REST, POSES.get(tr.get("pose", "parado_falando"), {}),
                    EXPRESSOES.get(tr.get("expressao", "neutro"), {}))
@@ -1496,7 +1714,8 @@ def render(pasta_partes, spec, saida, tmpdir=None):
             cam_falante, x_falante = dict(ACOES.CAM_NEUTRA), W / 2
             for chave in chaves:
                 pers, x0 = elenco[chave]
-                rig, c = _rig_do_trecho(tr, t, pan, por_ator[chave], x0)
+                rig, c = _rig_do_trecho(tr, t, pan, por_ator[chave], x0,
+                                        falando=(chave == falante))
                 # a cara de QUEM FALA vem do trecho; quem ouve fica na cara
                 # de reação que o roteirista der a ele, ou neutro
                 cara = rosto.para(tr, t, tr["dur"], chave) if chave == falante \
