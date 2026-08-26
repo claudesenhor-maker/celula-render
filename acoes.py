@@ -98,7 +98,7 @@ def _pernas_retas(rig):
     rig["perna_d"] = list(PERNA_RETA_D)
 
 
-def _ciclo_passo_lateral(rig, fase, amp=26.0, sentido=1):
+def _ciclo_passo_lateral(rig, fase, amp=24.0, sentido=1):
     """A caminhada do boneco frontal: PASSO LATERAL, sem cruzar as pernas.
 
     POR QUE A CAMINHADA ANTIGA NÃO PODIA DAR CERTO (26/08)
@@ -134,21 +134,26 @@ def _ciclo_passo_lateral(rig, fase, amp=26.0, sentido=1):
     """
     # abertura de cada perna, 0..1, sempre para o próprio lado
     s = math.sin(fase)
-    guia = 0.5 + 0.5 * s               # a perna do lado do movimento
-    tras = 0.5 - 0.5 * s               # a outra, meio ciclo atrás
     juntas = 1.0 - abs(s)              # 1 quando as duas estão embaixo do corpo
 
-    # PISO DE ABERTURA: uma perna nunca chega a colar na outra. Sem ele o
-    # boneco junta os pés a cada meio passo e parece que bate continência.
-    ab_e = amp * (0.18 + 0.82 * (guia if sentido < 0 else tras))
-    ab_d = amp * (0.18 + 0.82 * (guia if sentido > 0 else tras))
+    # UMA PERNA DE CADA VEZ. As duas abertas ao mesmo tempo escancaram a
+    # VIRILHA: as coxas giram em torno do pivô do quadril e, afastadas as
+    # duas, abre-se entre elas uma faixa por onde o cenário aparece -- o
+    # mesmo vão desenhado que `_fechar_vao` tapa nas juntas, aqui exposto
+    # pela abertura. Com `max(0, ...)` a perna de apoio fica RETA embaixo do
+    # corpo e tapa a virilha, que é também o que um passo lateral de verdade
+    # faz: abre uma perna, transfere o peso, junta a outra.
+    guia = max(0.0, s)                 # a perna do lado do movimento
+    tras = max(0.0, -s) * 0.6          # a outra abre menos: ela só acompanha
+    ab_e = amp * (guia if sentido < 0 else tras)
+    ab_d = amp * (guia if sentido > 0 else tras)
 
     # A perna que está FECHANDO é a que sai do chão: o joelho dobra para
     # dentro e a canela vem junto com o corpo. Derivada da abertura -- se
     # ela está diminuindo, o pé está no ar.
     c = math.cos(fase)
-    fecha_guia = max(0.0, -c)
-    fecha_tras = max(0.0, c)
+    fecha_guia = max(0.0, -c) * max(0.0, s)
+    fecha_tras = max(0.0, c) * max(0.0, -s)
     lev_e = fecha_guia if sentido < 0 else fecha_tras
     lev_d = fecha_guia if sentido > 0 else fecha_tras
 
@@ -191,7 +196,7 @@ def andar(u, rig, dur, a):
     sentido = 1 if a.get("sentido", 1) >= 0 else -1
     passada = float(a.get("passada_px", 150.0))     # avanço por passo
     esc_y = _ciclo_passo_lateral(rig, 2 * math.pi * passos * u * dur,
-                                 amp=float(a.get("amplitude", 26.0)),
+                                 amp=min(float(a.get("amplitude", 24.0)), 30.0),
                                  sentido=sentido)
     # o fundo anda o mesmo tanto que o pé andaria: sem isto o personagem
     # patina, que é o erro clássico de walk cycle
