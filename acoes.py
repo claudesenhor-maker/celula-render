@@ -83,68 +83,120 @@ def _pulso(u):
 # =====================================================================
 # LOCOMOÇÃO
 # =====================================================================
-def _ciclo_passada(rig, fase, amp=34.0):
-    """Uma passada em linguagem de DESENHO, não de anatomia.
+# PERNAS RETAS é o repouso, e é daqui que toda ação parte. A folha desenha
+# as duas pernas apontando para baixo; qualquer ângulo diferente de 90 é
+# perna aberta. O REST do palito_v4 traz [97, 5] e [83, -5] -- 7 graus de
+# abertura e 5 de joelho dobrado --, que num rig vetorial de traço fino
+# passava despercebido e num boneco de papel de perna grossa lê como
+# personagem de pernas tortas, parado.
+PERNA_RETA_E = [90.0, 0.0, 0.0]
+PERNA_RETA_D = [90.0, 0.0, 0.0]
 
-    A primeira versão era um walk cycle naturalista: pernas em oposição
-    de fase, joelho dobrando pouco, quique de 7px. Estava tecnicamente
-    correto e não combinava com o personagem -- boneco cartoon de cabeça
-    grande andando como um adulto real parece um adulto real fantasiado.
 
-    O que muda numa caminhada cartoon:
-      * QUIQUE GRANDE. O corpo sobe uns 4% da própria altura na passagem
-        e afunda no contato. É o que dá o ritmo, e é a primeira coisa que
-        o olho lê como "desenho animado".
-      * ARCOS AMPLOS. A perna abre muito mais e o joelho dobra muito mais
-        do que um humano dobraria. Amplitude é o que sobra de expressão
-        quando a figura tem cinco formas no total.
-      * SQUASH & STRETCH. Achata no contato, estica no ar. Sem isso o
-        quique parece elevador.
-      * ATRASO NAS PONTAS. Pulso e tornozelo chegam DEPOIS do osso que os
-        arrasta. É o detalhe que separa articulado de rígido -- e é a
-        razão de o rig ter ganhado pulso e tornozelo.
+def _pernas_retas(rig):
+    rig["perna_e"] = list(PERNA_RETA_E)
+    rig["perna_d"] = list(PERNA_RETA_D)
 
-    A fase avança 2*pi por passada completa (dois passos).
+
+def _ciclo_passo_lateral(rig, fase, amp=26.0, sentido=1):
+    """A caminhada do boneco frontal: PASSO LATERAL, sem cruzar as pernas.
+
+    POR QUE A CAMINHADA ANTIGA NÃO PODIA DAR CERTO (26/08)
+        O ciclo anterior era um walk cycle de PERFIL: coxas em oposição de
+        fase, uma indo para a frente enquanto a outra vai para trás. Só que
+        a folha do Pal é desenhada DE FRENTE, e o motor gira as peças no
+        plano da tela -- não existe "para a frente" ali. Girar a coxa 34
+        graus não põe a perna à frente do corpo: põe a perna PARA O LADO.
+        Com as duas em oposição de fase, uma abria para a esquerda enquanto
+        a outra abria para a direita e, meio ciclo depois, trocavam. O olho
+        lê isso como tesoura -- "cruzando as pernas" foi exatamente a
+        descrição de quem assistiu.
+
+        Não é defeito de ajuste: nenhuma amplitude conserta um ciclo de
+        perfil rodando numa figura frontal. Ou a arte ganha um perfil (uma
+        folha inteira nova por personagem), ou a caminhada passa a ser uma
+        que EXISTE de frente.
+
+    O QUE ELA É
+        O passo lateral: o personagem encara a câmera e se desloca de lado,
+        como um boneco articulado de papel faria. Cada perna abre para o
+        SEU lado e volta -- nenhuma delas cruza o eixo do corpo em momento
+        nenhum, e é isso que mata a tesoura por construção, não por
+        calibragem.
+
+        O ritmo é o de quem dá um passo e puxa o outro pé: a perna do lado
+        para onde ele vai abre primeiro, a de trás fecha em seguida. Nos
+        instantes em que as duas estão juntas, o corpo sobe (é o único
+        momento em que os dois pés poderiam sair do chão) e desce ao abrir
+        de novo. É o quique da animação cartoon, na fase certa.
+
+    Devolve a escala vertical (squash & stretch) do frame.
     """
-    s_, sd = math.sin(fase), math.sin(fase + math.pi)
-    passagem = abs(s_)                   # 1 no meio do passo, 0 no contato
+    # abertura de cada perna, 0..1, sempre para o próprio lado
+    s = math.sin(fase)
+    guia = 0.5 + 0.5 * s               # a perna do lado do movimento
+    tras = 0.5 - 0.5 * s               # a outra, meio ciclo atrás
+    juntas = 1.0 - abs(s)              # 1 quando as duas estão embaixo do corpo
 
-    coxa_e = 90.0 + amp * s_
-    coxa_d = 90.0 + amp * sd
-    joelho_e = -max(0.0, 66.0 * math.sin(fase - 0.7))
-    joelho_d = -max(0.0, 66.0 * math.sin(fase + math.pi - 0.7))
-    # tornozelo: o pé tende a ficar paralelo ao chão (o desenho do pé já
-    # está na horizontal) e a ponta cai no balanço, com atraso
-    pe_e = (90.0 - (coxa_e + joelho_e)) + 24.0 * max(0.0, math.sin(fase - 1.1))
-    pe_d = (90.0 - (coxa_d + joelho_d)) + 24.0 * max(0.0, math.sin(fase + math.pi - 1.1))
-    rig["perna_e"] = [coxa_e, joelho_e, pe_e]
-    rig["perna_d"] = [coxa_d, joelho_d, pe_d]
+    # PISO DE ABERTURA: uma perna nunca chega a colar na outra. Sem ele o
+    # boneco junta os pés a cada meio passo e parece que bate continência.
+    ab_e = amp * (0.18 + 0.82 * (guia if sentido < 0 else tras))
+    ab_d = amp * (0.18 + 0.82 * (guia if sentido > 0 else tras))
 
-    # braços contrabalançam a perna oposta; cotovelo sempre um pouco
-    # dobrado (braço reto é pose de soldado) e pulso atrasado
-    b = 0.62 * amp
-    rig["braco_e"] = [90.0 - b * s_, 16.0 + 14.0 * passagem, 12.0 * math.sin(fase - 0.6)]
-    rig["braco_d"] = [90.0 + b * s_, -16.0 - 14.0 * passagem, -12.0 * math.sin(fase - 0.6)]
+    # A perna que está FECHANDO é a que sai do chão: o joelho dobra para
+    # dentro e a canela vem junto com o corpo. Derivada da abertura -- se
+    # ela está diminuindo, o pé está no ar.
+    c = math.cos(fase)
+    fecha_guia = max(0.0, -c)
+    fecha_tras = max(0.0, c)
+    lev_e = fecha_guia if sentido < 0 else fecha_tras
+    lev_d = fecha_guia if sentido > 0 else fecha_tras
 
-    rig["tronco"] = -90.0 + 4.0
-    rig["quadril"] = [rig["quadril"][0], rig["quadril"][1] - passagem * 42.0]
-    # squash no contato, stretch no ar
-    return 1.0 + 0.06 * passagem - 0.05 * (1.0 - passagem)
+    # sinais: +ângulo leva o pé para a ESQUERDA da tela, -ângulo para a
+    # direita (y cresce para baixo). O joelho dobra para DENTRO, na direção
+    # do corpo, que é o que lê como pé levantado numa figura frontal.
+    #
+    # O TORNOZELO DESFAZ o que a perna fez: o pé é desenhado apoiado no
+    # chão, e os ângulos do rig se somam ao longo da cadeia -- sem
+    # compensar, a sola acompanha a coxa e o boneco anda de pé torto. O que
+    # sobra é um resto pequeno no pé que está no ar, que é a ponta caindo.
+    joelho_e, joelho_d = -18.0 * lev_e, 18.0 * lev_d
+    rig["perna_e"] = [90.0 + ab_e, joelho_e, -(ab_e + joelho_e) + 8.0 * lev_e]
+    rig["perna_d"] = [90.0 - ab_d, joelho_d, (ab_d - joelho_d) - 8.0 * lev_d]
+
+    # braços: contrapeso lateral no mesmo compasso, cotovelo sempre um
+    # pouco dobrado para dentro (braço reto é pose de soldado)
+    b = 0.42 * amp
+    _braco(rig, "e", 98.0 + b * s, 78.0 + b * s + 6.0 * juntas, 5.0 * s)
+    _braco(rig, "d", 82.0 - b * s, 102.0 - b * s - 6.0 * juntas, -5.0 * s)
+
+    # o tronco pende para o lado do pé de apoio, e o corpo sobe quando os
+    # dois pés se encontram
+    rig["tronco"] = -90.0 + 2.4 * s
+    rig["quadril"] = [rig["quadril"][0], rig["quadril"][1] - juntas * 16.0]
+    return 1.0 + 0.03 * juntas - 0.02 * (1.0 - juntas)
 
 
 def andar(u, rig, dur, a):
-    """Caminhada no lugar + fundo correndo ao contrário. O personagem fica
-    perto do centro do quadro e o CENÁRIO é que anda: é assim que animação
-    2D resolve locomoção sem precisar de um cenário infinito."""
+    """Passo lateral no lugar + fundo correndo ao contrário. O personagem
+    fica perto do centro do quadro e o CENÁRIO é que anda: é assim que
+    animação 2D resolve locomoção sem precisar de um cenário infinito.
+
+    O personagem NÃO é espelhado ao mudar de sentido. Espelhar existia para
+    virar um boneco de perfil; este anda de frente para a câmera, e
+    espelhar uma figura frontal só troca o lado do cabelo -- o que se lê
+    como corte de continuidade, não como mudança de direção. Quem indica a
+    direção é o fundo correndo e a perna que abre primeiro."""
     passos = float(a.get("passos_por_s", 1.7))
     sentido = 1 if a.get("sentido", 1) >= 0 else -1
-    passada = float(a.get("passada_px", 210.0))     # avanço por passo
-    esc_y = _ciclo_passada(rig, 2 * math.pi * passos * u * dur,
-                           amp=float(a.get("amplitude", 34.0)))
+    passada = float(a.get("passada_px", 150.0))     # avanço por passo
+    esc_y = _ciclo_passo_lateral(rig, 2 * math.pi * passos * u * dur,
+                                 amp=float(a.get("amplitude", 26.0)),
+                                 sentido=sentido)
     # o fundo anda o mesmo tanto que o pé andaria: sem isto o personagem
     # patina, que é o erro clássico de walk cycle
     return {"fundo_dx": -sentido * passada * passos * u * dur,
-            "espelhar": sentido < 0, "escala_y": esc_y}
+            "escala_y": esc_y}
 
 
 def entrar_andando(u, rig, dur, a):
@@ -169,7 +221,7 @@ def sair_andando(u, rig, dur, a):
 def entrar_correndo(u, rig, dur, a):
     b = dict(a)
     b.setdefault("passos_por_s", 3.2)
-    b.setdefault("amplitude", 40.0)
+    b.setdefault("amplitude", 34.0)
     cam = entrar_andando(u, rig, dur, b)
     cam["zoom"] = 1.10 - 0.10 * _suave(u)      # a câmera "recebe" o corpo
     return cam
@@ -283,10 +335,145 @@ def virar(u, rig, dur, a):
 # ESPERA
 # =====================================================================
 def parado(u, rig, dur, a):
-    """Respiração. Não é decoração: personagem 100% imóvel lê como
-    imagem congelada e o espectador acha que o vídeo travou."""
-    rig["quadril"] = [rig["quadril"][0],
-                      rig["quadril"][1] + math.sin(2 * math.pi * 0.28 * u * dur) * 5.0]
+    """O repouso: pernas retas, pés no chão, e o mínimo de vida possível.
+
+    O QUE MUDOU, E POR QUÊ (26/08)
+        A versão anterior somava um seno de 5px ao QUADRIL para simular
+        respiração. Só que o quadril é a raiz do esqueleto: mover o quadril
+        move o corpo inteiro, pés inclusive. O personagem subia e descia
+        cinco pixels a cada dois segundos, com os pés soltos do chão -- lido
+        na tela como "ele fica flutuando", que é exatamente o que era.
+
+        Personagem imóvel de verdade também não serve: lê como imagem
+        congelada. A saída é respirar com o que NÃO carrega o corpo. A
+        cabeça é a única peça leve que se mexe sem arrastar ninguém, e uma
+        oscilação de menos de um grau já basta para o quadro não parecer
+        travado -- ainda mais com a piscada e a boca andando por conta.
+
+        As pernas ficam RETAS. Todo ângulo de perna em repouso é abertura
+        lateral (o boneco é frontal, ver `_ciclo_passo_lateral`), e os 7
+        graus que o REST trazia deixavam o Pal parado em posição de quem
+        vai montar a cavalo.
+    """
+    _pernas_retas(rig)
+    rig["cabeca"] = rig.get("cabeca", 0.0) + math.sin(2 * math.pi * 0.24 * u * dur) * 0.7
+    return {}
+
+
+def gesticular(u, rig, dur, a):
+    """A mão que acompanha a fala. Não é uma ação do roteiro: é o que o
+    corpo faz sozinho enquanto a boca trabalha.
+
+    POR QUE (26/08, "melhorar linguagem corporal")
+        Fora das janelas de ação, o Pal falava com os dois braços mortos ao
+        lado do corpo, do primeiro ao último frame do trecho. Ninguém fala
+        assim, e num Short de 20 segundos o efeito é de boneco de vitrine
+        que dubla.
+
+        O gesto aqui é pequeno de propósito e fica NA BASE da pilha de
+        ações (ver `aplicar`): qualquer ação escrita pelo roteirista
+        sobrescreve o braço que ela usa. `apontar` continua apontando; o
+        que some é o braço parado ao lado dele.
+
+    `forca` sai da intensidade do trecho: quem está bravo gesticula mais.
+    """
+    f = max(0.0, min(1.6, float(a.get("forca", 1.0))))
+    if f < 0.01:
+        return {}
+    w = 2 * math.pi * 0.62 * u * dur          # ~0,6 gesto por segundo
+    # antebraços um pouco à frente do corpo (dobra para DENTRO), subindo e
+    # descendo em contratempo: é o gesto de quem conta um caso, não o de
+    # quem apresenta o telejornal
+    _braco(rig, "e", 104.0 + 5.0 * f * math.sin(w),
+           74.0 - 26.0 * f * (0.5 + 0.5 * math.sin(w + 0.9)),
+           5.0 * f * math.sin(w + 1.6))
+    _braco(rig, "d", 76.0 - 5.0 * f * math.sin(w + 2.3),
+           106.0 + 26.0 * f * (0.5 + 0.5 * math.sin(w + 3.1)),
+           -5.0 * f * math.sin(w + 3.9))
+    return {}
+
+
+# =====================================================================
+# LINGUAGEM CORPORAL — poses que o roteirista pede pelo nome
+# =====================================================================
+# Cada uma existe porque uma emoção do catálogo de expressões precisava de
+# um corpo: cara de dúvida com braço caído lê como cara de dúvida em cima
+# de um manequim. Todas seguram a pose depois de entrar (gesto que volta ao
+# neutro no meio da frase lê como tique), e todas mexem no mínimo de ossos
+# possível, para poderem se combinar com `andar`.
+#
+# A CONVENÇÃO DE BRAÇO, medida no motor e não deduzida da anatomia:
+# somando a correção de pose T, o ângulo de cada osso do braço é a DIREÇÃO
+# EM QUE ELE APONTA NA TELA, igual nos dois lados -- 0 para a direita, 90
+# para baixo, 180 para a esquerda, -90 para cima. O segundo número continua
+# sendo a dobra do cotovelo, somada à do ombro; escrever a pose pela direção
+# do antebraço e deixar a subtração para `_braco` evita o erro que saiu na
+# primeira versão destes gestos, em que todo cotovelo dobrava para FORA e
+# ninguém conseguia pôr a mão na cintura.
+def _braco(rig, lado, sup, ante, pulso=0.0, k=1.0):
+    """Aponta o braço `lado` ('e'/'d'): `sup` e `ante` em graus de tela."""
+    osso = "braco_" + lado
+    base = (list(rig.get(osso) or [90.0, 0.0, 0.0]) + [0.0, 0.0, 0.0])[:3]
+    alvo = [sup, ante - sup, pulso]
+    rig[osso] = [b + (v - b) * k for b, v in zip(base, alvo)]
+
+
+def maos_na_cintura(u, rig, dur, a):
+    """Mão na cintura: cobrança, impaciência, "eu avisei"."""
+    k = _suave(min(1.0, u * 2.5))
+    _braco(rig, "e", 112.0, 34.0, 8.0, k)
+    _braco(rig, "d", 68.0, 146.0, -8.0, k)
+    rig["tronco"] = -90.0
+    return {}
+
+
+def bracos_cruzados(u, rig, dur, a):
+    """Fechado, na defensiva, ou esperando explicação."""
+    k = _suave(min(1.0, u * 2.5))
+    _braco(rig, "e", 104.0, 8.0, 4.0, k)
+    _braco(rig, "d", 76.0, 168.0, -4.0, k)
+    rig["tronco"] = -90.0 - 1.5 * k
+    return {}
+
+
+def mao_no_queixo(u, rig, dur, a):
+    """Pensando: o braço sobe à frente e o antebraço aponta para o rosto."""
+    k = _suave(min(1.0, u * 2.2))
+    _braco(rig, "d", 22.0, -104.0, -10.0, k)
+    _braco(rig, "e", 100.0, 118.0, 0.0, k * 0.6)
+    return {}
+
+
+def apresentar(u, rig, dur, a):
+    """A palma aberta para o lado: "é isso aí", "olha só". O gesto de
+    apresentação é o mais usado por quem conta caso, e faltava."""
+    k = _suave(min(1.0, u * 2.4))
+    alt = float(a.get("altura", 14.0))          # 0 = braço na horizontal
+    _braco(rig, "d", alt, alt - 22.0, -14.0, k)
+    return {}
+
+
+def apontar_para_si(u, rig, dur, a):
+    """"Eu?" -- a mão volta para o peito. Vale ouro em piada de vítima."""
+    k = _suave(min(1.0, u * 2.6))
+    _braco(rig, "d", 46.0, 186.0, -10.0, k)
+    rig["tronco"] = -90.0 + 2.0 * k
+    return {}
+
+
+def comemorar(u, rig, dur, a):
+    """Os dois braços para cima, com um quique. Fim feliz, ou ironia."""
+    k = _pulso(min(1.0, u * 1.3)) if u > 0.6 else _suave(min(1.0, u * 2.2))
+    rig["braco_e"] = [90.0 + 128.0 * k, 20.0 * k]
+    rig["braco_d"] = [90.0 - 128.0 * k, -20.0 * k]
+    rig["quadril"] = [rig["quadril"][0], rig["quadril"][1] - 26.0 * k]
+    return {}
+
+
+def negar(u, rig, dur, a):
+    """Balança a cabeça: "não". A única negativa que uma figura frontal
+    consegue fazer sem arte nova -- e ela é lida na hora."""
+    rig["cabeca"] = rig.get("cabeca", 0.0) + 9.0 * math.sin(2 * math.pi * 1.4 * u * dur)
     return {}
 
 
@@ -300,13 +487,108 @@ CATALOGO = {
     "encolher_ombros": encolher_ombros,
     "maos_na_cabeca": maos_na_cabeca,
     "cocar_cabeca": cocar_cabeca,
+    "maos_na_cintura": maos_na_cintura,
+    "bracos_cruzados": bracos_cruzados,
+    "mao_no_queixo": mao_no_queixo,
+    "apresentar": apresentar,
+    "apontar_para_si": apontar_para_si,
+    "comemorar": comemorar,
+    "negar": negar,
     "susto": susto,
     "pular": pular,
     "tropecar": tropecar,
     "cair": cair,
     "virar": virar,
     "parado": parado,
+    "gesticular": gesticular,
 }
+
+
+# =====================================================================
+# POSTURA — o corpo que cada emoção pede
+# =====================================================================
+# O roteirista já escolhe UMA emoção por trecho (`expressao`), e até aqui
+# ela só chegava ao rosto. Postura é a mesma escolha lida pelo corpo: a
+# diferença entre um personagem triste e um personagem neutro de cara
+# triste são os ombros. São deltas somados ao repouso, aplicados ANTES das
+# ações -- então qualquer ação do roteiro passa por cima.
+#
+# tronco: graus somados a -90 (positivo inclina para a frente/direita da
+# tela). braco_*: [ombro, cotovelo, pulso] absolutos, como no rig.
+#
+# Os braços vão escritos como [direção do ombro, direção do antebraço] na
+# tela (a convenção de `_braco`), e `aplicar_postura` faz a conta da dobra.
+POSTURA = {
+    "neutro":      {},
+    "sorrindo":    {"tronco": -1.5, "braco_e": [102.0, 88.0],
+                    "braco_d": [78.0, 92.0]},
+    "confiante":   {"tronco": -2.5, "braco_e": [105.0, 86.0],
+                    "braco_d": [75.0, 94.0]},
+    # ombros para dentro, peso à frente: quem está bravo ocupa menos espaço
+    # lateral e mais espaço para a frente
+    "bravo":       {"tronco": 3.5, "braco_e": [96.0, 62.0],
+                    "braco_d": [84.0, 118.0]},
+    "irritado":    {"tronco": 2.5, "braco_e": [97.0, 70.0],
+                    "braco_d": [83.0, 110.0]},
+    # ombros caídos e braços quase retos, colados: a tristeza encolhe a
+    # silhueta -- é o oposto exato do peito aberto do confiante
+    "triste":      {"tronco": 5.0, "braco_e": [93.0, 89.0],
+                    "braco_d": [87.0, 91.0]},
+    "desesperado": {"tronco": -3.0, "braco_e": [116.0, 74.0],
+                    "braco_d": [64.0, 106.0]},
+    "surpreso":    {"tronco": -3.0, "braco_e": [110.0, 80.0],
+                    "braco_d": [70.0, 100.0]},
+    "chocado":     {"tronco": -5.0, "braco_e": [120.0, 72.0],
+                    "braco_d": [60.0, 108.0]},
+    "duvida":      {"tronco": 1.0, "braco_e": [99.0, 84.0],
+                    "braco_d": [82.0, 104.0]},
+    "pensando":    {"tronco": 1.5, "braco_e": [98.0, 84.0],
+                    "braco_d": [84.0, 110.0]},
+    "desdem":      {"tronco": -1.0, "braco_e": [101.0, 85.0],
+                    "braco_d": [80.0, 96.0]},
+}
+
+
+# O QUANTO cada emoção gesticula enquanto fala. Multiplica a `forca` de
+# `gesticular`. Quem está triste quase não move as mãos; quem está bravo
+# move mais do que o normal -- é a mesma informação que a prosódia já usa
+# para a voz (expressao.PROSODIA), lida pelos braços.
+ENERGIA_GESTO = {
+    "triste": 0.35, "pensando": 0.45, "desdem": 0.55, "duvida": 0.7,
+    "neutro": 0.85, "confiante": 1.0, "sorrindo": 1.05,
+    "irritado": 1.2, "bravo": 1.3, "surpreso": 1.15,
+    "chocado": 1.25, "desesperado": 1.35,
+}
+
+
+def energia_gesto(expressao, intensidade=1.0):
+    import expressao as _EX
+    base = ENERGIA_GESTO.get(_EX.normalizar(expressao), 0.85)
+    return base * max(0.0, min(1.6, float(intensidade)))
+
+
+def aplicar_postura(rig, expressao, intensidade=1.0):
+    """Soma ao rig a postura da emoção do trecho, diluída pela intensidade.
+
+    Fica fora de `aplicar` de propósito: postura é ESTADO do trecho, não um
+    verbo com janela. Ações continuam sendo a única coisa que se move com
+    tempo próprio."""
+    import expressao as _EX
+    p = POSTURA.get(_EX.normalizar(expressao), {})
+    if not p:
+        return rig
+    k = max(0.0, min(1.6, float(intensidade)))
+    for osso, valor in p.items():
+        if osso == "tronco":
+            rig["tronco"] = rig.get("tronco", -90.0) + valor * k
+        elif osso.startswith("braco_"):
+            _braco(rig, osso[-1], valor[0], valor[1],
+                   valor[2] if len(valor) > 2 else 0.0, k)
+        else:
+            base = (list(rig.get(osso) or [90.0, 0.0, 0.0]) + [0.0, 0.0, 0.0])[:3]
+            alvo = (list(valor) + [0.0, 0.0, 0.0])[:3]
+            rig[osso] = [b + (v - b) * k for b, v in zip(base, alvo)]
+    return rig
 
 
 # =====================================================================
