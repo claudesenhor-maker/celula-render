@@ -384,6 +384,30 @@ def nomear_rosto(regioes, cabeca):
              and (c["bbox"][3] - c["bbox"][1]) < alt * 0.20]
     if perto:
         nomes[id(max(perto, key=lambda c: c["area"]))] = "nariz"
+
+    # ---------------------------------------------------------------
+    # SE A CARA NÃO SE ABRIU, NÃO EXISTEM FEIÇÕES.
+    #
+    # Quando nenhuma região chega a 45% da cabeça, o chamador usa a CABEÇA
+    # INTEIRA como crânio -- decisão certa e já registrada. Só que as
+    # feições continuavam sendo nomeadas e exportadas, e aí o motor
+    # desenhava olho, sobrancelha e nariz POR CIMA de um crânio que já os
+    # continha. Duas consequências, as duas descobertas em 28/08 olhando
+    # `cranio.png` da folha do Pal, que é a cara inteira:
+    #
+    #   * a duplicação é invisível em repouso (a peça cai exatamente sobre
+    #     o desenho dela) e vira defeito assim que algo a move -- foi o
+    #     "traço solto na testa" que apareceu ao inclinar a sobrancelha;
+    #   * o pipeline parecia ter rosto articulado quando não tinha. As
+    #     peças `olho_e`, `sobrancelha_e` e `mandibula` do Pal são fiapos
+    #     de 11x21, 40x12 e um punhado de pixels de pele -- pedaços do
+    #     contorno do cabelo, não feições.
+    #
+    # Sem crânio próprio, devolver feição nenhuma é a leitura honesta: a
+    # cara é um desenho só, e quem quiser expressão precisa de uma folha
+    # em que ela venha separada.
+    if not any(n == "cranio" for n in nomes.values()):
+        return {}
     return nomes
 
 
@@ -479,6 +503,13 @@ def segmentar_corpo(img, esqueleto, min_frac_area=0.0012):
         if "cranio" in por_nome:
             por_nome.pop("cabeca", None)
         else:
+            # A cara não se abriu em feições. Avisar ALTO: uma folha assim
+            # roda -- o boneco anda, gesticula e a legenda funciona -- mas
+            # não tem expressão facial nenhuma, e isso passou despercebido
+            # por semanas justamente porque o vídeo saía.
+            print("[rosto] a cabeca veio como UMA peca so: sem olho, "
+                  "sobrancelha ou mandibula separados. O personagem nao vai "
+                  "ter expressao facial nem lipsync de queixo com esta folha")
             por_nome["cranio"] = por_nome.pop("cabeca")
 
     # Mandíbula como peça de papel separada (o gerador deixou vão no
