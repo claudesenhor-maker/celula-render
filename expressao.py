@@ -238,6 +238,102 @@ class Rosto:
 
 
 # =====================================================================
+# A MESMA EMOÇÃO, NA VOZ
+# =====================================================================
+# POR QUE ISTO MORA AQUI, e não num módulo de voz: a emoção do trecho já é
+# escolhida uma vez, pelo roteirista, no campo `expressao`. Se a voz
+# tivesse um vocabulário próprio, o roteirista teria que escolher duas
+# vezes e as duas escolhas divergiriam no primeiro trecho em que alguém
+# esquecesse de mexer numa delas -- cara de espanto com voz de tédio, que é
+# pior do que não ter nenhuma das duas.
+#
+# O Edge-TTS aceita três controles: `rate` (velocidade), `pitch` (altura) e
+# `volume`. Não é SSML completo, não há ênfase por palavra -- mas quem já
+# ouviu alguém contar um caso sabe que a diferença entre susto e tristeza
+# está quase toda em velocidade e altura, e essas duas o serviço dá.
+#
+# Os valores são DELTAS sobre o perfil de voz do personagem: o perfil diz
+# como o Pal fala (rate +12%, pitch +18Hz), a emoção diz o quanto ele se
+# desvia disso neste trecho. Assim trocar a voz do personagem não obriga a
+# refazer a tabela de emoções.
+PROSODIA = {
+    "neutro":      (0, 0, 0),
+    # susto: rápido e agudo, que é o que a adrenalina faz com a fala
+    "surpreso":    (+14, +22, +6),
+    "chocado":     (+20, +30, +8),
+    # raiva: rápido, mas GRAVE -- agudo com raiva sai como esganiçado
+    "bravo":       (+10, -10, +8),
+    "irritado":    (+6, -6, +5),
+    # tristeza é o oposto de tudo: devagar, baixo, mais fraco
+    "triste":      (-14, -14, -6),
+    "desesperado": (+16, +18, +6),
+    "sorrindo":    (+6, +8, +2),
+    "confiante":   (-4, -6, +3),
+    # dúvida e reflexão pedem freio: o ouvinte precisa de tempo para
+    # perceber que o personagem está pensando
+    "duvida":      (-8, +4, 0),
+    "pensando":    (-12, -2, -2),
+    # desdém é a piada dita como quem não quer nada -- é o timing seco
+    "desdem":      (-6, -8, -2),
+}
+
+
+def _sinal(v, unidade):
+    return f"{v:+.0f}{unidade}"
+
+
+def prosodia(nome, intensidade=1.0, base=None):
+    """cfg de voz do trecho: o perfil do personagem mais a emoção.
+
+    `base` é o perfil (`spec["vozes"][perfil]`), e volta intacto no que a
+    emoção não toca -- `voice`, `motor`, `eleven_voice_id`. O que a emoção
+    mexe é somado ao rate/pitch do perfil, em vez de substituí-los.
+
+    Um trecho pode ainda cravar `rate`/`pitch` próprios; eles ganham de
+    tudo, porque escolha explícita do roteirista é decisão, não sugestão."""
+    cfg = dict(base or {})
+    dr, dp, dv = PROSODIA.get(normalizar(nome), (0, 0, 0))
+    k = max(0.0, min(1.6, float(intensidade)))
+    dr, dp, dv = dr * k, dp * k, dv * k
+
+    def _num(txt, unidade):
+        try:
+            return float(str(txt or "0").replace(unidade, "").replace("+", "").strip())
+        except ValueError:
+            return 0.0
+
+    cfg["rate"] = _sinal(_num(cfg.get("rate"), "%") + dr, "%")
+    cfg["pitch"] = _sinal(_num(cfg.get("pitch"), "Hz") + dp, "Hz")
+    if abs(dv) > 0.5:
+        cfg["volume"] = _sinal(_num(cfg.get("volume"), "%") + dv, "%")
+    return cfg
+
+
+# TEMPO CÔMICO. A pausa antes da tirada é o instrumento mais barato da
+# comédia -- e o motor já sabe inserir silêncio de verdade entre trechos
+# (juntar_com_respiro). O que faltava era usar isso de propósito em vez de
+# repetir 0,45s quatro vezes, que é o que faz quatro falas soarem como uma
+# lista de itens.
+RESPIRO_PADRAO = 0.34
+RESPIRO_ANTES_DA_TIRADA = 0.85
+RESPIRO_FINAL = 0.60
+
+
+def respiro_sugerido(i, total):
+    """Quanto silêncio DEPOIS do trecho `i` de `total`.
+
+    O penúltimo respiro é o longo: é a pausa que separa a montagem da
+    piada da piada. O último segura o quadro por meio segundo depois do
+    fim -- sem ele o vídeo corta na sílaba final e o YouTube já emenda no
+    próximo antes de a graça cair."""
+    if total >= 2 and i == total - 2:
+        return RESPIRO_ANTES_DA_TIRADA
+    if i == total - 1:
+        return RESPIRO_FINAL
+    return RESPIRO_PADRAO
+
+
+# =====================================================================
 # PISCAR
 # =====================================================================
 def piscando(n_frame, fps, semente=0, expr_nome="neutro"):
