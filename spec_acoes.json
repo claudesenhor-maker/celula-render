@@ -1,61 +1,103 @@
 {
-  "_leia_me": "CONTRATO do formato novo, executavel. Movimento por acoes com motivo, cenario por nome, legenda ligada. E isto que o no '3 Producao' do n8n precisa passar a emitir -- hoje ele ainda manda pose/pose_saida, que o motor aceita por compatibilidade mas nao produz caminhada nem gesto com causa. Campo comecado por _ e comentario; o motor ignora.",
-  "fila_id": "teste-cutout-2708",
-  "_fila_id": "id NAO-uuid de proposito: job.py reconhece como render de teste, pula a fila_producao e o Dispatcher nunca repesca. O MP4 sobe no bucket e NADA e publicado.",
+  "_leia_me": "CONTRATO de 29/08. Tudo o que o motor sabe fazer hoje, num arquivo so: acoes com motivo, expressoes com janela de reacao (que agora tambem mudam a VOZ), cenario do catalogo fechado (cenarios.py), legenda por palavra, efeitos sonoros e trilha. Campo comecado por _ e comentario; o motor ignora.",
+  "fila_id": "teste-som-2908",
+  "_fila_id": "id NAO-uuid de proposito: job.py reconhece como render de teste, pula a fila_producao e o Dispatcher nunca repesca. NADA e publicado.",
   "personagem_url": "https://fejivjwyadbawjdhldbj.supabase.co/storage/v1/object/public/toonzueira/assets/parte_personagem/pal/personagem.zip",
-  "vozes": {
-    "protagonista": {"voice": "pt-BR-AntonioNeural", "rate": "+12%", "pitch": "+18Hz"}
-  },
-  "cenarios": {
-    "rua":  "https://fejivjwyadbawjdhldbj.supabase.co/storage/v1/object/public/toonzueira/assets_bruto/cenario/geral/rua.jpg",
-    "sala": "https://fejivjwyadbawjdhldbj.supabase.co/storage/v1/object/public/toonzueira/assets_bruto/cenario/geral/sala.jpg"
-  },
-  "_cenarios": "URL do BRUTO, nao da versao em assets/: a de assets/ passou pelo rembg e voltou lavada. Sem esta chave, job.py monta a URL padrao do bucket a partir do nome citado em cada trecho, entao um spec antigo tambem ganha fundo.",
+  "modo_tts": "real",
   "legenda": true,
   "legenda_palavras": 3,
   "loudnorm": "loudnorm=I=-9:LRA=8:TP=-1.5",
+
+  "musica": {"estilo": "leve", "bpm": 108, "ganho_db": -21},
+  "_musica": "trilha sintetizada em sfx.py. Para uma faixa de verdade, ponha 'url' aqui e o job.py baixa. false desliga.",
+  "_sfx": "os efeitos saem sozinhos das acoes (susto estala, cair bate); a lista 'sfx' de cada trecho e para marcar o que o roteiro quer alem disso.",
+
+  "vozes": {
+    "protagonista": {"motor": "edge", "voice": "pt-BR-AntonioNeural", "rate": "+10%", "pitch": "+14Hz"},
+    "_prosodia": "rate e pitch sao o jeito de FALAR do personagem; a emocao de cada trecho e somada em cima disto por expressao.PROSODIA -- susto acelera e sobe, triste desacelera e desce."
+  },
+
+  "cenarios": {
+    "comercio": "https://fejivjwyadbawjdhldbj.supabase.co/storage/v1/object/public/toonzueira/assets_bruto/cenario/geral/comercio.jpg",
+    "rua": "https://fejivjwyadbawjdhldbj.supabase.co/storage/v1/object/public/toonzueira/assets_bruto/cenario/geral/rua.jpg"
+  },
+  "_cenarios": "as oito chaves validas estao em cenarios.py e sao as mesmas que o n8n gera. Pedir uma que nao existe nao cai mais em fundo verde: cai no interior mais parecido, com aviso no log.",
+
   "trechos": [
     {
-      "fala": "Fui no banco resolver uma coisa de cinco minutos.",
+      "fala": "Comprei um pão de cinquenta centavos e a maquininha perguntou se eu queria parcelar.",
+      "perfil_voz": "protagonista",
+      "cenario": "comercio",
+      "expressao": "surpreso",
+      "intensidade": 1.0,
+      "_por_que": "GANCHO: o absurdo esta na primeira frase e e concreto (cinquenta centavos, parcelar). Nada de 'sabe quando voce vai na padaria...'",
+      "acoes": [
+        {"nome": "susto", "de": 0.62, "ate": 0.95, "forca": 1.0,
+         "motivo": "o susto cai na palavra 'parcelar', que e onde a piada abre"},
+        {"nome": "apontar", "de": 0.25, "ate": 0.55, "altura": 20,
+         "motivo": "aponta para a maquininha no balcao enquanto a cita"}
+      ],
+      "expressoes": [
+        {"nome": "chocado", "de": 0.66, "ate": 1.0,
+         "motivo": "a cara desaba junto com o susto, na mesma palavra"}
+      ]
+    },
+    {
+      "fala": "Falei que não. Ela perguntou de novo. Em duas vezes de vinte e cinco.",
+      "perfil_voz": "protagonista",
+      "cenario": "comercio",
+      "expressao": "irritado",
+      "intensidade": 1.0,
+      "_por_que": "ESCALADA em tres tempos dentro da mesma fala. O numero exato (vinte e cinco) e o que faz rir; 'um valor baixo' nao faria.",
+      "acoes": [
+        {"nome": "encolher_ombros", "de": 0.0, "ate": 0.3,
+         "motivo": "encolhe os ombros ao dizer que recusou, como quem acha obvio"},
+        {"nome": "cocar_cabeca", "de": 0.45, "ate": 0.8,
+         "motivo": "coca a cabeca quando a maquina insiste"}
+      ],
+      "expressoes": [
+        {"nome": "duvida", "de": 0.55, "ate": 1.0,
+         "motivo": "a duvida entra em 'duas vezes de vinte e cinco', que e o absurdo aritmetico"}
+      ],
+      "sfx": [{"nome": "erro", "em": 0.42, "ganho": 0.9}],
+      "_sfx_deste": "o 'errou' de interfone marca a recusa da maquina sem precisar de uma fala explicando"
+    },
+    {
+      "fala": "E a fila inteira parada, esperando eu decidir a minha vida financeira.",
+      "perfil_voz": "protagonista",
+      "cenario": "comercio",
+      "expressao": "desesperado",
+      "intensidade": 1.1,
+      "_por_que": "ELEVACAO: sai do objeto e vira vergonha publica, que e o que qualquer um reconhece.",
+      "acoes": [
+        {"nome": "maos_na_cabeca", "de": 0.3, "ate": 0.95,
+         "motivo": "leva as maos a cabeca ao perceber a fila olhando"}
+      ],
+      "expressoes": [
+        {"nome": "triste", "de": 0.7, "ate": 1.0,
+         "motivo": "a vergonha vira derrota no fim da frase"}
+      ]
+    },
+    {
+      "fala": "Parcelei. Agora eu devo pão.",
       "perfil_voz": "protagonista",
       "cenario": "rua",
+      "expressao": "desdem",
+      "intensidade": 1.0,
+      "respiro_s": 1.0,
+      "_por_que": "VIRADA: quatro palavras, dita de cara amarrada. O respiro longo antes vem sozinho do trecho anterior (expressao.respiro_sugerido) e o de 1,0s aqui segura o quadro depois da tirada.",
       "acoes": [
-        {"nome": "entrar_correndo", "de": 0.0, "ate": 0.5, "sentido": 1,
-         "motivo": "entra correndo porque acha que resolve rapido e ainda da tempo"},
-        {"nome": "apontar", "de": 0.62, "ate": 1.0, "altura": -20,
-         "motivo": "aponta para o banco no instante exato em que cita o banco"}
-      ]
-    },
-    {
-      "fala": "A moça olhou o sistema e falou: só um instante.",
-      "perfil_voz": "protagonista",
-      "cenario": "rua",
-      "acoes": [
-        {"nome": "encolher_ombros", "de": 0.45, "ate": 1.0,
-         "motivo": "da de ombros ao repetir a resposta que nao explica nada"}
-      ]
-    },
-    {
-      "fala": "Instante. Duas horas depois eu já conhecia a família inteira da fila.",
-      "perfil_voz": "protagonista",
-      "cenario": "sala",
-      "acoes": [
-        {"nome": "maos_na_cabeca", "de": 0.28, "ate": 0.8,
-         "motivo": "leva as maos a cabeca ao dizer duas horas, que e onde a piada vira"},
-        {"nome": "apontar", "de": 0.82, "ate": 1.0, "altura": 10,
-         "motivo": "aponta para a fila ao lado quando fala da familia inteira"}
-      ]
-    },
-    {
-      "fala": "Saí de lá com aniversário marcado e o problema do mesmo jeito.",
-      "perfil_voz": "protagonista",
-      "cenario": "sala",
-      "acoes": [
-        {"nome": "andar", "de": 0.0, "ate": 0.55, "sentido": -1, "passos_por_s": 1.5,
-         "motivo": "vai embora andando enquanto conta como saiu de la"},
-        {"nome": "acenar", "de": 0.6, "ate": 1.0,
-         "motivo": "acena de tchau para a fila, que virou conhecida"}
-      ]
+        {"nome": "andar", "de": 0.0, "ate": 0.45, "sentido": -1, "passos_por_s": 1.2,
+         "motivo": "sai andando da loja enquanto admite que parcelou"},
+        {"nome": "encolher_ombros", "de": 0.55, "ate": 1.0,
+         "motivo": "encolhe os ombros na tirada final, como quem ja se conformou"}
+      ],
+      "expressoes": [
+        {"nome": "confiante", "de": 0.6, "ate": 1.0,
+         "motivo": "ele finge que estava tudo bem, que e o que fecha a piada"}
+      ],
+      "sfx": [{"nome": "rimshot", "em": 0.72, "ganho": 1.0}],
+      "_sfx_deste": "ba-dum-tss no punchline: sem marca sonora a ultima fala soa igual as tres anteriores e ninguem percebe que acabou"
     }
   ]
 }
