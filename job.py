@@ -12,9 +12,16 @@ Variáveis de ambiente:
   SUPABASE_SERVICE_KEY  service_role key
   SUPABASE_BUCKET       padrão: toonzueira
 """
-import os, sys, time, json, traceback
+import os, sys, re, time, json, traceback
 from pathlib import Path
 import requests
+
+# fila_producao.fila_id e uuid no Postgres. Um id legivel de teste
+# ("teste-cutout-2208") faz o PostgREST devolver 400/22P02 -- e como
+# atualizar_fila roda DEPOIS do upload, isso transformava um render bom
+# num job 'failure' com o MP4 ja no bucket. Aconteceu no run #11.
+UUID_RE = re.compile(r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-"
+                     r"[0-9a-f]{4}-[0-9a-f]{12}$", re.I)
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from palito_v5 import render_spec
@@ -55,6 +62,11 @@ def atualizar_fila(fila_id, campos):
     """
     if not fila_id or fila_id == "sem-id":
         print("[fila] sem fila_id, pulando"); return
+    if not UUID_RE.match(str(fila_id)):
+        # Render de teste: nao existe linha na fila para atualizar. Pular e
+        # correto -- e o inverso (deixar o 400 subir) custava o video inteiro.
+        print(f"[fila] fila_id '{fila_id}' nao e uuid; render de teste, pulando")
+        return
     r = requests.patch(
         f"{SB}/rest/v1/fila_producao?fila_id=eq.{fila_id}",
         json=campos,
@@ -120,7 +132,12 @@ def main():
             motor = "cutout"
             _, dur = render_cutout(pasta, spec, out, tmpdir="/tmp/render")
         except Exception as e:
+            # Traceback completo de proposito: este except engole TUDO, ate
+            # ImportError. No run #11 um 'No module named numpy' (dependencia
+            # que faltava no requirements.txt) apareceu como uma linha solta e
+            # passou por defeito de arte -- o cut-out nunca tinha rodado.
             print(f"[motor] cut-out falhou ({e}); caindo para o rig vetorial")
+            traceback.print_exc()
             motor = "vetor"
     if motor == "vetor":
         print("[motor] rig vetorial")
