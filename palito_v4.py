@@ -22,7 +22,13 @@ Ponto de entrada:
     render_spec(spec, "saida.mp4", modo="real")
 """
 import math, os, random, subprocess, tempfile, time
-import cairosvg
+# cairosvg NAO entra aqui. Este arquivo e biblioteca de geometria: monta
+# STRING de SVG e nao rasteriza nada -- o import era morto. Quem rasteriza e
+# o palito_v5, e e la que o import mora agora, dentro da funcao. Como
+# palito_cutout importa daqui as poses e o merge, o import solto obrigava o
+# motor CUT-OUT -- que nao toca em SVG -- a ter libcairo instalado. Fora do
+# runner Ubuntu isso impede rodar o cut-out para conferir frames antes de
+# gastar 13 minutos de Action.
 
 # W,H = espaço de PROJETO (viewBox do SVG). Toda a geometria do rig usa isto.
 # OUT_W,OUT_H = resolução de SAÍDA. Como o desenho é vetorial, subir a saída
