@@ -59,7 +59,7 @@ Uso:
 """
 import argparse, json, math, os, subprocess, sys, tempfile
 import numpy as np
-from PIL import Image
+from PIL import Image, ImageDraw, ImageFilter
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from palito_v4 import REST, POSES, EXPRESSOES, merge, blend, pt
@@ -115,6 +115,60 @@ def _centralizar(img, pivot):
     return tela, (R, R)
 
 
+def _cor_da_casca(img):
+    """A cor do contorno da peça, amostrada da própria arte.
+
+    Cravar preto funcionaria para o Pal e quebraria no primeiro personagem
+    com contorno colorido. A casca é o anel de fora do alfa; a mediana dele
+    é a cor da linha."""
+    a = np.asarray(img)
+    al = a[..., 3]
+    dentro = al > 128
+    if not dentro.any():
+        return (26, 24, 20)
+    erodido = np.asarray(img.split()[3].filter(ImageFilter.MinFilter(5))) > 128
+    anel = dentro & ~erodido
+    if anel.sum() < 20:
+        anel = dentro
+    return tuple(int(v) for v in np.median(a[anel][:, :3], axis=0))
+
+
+def _fechar_vao(img, pivot, px):
+    """Engrossa a peça `px` pixels com a cor do próprio contorno.
+
+    POR QUE (defeito visto no run #13 e explicado só agora)
+        A folha é um BONECO DE PAPEL: cada parte tem contorno próprio e um
+        vão branco a separa da vizinha. O vão é o que permite segmentar a
+        folha, e o meio dele é a articulação -- é a decisão estrutural do
+        projeto e continua certa.
+
+        Só que o motor nunca fechou esse vão ao compor. Enquanto o fundo
+        era branco isso não aparecia: vão branco sobre fundo branco é
+        invisível. Com CENÁRIO atrás, cada vão virou um rasgo por onde a
+        rua aparece -- ombro, cintura, punho, joelho e tornozelo abertos,
+        o corpo lido como pedaços soltos. O HANDOFF registrava um caso
+        disto ("vão entre antebraço e mão que não fecha") como defeito de
+        pivô; não era: é o vão desenhado, em todas as juntas.
+
+        Peça vizinha cresce metade do vão de cada lado e as duas se
+        encostam. Crescer com a COR DO CONTORNO faz a emenda ler como
+        linha um pouco mais grossa, que é exatamente como cut-out de
+        verdade resolve: as peças se sobrepõem, não se tangenciam.
+
+    O pivô não se mexe em relação ao desenho -- a peça cresce em volta
+    dele --, então nenhuma medida da folha é invalidada."""
+    if px <= 0:
+        return img, pivot
+    m = int(px)
+    tela = Image.new("RGBA", (img.width + 2 * m, img.height + 2 * m), (0, 0, 0, 0))
+    tela.alpha_composite(img, (m, m))
+    alfa = tela.split()[3].filter(ImageFilter.MaxFilter(2 * m + 1))
+    grossa = Image.new("RGBA", tela.size, _cor_da_casca(img) + (255,))
+    grossa.putalpha(alfa)
+    grossa.alpha_composite(tela)          # a arte original por cima do anel
+    return grossa, (pivot[0] + m, pivot[1] + m)
+
+
 class Personagem:
     """Carrega as peças e as âncoras uma vez, na memória.
 
@@ -131,10 +185,20 @@ class Personagem:
         self.saidas = cfg.get("saidas", {})
         self.escala = cfg.get("escala", 1.0)
         self.comp = cfg.get("comprimentos", {})
+        self.vaos = cfg.get("vaos", {})
         # CORREÇÃO DE FOLHA: a arte vem em pose T; em cena o braço cai.
         self.corr = dict(CORRECAO_POSE_T)
         for filho, dono in SEGUE.items():
             self.corr.setdefault(filho, self.corr.get(dono, 0.0))
+        # O segmentador mede vão só nas juntas do corpo; nas peças de rosto
+        # ele grava 0. Para olho, nariz e sobrancelha isso é certo -- são
+        # adornos colados no crânio e engrossá-los mudaria a cara. A
+        # MANDÍBULA é outra coisa: ela é a única peça de rosto que se MOVE
+        # em relação ao pai, e é por ela que a boca abre. Sem fechar o vão
+        # dela, o entalhe do crânio fica maior que o queixo e a boca parece
+        # permanentemente entreaberta -- foi lido como defeito da arte.
+        medidos = [v for v in self.vaos.values() if v > 0.5]
+        tipico = sorted(medidos)[len(medidos) // 2] if medidos else 5.0
         self.img, self.piv = {}, {}
         for nome in cfg["partes"]:
             if nome not in self.pivos:
@@ -149,7 +213,17 @@ class Personagem:
             if not os.path.exists(caminho):
                 raise FileNotFoundError(f"parte '{nome}.png' nao existe em {pasta}")
             im = Image.open(caminho).convert("RGBA")
-            self.img[nome], self.piv[nome] = _centralizar(im, self.pivos[nome])
+            # metade do vão de cada lado: as duas vizinhas crescem uma em
+            # direção à outra e a junta fecha. +1 cobre o arredondamento e a
+            # borda macia que o resize da escala deixa.
+            vao = float(self.vaos.get(nome, 0.0))
+            if nome in FECHA_MESMO_SEM_MEDIDA and vao <= 0.5:
+                vao = tipico
+                print(f"[personagem] '{nome}' sem vao medido; usando o tipico "
+                      f"({tipico:.1f}px) para fechar a junta")
+            im, pivo = _fechar_vao(im, self.pivos[nome],
+                                   int(round(vao / 2.0)) + 1 if vao > 0.5 else 0)
+            self.img[nome], self.piv[nome] = _centralizar(im, pivo)
 
     def p(self, nome):
         return self.img[nome], self.piv[nome]
@@ -167,6 +241,14 @@ def _tri(v):
 
 
 ABERTURA_MAXILAR = 0.38     # fração da altura do queixo que a boca desce
+
+# Peças que fecham a junta mesmo sem vão medido (ver Personagem.__init__)
+FECHA_MESMO_SEM_MEDIDA = ("mandibula",)
+
+# Interior da boca: o que se vê quando o maxilar desce. Cor de dentro de
+# boca de desenho -- escura o bastante para ler como buraco, quente o
+# bastante para não virar um retângulo preto no meio da cara.
+COR_BOCA = (92, 42, 38, 255)
 
 
 def _angulo(nome, rig, boca_nivel):
@@ -250,8 +332,11 @@ def desenhar_personagem(pers, rig, boca_nivel=0.0, piscando=False, objeto=None):
     # A boca abre por QUEDA do queixo, não por rotação: de frente, girar a
     # mandíbula em torno de um ponto no meio do rosto torce o queixo para
     # um lado. Descer mantém a cara simétrica e é o que se lê como fala.
+    repouso_mandibula = None
     if "mandibula" in pos and pers.tem("mandibula"):
         queda = boca_nivel * pers.img["mandibula"].size[1] * ABERTURA_MAXILAR * e * 0.5
+        if queda > 1.0:
+            repouso_mandibula = pos["mandibula"]
         pos["mandibula"] = (pos["mandibula"][0], pos["mandibula"][1] + queda)
         if "boca" in pos:
             pos["boca"] = (pos["boca"][0], pos["boca"][1] + queda)
@@ -262,6 +347,20 @@ def desenhar_personagem(pers, rig, boca_nivel=0.0, piscando=False, objeto=None):
             continue
         if piscando and nome in ("olho_e", "olho_d"):
             continue        # piscar = simplesmente não desenhar o olho
+
+        # INTERIOR DA BOCA. O maxilar desce e deixa um buraco entre ele e o
+        # crânio -- e por esse buraco aparecia o CENÁRIO, porque o entalhe
+        # do crânio é vazado (é o vão que permitiu segmentar a folha).
+        # Enche-se o buraco com a silhueta do próprio maxilar, tingida de
+        # escuro, na posição de REPOUSO: assim o formato é exatamente o
+        # certo, sem inventar geometria de boca nenhuma, e o que sobra
+        # visível é só a faixa que o queixo desceu.
+        if nome == "mandibula" and repouso_mandibula is not None:
+            img, piv = pers.p(nome)
+            dentro = Image.new("RGBA", img.size, COR_BOCA)
+            dentro.putalpha(img.split()[3])
+            colar(base, dentro, piv, repouso_mandibula, ang[nome], e)
+
         img, piv = pers.p(nome)
         colar(base, img, piv, pos[nome], ang[nome], e)
 
@@ -327,6 +426,37 @@ class Cenario:
         return out
 
 
+def _sombra_de_contato(quadro, camada, chao_y):
+    """Elipse escura no chão, sob o personagem.
+
+    Sem ela o personagem é um recorte POUSADO no cenário, não alguém DENTRO
+    dele -- foi a primeira coisa que saltou quando o fundo deixou de ser
+    cor chapada e virou uma rua. Uma sombra de contato é o sinal mais
+    barato de que os pés tocam o chão.
+
+    O ponto de apoio é a LINHA DO CHÃO da cena, não a base da figura: presa
+    aos pés, a sombra subiria junto no pulo -- e sombra que voa denuncia
+    mais do que sombra nenhuma. Ela encolhe e clareia conforme a figura se
+    afasta do chão, que é o que dá a leitura de altura."""
+    bb = camada.getbbox()
+    if not bb:
+        return
+    x0, _, x1, y1 = bb
+    voo = max(0.0, chao_y - y1)
+    if voo > H * 0.30:
+        return                          # alto demais: já não há contato a sugerir
+    k = 1.0 - min(1.0, voo / (H * 0.30))
+    larg = (x1 - x0) * (0.42 + 0.22 * k)
+    alt = max(6.0, larg * 0.15)
+    cx = (x0 + x1) / 2.0
+    tinta = Image.new("RGBA", (W, H), (0, 0, 0, 0))
+    ImageDraw.Draw(tinta).ellipse(
+        [cx - larg / 2, chao_y - alt / 2, cx + larg / 2, chao_y + alt / 2],
+        fill=(30, 26, 22, int(96 * (0.45 + 0.55 * k))))
+    tinta = tinta.filter(ImageFilter.GaussianBlur(max(2, int(alt * 0.35))))
+    quadro.alpha_composite(tinta)
+
+
 def montar_frame(camada, cenario, cam, quadril_x=W / 2):
     """Junta personagem + cenário aplicando o que a câmera pediu."""
     if cam.get("espelhar"):
@@ -360,6 +490,8 @@ def montar_frame(camada, cenario, cam, quadril_x=W / 2):
             camada = nova
 
     quadro = cenario.quadro(cam.get("fundo_dx", 0.0)).convert("RGBA")
+    if cam.get("chao_y"):
+        _sombra_de_contato(quadro, camada, float(cam["chao_y"]))
     quadro.alpha_composite(camada)
     quadro = quadro.convert("RGB")
 
@@ -431,6 +563,35 @@ def _carregar_elenco(spec, pasta_padrao):
     return fora
 
 
+def _pastas(spec, pasta_partes, chave_spec, padroes):
+    """Onde procurar arte que não é do personagem (cenário, objeto).
+
+    Ordem: o que o spec mandar, depois as pastas ao lado da pasta de
+    peças. Aceita singular e plural de propósito -- o bucket guarda em
+    `assets/cenario/` e `assets/objeto/`, e o motor sempre procurou por
+    `cenarios/` e `objetos/`. A divergência nunca apareceu porque NADA
+    baixava esses arquivos: o cut-out caía direto na cor chapada e o
+    defeito passou por "cenário ainda não existe"."""
+    fora = [p for p in [spec.get(chave_spec)] if p]
+    fora += [os.path.join(pasta_partes, "..", p) for p in padroes]
+    return fora
+
+
+def _achar_arte(pastas, nome, exts=(".png", ".jpg", ".jpeg", ".webp")):
+    """Primeiro arquivo que existir, em qualquer das extensões.
+
+    Cenário chega como JPG (o bruto do gerador) ou PNG; procurar só por
+    .png fazia o motor não achar justamente o que presta -- a versão que
+    passou pelo rembg volta lavada, porque rembg é segmentador de objeto
+    saliente e um cenário não tem objeto saliente nenhum."""
+    for p in pastas:
+        for e in exts:
+            caminho = os.path.join(p, nome + e)
+            if os.path.exists(caminho):
+                return caminho
+    return None
+
+
 def _acoes_por_ator(tr, chaves, falante):
     """Distribui as ações do trecho entre os atores.
 
@@ -446,7 +607,7 @@ def _acoes_por_ator(tr, chaves, falante):
 
 
 def render(pasta_partes, spec, saida, tmpdir=None):
-    from palito_v5 import sintetizar, envelope
+    from palito_v5 import sintetizar, envelope, juntar_com_respiro
     tmp = tmpdir or tempfile.mkdtemp()
     fd = os.path.join(tmp, "frames"); os.makedirs(fd, exist_ok=True)
 
@@ -454,13 +615,18 @@ def render(pasta_partes, spec, saida, tmpdir=None):
     chaves = list(elenco)
     padrao_ator = chaves[0]
 
+    pastas_objeto = _pastas(spec, pasta_partes, "pasta_objetos", ("objetos", "objeto"))
+
     # OBJETOS: PNG solto que gruda na mão de alguém. Carregados uma vez.
     objetos = {}
     for nome, caminho in (spec.get("objetos") or {}).items():
         if not os.path.isabs(caminho):
-            caminho = os.path.join(pasta_partes, "..", "objetos", caminho)
+            # o spec pode dar o nome da arte ("celular") ou o arquivo
+            # ("celular.png"); os dois têm que achar o mesmo PNG
+            base = caminho.rsplit(".", 1)[0] if "." in caminho else caminho
+            caminho = _achar_arte(pastas_objeto, base) or caminho
         if not os.path.exists(caminho):
-            print(f"[objeto] {nome}: nao achei {caminho}, seguindo sem ele")
+            print(f"[objeto] {nome}: nao achei '{caminho}', seguindo sem ele")
             continue
         im = Image.open(caminho).convert("RGBA")
         # NORMALIZA O TAMANHO. O gerador devolve o objeto ocupando a
@@ -482,33 +648,73 @@ def render(pasta_partes, spec, saida, tmpdir=None):
     ACOES.garantir_gancho(spec)
 
     # VOZ PRIMEIRO: a duração real vira a timeline (igual ao palito_v5)
-    faixas, total = [], 0.0
+    faixas, respiros, marcas_por_trecho, total = [], [], [], 0.0
     for i, tr in enumerate(spec["trechos"]):
         wav = os.path.join(tmp, f"v{i:02d}.wav")
         perfil = tr.get("perfil_voz") or tr.get("ator") or "narrador"
         cfg = spec.get("vozes", {}).get(perfil, {})
-        _, dur = sintetizar(tr["fala"], cfg, wav,
-                            spec.get("modo_tts", os.environ.get("MODO_TTS", "real")))
-        tr["dur"] = dur + tr.get("respiro_s", 0.45)
-        faixas.append(wav); total += tr["dur"]
+        # as MARCAS de palavra deixam de ser descartadas: sao elas que dao
+        # o tempo exato de cada palavra para a legenda (ver legendas.py)
+        marcas, dur = sintetizar(tr["fala"], cfg, wav,
+                                 spec.get("modo_tts", os.environ.get("MODO_TTS", "real")))
+        respiro = float(tr.get("respiro_s", 0.45))
+        tr["dur"] = dur + respiro
+        tr["_inicio_s"] = total          # tempo global em que este trecho começa
+        tr["_dur_voz"] = dur             # sem o respiro: é o que tem som
+        faixas.append(wav); respiros.append(respiro)
+        marcas_por_trecho.append(marcas or [])
+        total += tr["dur"]
     print(f"[voz] timeline real: {total:.2f}s")
 
-    lista = os.path.join(tmp, "a.txt")
-    open(lista, "w").write("\n".join(f"file '{a}'" for a in faixas))
-    voz = os.path.join(tmp, "voz.wav")
-    subprocess.run(["ffmpeg", "-y", "-v", "error", "-f", "concat", "-safe", "0",
-                    "-i", lista, "-ar", "24000", "-ac", "1", voz], check=True)
+    # o respiro entra no áudio como silêncio de verdade. Sem isto o
+    # -shortest do fim decepava a cauda de cada trecho -- o vídeo saía
+    # 1,35s mais curto do que o log dizia (ver juntar_com_respiro)
+    voz = juntar_com_respiro(faixas, respiros, os.path.join(tmp, "voz.wav"), tmp)
     env = envelope(voz)
 
+    # LEGENDA: opcional, mas ligada por padrão. Short se assiste no mudo.
+    leg = None
+    if spec.get("legenda", True):
+        from legendas import Legenda
+        leg = Legenda(W, H, tamanho=spec.get("legenda_px"),
+                      por_bloco=spec.get("legenda_palavras", 3))
+        for tr, m in zip(spec["trechos"], marcas_por_trecho):
+            leg.adicionar(tr["fala"], m, tr["_inicio_s"], tr["_dur_voz"])
+        print(f"[legenda] {len(leg.blocos)} blocos"
+              + ("" if any(marcas_por_trecho) else " (sem WordBoundary: tempo repartido)"))
+
+    # LINHA DO CHÃO: onde os pés do personagem pousam em repouso. Sai de um
+    # frame de teste, uma vez por render -- é a única referência estável de
+    # chão que existe, já que o cenário é arte e não traz cota nenhuma.
+    chao_y = None
+    try:
+        pers0, x0_ = elenco[padrao_ator]
+        rig0 = merge(REST, {})
+        rig0["quadril"] = [x0_, REST["quadril"][1]]
+        bb0 = desenhar_personagem(pers0, rig0).getbbox()
+        chao_y = bb0[3] if bb0 else None
+        print(f"[chao] linha do chao em y={chao_y}")
+    except Exception as e:
+        print(f"[chao] nao consegui medir ({e}); seguindo sem sombra de contato")
+
+    pastas_cenario = _pastas(spec, pasta_partes, "pasta_cenarios", ("cenarios", "cenario"))
     cenarios = {}
     n = 0
     pan = 0.0            # o quanto o fundo já andou; NÃO zera entre trechos
     for tr in spec["trechos"]:
         cen = tr.get("cenario", "sala")
         if cen not in cenarios:
-            cam_path = os.path.join(pasta_partes, "..", "cenarios", cen + ".png")
-            img = (Image.open(cam_path) if os.path.exists(cam_path)
-                   else Image.new("RGB", (W, H), "#A5A893"))
+            cam_path = _achar_arte(pastas_cenario, cen)
+            if cam_path:
+                print(f"[cenario] {cen}: {cam_path}")
+                img = Image.open(cam_path)
+            else:
+                # fundo chapado é o ÚLTIMO recurso, e agora ele avisa. Foi
+                # esta cor saindo calada que fez o cenário faltante passar
+                # por "cenário ainda não existe" durante duas sessões.
+                print(f"[cenario] {cen}: nao achei arte em "
+                      f"{[os.path.normpath(p) for p in pastas_cenario]}; cor chapada")
+                img = Image.new("RGB", (W, H), "#A5A893")
             cenarios[cen] = Cenario(img)
         falante = tr.get("ator") if tr.get("ator") in elenco else padrao_ator
         por_ator = _acoes_por_ator(tr, chaves, falante)
@@ -538,8 +744,14 @@ def render(pasta_partes, spec, saida, tmpdir=None):
                 if chave == falante:
                     cam_falante, x_falante = c, rig["quadril"][0]
             cam = cam_falante
-            montar_frame(camada, cenarios[cen], cam, x_falante).save(
-                os.path.join(fd, f"{n:05d}.png"))
+            if chao_y:
+                cam["chao_y"] = chao_y
+            quadro = montar_frame(camada, cenarios[cen], cam, x_falante)
+            if leg is not None:
+                # por cima de tudo, e no tempo GLOBAL: o índice do frame é
+                # contínuo entre trechos, então n/FPS é o relógio do vídeo
+                leg.desenhar(quadro, n / float(FPS))
+            quadro.save(os.path.join(fd, f"{n:05d}.png"))
             n += 1
         pan = cam.get("fundo_dx", pan)              # continua de onde parou
     print(f"[cutout] {n} frames ({n/FPS:.1f}s)")
@@ -550,7 +762,12 @@ def render(pasta_partes, spec, saida, tmpdir=None):
                     "-c:v", "libx264", "-preset", "medium", "-crf", "21",
                     "-pix_fmt", "yuv420p", "-c:a", "aac", "-b:a", "192k",
                     "-shortest", "-movflags", "+faststart", saida], check=True)
-    return saida, round(total, 2)
+    # Duração devolvida = a do VÍDEO que saiu, não a soma planejada. Com o
+    # respiro no áudio as duas praticamente coincidem, mas `int(dur*FPS)`
+    # arredonda para baixo em cada trecho, e é a guarda de duração do
+    # job.py que consome este número -- ela precisa validar o arquivo, não
+    # a intenção.
+    return saida, round(n / float(FPS), 2)
 
 
 if __name__ == "__main__":
