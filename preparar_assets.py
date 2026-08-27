@@ -295,8 +295,20 @@ def fatiar_folha(chave):
         return False
 
     folha = Image.open(io.BytesIO(baixar(achados["corpo"]))).convert("RGBA")
+
+    # PIVOS ESCRITOS A MAO, se a arte deixou alguma junta ambigua. O arquivo
+    # e opcional e mora ao lado da folha; o que ele nao citar continua sendo
+    # medido no vao. Ver lab-celula/PIVOS-MANUAIS.md.
+    pivos_manuais = None
+    if existe(origem + "pivos.json"):
+        try:
+            pivos_manuais = json.loads(baixar(origem + "pivos.json"))
+            print(f"[folha] {chave}: pivos.json com {len(pivos_manuais)} peca(s) a mao")
+        except Exception as e:
+            print(f"[folha] {chave}: pivos.json ilegivel, ignorado ({e})")
+
     try:
-        pecas, ancoras = segmentar_folha(folha)
+        pecas, ancoras = segmentar_folha(folha, pivos_manuais)
     except FolhaGrudada as e:
         print(f"[folha] {chave}: RECUSADA -- {e}")
         print(f"        a arte precisa vir com vao branco entre as partes; "
