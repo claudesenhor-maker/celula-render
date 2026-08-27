@@ -492,6 +492,102 @@ def negar(u, rig, dur, a):
     return {}
 
 
+# =====================================================================
+# OBJETOS — o corpo que interage com uma coisa, não só com o ar
+# =====================================================================
+# O motor já sabia grudar um PNG na mão (`objeto` na ação, ver
+# `_pivo_de_pega`), e mesmo assim nenhum vídeo teve objeto: faltava o
+# GESTO. Uma xícara colada numa mão que gesticula lê como erro de colagem;
+# o que faz o objeto existir é o braço se comportar como se ele pesasse --
+# descer para pegar, subir para mostrar, esticar para entregar.
+#
+# Todas as ações daqui aceitam `objeto` (o nome da arte no spec) e `mao`
+# ("d" por padrão). A partir do instante em que uma delas começa, o objeto
+# FICA na mão do personagem até `largar_objeto` -- inclusive atravessando
+# trechos. Antes, ele só aparecia dentro da janela `de..ate` da ação que o
+# citava, e o roteirista tinha que repetir `objeto` em toda ação seguinte
+# para o celular não sumir da mão no meio da fala.
+def pegar_objeto(u, rig, dur, a):
+    """Desce a mão, pega e traz o objeto para a altura do peito.
+
+    A descida importa: sem ela o objeto simplesmente aparece na mão, e
+    aparecer é o que faz o público ler colagem em vez de ação."""
+    lado = a.get("mao", "d")
+    desce = _suave(min(1.0, u * 2.2))
+    sobe = _suave(max(0.0, (u - 0.45) / 0.55))
+    # desce até junto do quadril, depois recolhe à frente do peito
+    ombro = 92.0 - 26.0 * sobe
+    ante = 96.0 * (1.0 - sobe) + (168.0 if lado == "d" else 12.0) * sobe
+    _braco(rig, lado, ombro if lado == "d" else 180.0 - ombro,
+           ante if lado == "d" else 180.0 - ante, 0.0, max(desce, sobe))
+    rig["tronco"] = -90.0 + 4.0 * desce * (1.0 - sobe)
+    return {}
+
+
+def mostrar_objeto(u, rig, dur, a):
+    """Ergue o objeto à frente, na altura do rosto: "olha ISSO".
+
+    É o gesto de prova -- o que transforma um objeto de cena em argumento
+    da piada."""
+    lado = a.get("mao", "d")
+    k = _suave(min(1.0, u * 2.4))
+    alt = float(a.get("altura", 34.0))    # quanto acima da horizontal
+    if lado == "d":
+        _braco(rig, "d", -alt, -alt - 30.0, -8.0, k)
+    else:
+        _braco(rig, "e", 180.0 + alt, 210.0 + alt, 8.0, k)
+    rig["tronco"] = -90.0 - 1.5 * k
+    return {}
+
+
+def usar_objeto(u, rig, dur, a):
+    """As duas mãos à frente, cabeça baixa: mexendo no celular, lendo,
+    contando dinheiro. O personagem some do mundo, que é a piada."""
+    k = _suave(min(1.0, u * 2.2))
+    _braco(rig, "d", 34.0, -62.0, -6.0, k)
+    _braco(rig, "e", 146.0, 242.0, 6.0, k * 0.8)
+    rig["cabeca"] = rig.get("cabeca", 0.0) + 5.0 * k
+    rig["tronco"] = -90.0 + 3.0 * k
+    return {}
+
+
+def entregar_objeto(u, rig, dur, a):
+    """Estica o braço para o outro ator, oferecendo o objeto.
+
+    `sentido` diz para que lado ele estende (-1 esquerda, 1 direita); o
+    padrão é para o lado da mão que segura."""
+    lado = a.get("mao", "d")
+    sentido = float(a.get("sentido", 1.0 if lado == "d" else -1.0))
+    k = _suave(min(1.0, u * 2.0))
+    alt = 8.0
+    if sentido >= 0:
+        _braco(rig, "d", alt, alt - 6.0, -4.0, k)
+    else:
+        _braco(rig, "e", 180.0 - alt, 186.0 - alt, 4.0, k)
+    rig["tronco"] = -90.0 - 2.0 * k
+    return {}
+
+
+def largar_objeto(u, rig, dur, a):
+    """Abaixa o braço e SOLTA: daqui em diante a mão volta a estar vazia.
+
+    Existe para fechar o estado que `pegar_objeto` abre. Sem uma ação de
+    largar, o objeto acompanharia o personagem até o fim do vídeo -- e o
+    celular ficaria na mão dele durante a queda."""
+    lado = a.get("mao", "d")
+    k = _suave(min(1.0, u * 2.6))
+    _braco(rig, lado, 92.0 if lado == "d" else 88.0,
+           94.0 if lado == "d" else 86.0, 0.0, k)
+    return {}
+
+
+# quais ações põem e quais tiram o objeto da mão. O motor lê esta lista,
+# não o nome da ação, para não espalhar string mágica pelo render.
+ACOES_PEGAM_OBJETO = ("pegar_objeto", "mostrar_objeto", "usar_objeto",
+                      "entregar_objeto")
+ACOES_LARGAM_OBJETO = ("largar_objeto",)
+
+
 CATALOGO = {
     "andar": andar,
     "entrar_andando": entrar_andando,
@@ -516,6 +612,11 @@ CATALOGO = {
     "virar": virar,
     "parado": parado,
     "gesticular": gesticular,
+    "pegar_objeto": pegar_objeto,
+    "mostrar_objeto": mostrar_objeto,
+    "usar_objeto": usar_objeto,
+    "entregar_objeto": entregar_objeto,
+    "largar_objeto": largar_objeto,
 }
 
 
