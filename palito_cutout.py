@@ -1504,14 +1504,47 @@ def _carregar_elenco(spec, pasta_padrao):
         pasta = cfg.get("pasta") or os.path.join(pasta_padrao, "..", chave)
         # posições padrão bem separadas: duas pessoas no mesmo x viram uma
         # pessoa só com quatro braços
-        padrao = W * (0.5 if n == 1 else 0.26 + 0.48 * i / max(n - 1, 1))
+        padrao = W * (0.5 if n == 1 else 0.27 + 0.46 * i / max(n - 1, 1))
         p = Personagem(pasta)
         # Com mais de um personagem em cena, cada um encolhe: dois bonecos
         # na altura de protagonista não cabem lado a lado num quadro 9:16
         # sem se atravessarem. O recuo também dá a leitura de "plano
         # aberto, dois na cena" em vez de "close que deu errado".
-        p.escala *= float(cfg.get("escala", 1.0 if n == 1 else 0.78))
+        p.escala *= float(cfg.get("escala", 1.0 if n == 1 else 0.74))
         fora[chave] = (p, float(cfg.get("x", padrao)))
+    return _alinhar_pelos_pes(fora)
+
+
+def _alinhar_pelos_pes(elenco):
+    """Todo mundo pisa na MESMA linha do chão.
+
+    O rig ancora o personagem pelo QUADRIL -- é a raiz do esqueleto, e é de
+    lá que a árvore de peças se abre. Só que a altura do quadril dentro do
+    corpo é decisão do desenhista: no Pal e no Zeca o quadril fica a 66% da
+    figura, na Maya a 56% (a legging faz a divisão subir). Postos com o
+    quadril na mesma altura, os pés dela caíram 90 px abaixo dos dele -- os
+    dois no mesmo cenário, um pisando no chão e o outro enterrado nele.
+
+    A correção não é proporção nem tabela: é MEDIR. Cada personagem é
+    desenhado uma vez em repouso, e o deslocamento vertical que põe a base
+    dele na base do primeiro fica guardado. Custa um frame por ator, no
+    carregamento, e vale para qualquer folha nova sem ninguém ajustar nada.
+
+    Devolve {chave: (Personagem, x, dy)}.
+    """
+    base_ref, fora = None, {}
+    for chave, (pers, x) in elenco.items():
+        rig = merge(REST, {})
+        rig["quadril"] = [W / 2.0, REST["quadril"][1]]
+        bb = desenhar_personagem(pers, rig).getbbox()
+        base = bb[3] if bb else REST["quadril"][1]
+        if base_ref is None:
+            base_ref = base
+        dy = base_ref - base
+        if abs(dy) > 1:
+            print(f"[elenco] {chave}: {dy:+.0f}px em y para pisar na mesma "
+                  f"linha do chao")
+        fora[chave] = (pers, x, float(dy))
     return fora
 
 
@@ -1716,9 +1749,9 @@ def render(pasta_partes, spec, saida, tmpdir=None):
     # chão que existe, já que o cenário é arte e não traz cota nenhuma.
     chao_y = None
     try:
-        pers0, x0_ = elenco[padrao_ator]
+        pers0, x0_, dy0 = elenco[padrao_ator]
         rig0 = merge(REST, {})
-        rig0["quadril"] = [x0_, REST["quadril"][1]]
+        rig0["quadril"] = [x0_, REST["quadril"][1] + dy0]
         bb0 = desenhar_personagem(pers0, rig0).getbbox()
         chao_y = bb0[3] if bb0 else None
         print(f"[chao] linha do chao em y={chao_y}")
@@ -1773,9 +1806,13 @@ def render(pasta_partes, spec, saida, tmpdir=None):
             camada = Image.new("RGBA", (W, H), (0, 0, 0, 0))
             cam_falante, x_falante = dict(ACOES.CAM_NEUTRA), W / 2
             for chave in chaves:
-                pers, x0 = elenco[chave]
+                pers, x0, dy = elenco[chave]
                 rig, c = _rig_do_trecho(tr, t, pan, por_ator[chave], x0,
                                         falando=(chave == falante))
+                # o deslocamento que põe este ator na linha do chão comum
+                # (ver _alinhar_pelos_pes) entra DEPOIS das ações: pular e
+                # cair mexem no quadril, e a correção acompanha o pulo
+                rig["quadril"] = [rig["quadril"][0], rig["quadril"][1] + dy]
                 # a cara de QUEM FALA vem do trecho; quem ouve fica na cara
                 # de reação que o roteirista der a ele, ou neutro
                 cara = rosto.para(tr, t, tr["dur"], chave) if chave == falante \
