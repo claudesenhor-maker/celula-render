@@ -79,6 +79,11 @@ W, H, FPS = 1080, 1920, 24
 # altura de referencia do personagem no quadro; objetos sao medidos contra ela
 ALTURA_ALVO_PX = 1150
 
+# quantos personagens cabem no quadro ao mesmo tempo. Dois é o teto do
+# formato: no 9:16 o terceiro só entra encolhendo todo mundo até a cara
+# sumir, e cara é onde a piada acontece.
+MAX_EM_CENA = 2
+
 
 # =====================================================================
 # Composição: girar em torno do pivô e colar no destino
@@ -410,8 +415,19 @@ def _extrair_feicoes(img, piv):
     if dentro.sum() < 400:
         return img, None
 
-    # afasta-se da borda: o contorno preto externo e a orelha encostam nela
-    r = max(3, int(min(img.width, img.height) * 0.045))
+    # afasta-se da borda: o contorno preto externo e a orelha encostam nela.
+    # A medida é o ROSTO, não a imagem: `_centralizar` infla a peça até um
+    # quadrado que caiba qualquer rotação (o crânio de 221px chega aqui numa
+    # tela de 504), e amarrar o raio ao lado da tela erodia 22px em vez de 9
+    # -- com isso o bigode do Zeca se fundia à boca e virava uma mancha de
+    # 150px, que o motor apagou e substituiu por uma boca de meio rosto.
+    ys, xs = np.nonzero(dentro)
+    x0, x1 = float(xs.min()), float(xs.max())
+    y0, y1 = float(ys.min()), float(ys.max())
+    larg_r, alt_r = x1 - x0 + 1, y1 - y0 + 1
+    cx_rosto = (x0 + x1) / 2.0
+
+    r = max(3, int(min(larg_r, alt_r) * 0.045))
     nucleo = np.asarray(img.split()[3].filter(ImageFilter.MinFilter(2 * r + 1))) > 128
     if nucleo.sum() < 200:
         return img, None
@@ -426,11 +442,6 @@ def _extrair_feicoes(img, piv):
     if tinta.sum() < 40:
         return img, None
 
-    ys, xs = np.nonzero(dentro)
-    x0, x1 = float(xs.min()), float(xs.max())
-    y0, y1 = float(ys.min()), float(ys.max())
-    larg_r, alt_r = x1 - x0 + 1, y1 - y0 + 1
-    cx_rosto = (x0 + x1) / 2.0
     lum = rgb.sum(axis=2)
 
     olhos, cenhos = [], []
@@ -602,7 +613,16 @@ def _tapar_boca_desenhada(img):
     dentro = alfa > 128
     if dentro.sum() < 400:
         return img, None, None
-    r = max(3, int(min(img.width, img.height) * 0.045))
+
+    # o raio de erosão é medido no ROSTO, não na tela inflada por
+    # `_centralizar` -- ver a mesma nota em `_extrair_feicoes`
+    ys, xs = np.nonzero(dentro)
+    x0, x1 = float(xs.min()), float(xs.max())
+    y0, y1 = float(ys.min()), float(ys.max())
+    larg_r, alt_r = x1 - x0 + 1, y1 - y0 + 1
+    cx_rosto = (x0 + x1) / 2.0
+
+    r = max(3, int(min(larg_r, alt_r) * 0.045))
     nucleo = np.asarray(img.split()[3].filter(ImageFilter.MinFilter(2 * r + 1))) > 128
     if nucleo.sum() < 200:
         return img, None, None
@@ -614,12 +634,6 @@ def _tapar_boca_desenhada(img):
     tinta = nucleo & (np.abs(rgb - pele).sum(axis=2) > 90)
     if tinta.sum() < 20:
         return img, None, None
-
-    ys, xs = np.nonzero(dentro)
-    x0, x1 = float(xs.min()), float(xs.max())
-    y0, y1 = float(ys.min()), float(ys.max())
-    larg_r, alt_r = x1 - x0 + 1, y1 - y0 + 1
-    cx_rosto = (x0 + x1) / 2.0
 
     cands = []
     for c in _componentes(tinta, area_min=max(20, int(tinta.sum() * 0.01))):
@@ -1473,6 +1487,16 @@ def _carregar_elenco(spec, pasta_padrao):
     elenco = spec.get("elenco")
     if not elenco:
         return {"_": (Personagem(pasta_padrao), W / 2)}
+    if len(elenco) > MAX_EM_CENA:
+        # DOIS, NO MAXIMO. Num quadro 9:16 o terceiro boneco ou sai do
+        # enquadramento ou obriga um recuo em que ninguem mais tem cara --
+        # e cara é onde a piada acontece. A regra vem do roteiro; aqui ela
+        # é aplicada de novo porque spec errado não pode virar vídeo
+        # ilegível.
+        print(f"[elenco] {len(elenco)} personagens no spec; a cena aceita "
+              f"{MAX_EM_CENA}: fico com "
+              f"{', '.join(list(elenco)[:MAX_EM_CENA])}")
+        elenco = {k: elenco[k] for k in list(elenco)[:MAX_EM_CENA]}
     fora = {}
     n = len(elenco)
     for i, (chave, cfg) in enumerate(elenco.items()):
@@ -1537,6 +1561,33 @@ def _inventario(pastas, exts=(".png", ".jpg", ".jpeg", ".webp")):
         except OSError:
             continue
     return fora
+
+
+def _objeto_na_mao(acoes_do_ator, t, objetos, atual):
+    """O que este ator está segurando NESTE instante.
+
+    O objeto é um ESTADO, não um efeito de janela. Até 26/08 ele só existia
+    enquanto a ação que o citava estava rodando: o personagem pegava o
+    celular, a ação terminava e o celular sumia da mão no meio da fala
+    seguinte -- e a única saída era repetir `objeto` em toda ação do
+    roteiro, o que ninguém faz.
+
+    Agora quem pega, segura: a partir do início de uma ação de pegar
+    (`acoes.ACOES_PEGAM_OBJETO`) o objeto fica na mão, atravessa trechos, e
+    só sai em `largar_objeto`. Uma ação de qualquer outro nome que cite
+    `objeto` continua valendo -- é como os specs antigos escrevem.
+    """
+    for a in acoes_do_ator:
+        if float(a.get("de", 0.0)) > t:
+            continue
+        if a.get("nome") in ACOES.ACOES_LARGAM_OBJETO:
+            atual = None
+            continue
+        nome = a.get("objeto")
+        if nome in objetos:
+            atual = {"img": objetos[nome], "mao": a.get("mao", "d"),
+                     "escala": float(a.get("escala_objeto", 1.0))}
+    return atual
 
 
 def _acoes_por_ator(tr, chaves, falante):
@@ -1682,6 +1733,8 @@ def render(pasta_partes, spec, saida, tmpdir=None):
     rosto = EXPR.Rosto(spec)
     caras = []
     n = 0
+    # o que cada ator tem na mão; sobrevive de um trecho para o outro
+    na_mao = {c: None for c in chaves}
     pan = 0.0            # o quanto o fundo já andou; NÃO zera entre trechos
     for tr in spec["trechos"]:
         pedido = tr.get("cenario") or CENARIOS.escolher(tr.get("fala", ""))
@@ -1725,11 +1778,9 @@ def render(pasta_partes, spec, saida, tmpdir=None):
                                       if chave == falante else "neutro")
                 # SÓ QUEM FALA MEXE A BOCA. Sem isto os dois abrem o
                 # maxilar na mesma envoltória e ninguém sabe quem falou.
-                obj = None
-                for a in por_ator[chave]:
-                    if a.get("objeto") in objetos and float(a.get("de", 0)) <= t <= float(a.get("ate", 1)):
-                        obj = {"img": objetos[a["objeto"]], "mao": a.get("mao", "d"),
-                               "escala": a.get("escala_objeto", 1.0)}
+                obj = _objeto_na_mao(por_ator[chave], t, objetos,
+                                     na_mao.setdefault(chave, None))
+                na_mao[chave] = obj
                 camada.alpha_composite(
                     desenhar_personagem(pers, rig, nivel if chave == falante else 0.0,
                                         pisca, obj, cara))
