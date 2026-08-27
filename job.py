@@ -101,6 +101,66 @@ def _baixar_para(url, pasta, nome):
         return None
 
 
+MAX_EM_CENA = 2
+
+
+def baixar_elenco(spec, pecas_url):
+    """Poe a arte de cada personagem no disco e devolve (pasta_base, KB).
+
+    UM personagem continua sendo o caso normal: com `personagem_url` e sem
+    `elenco`, o zip vai para /tmp/personagem e nada muda.
+
+    Com `elenco`, cada personagem ganha a PROPRIA pasta,
+    /tmp/personagem/<chave>, e o `pasta` de cada um e' escrito de volta no
+    spec -- e assim que `palito_cutout._carregar_elenco` acha as pecas. A
+    pasta base devolvida e a do primeiro, porque e' dela que o motor deriva
+    onde procurar cenario e objeto.
+
+    NO MAXIMO DOIS EM CENA. Nao e' limitacao tecnica, e' de formato: num
+    quadro 9:16 um terceiro boneco ou sai do enquadramento ou obriga um
+    recuo em que ninguem mais tem cara. Vem do roteiro, mas o motor
+    tambem corta -- um spec errado nao pode virar video ilegivel.
+    """
+    import io, zipfile
+    elenco = spec.get("elenco") or {}
+    if not elenco:
+        pasta = "/tmp/personagem"
+        os.makedirs(pasta, exist_ok=True)
+        dados = requests.get(pecas_url, timeout=120).content
+        zipfile.ZipFile(io.BytesIO(dados)).extractall(pasta)
+        if not os.path.exists(os.path.join(pasta, "partes.json")):
+            raise RuntimeError("o zip nao tem partes.json na raiz")
+        return pasta, len(dados) / 1024.0
+
+    if len(elenco) > MAX_EM_CENA:
+        sobra = list(elenco)[MAX_EM_CENA:]
+        print(f"[elenco] {len(elenco)} personagens no spec; a cena aceita "
+              f"{MAX_EM_CENA}. Fora: {', '.join(sobra)}")
+        for c in sobra:
+            elenco.pop(c)
+
+    publico = f"{SB}/storage/v1/object/public/{BUCKET}"
+    total, base = 0.0, None
+    for chave, cfg in list(elenco.items()):
+        if not isinstance(cfg, dict):
+            cfg = {"url": cfg} if str(cfg).startswith("http") else {"pasta": cfg}
+            elenco[chave] = cfg
+        pasta = os.path.join("/tmp/personagem", chave)
+        if not cfg.get("pasta"):
+            url = cfg.get("url") or (pecas_url if chave == list(elenco)[0] and pecas_url
+                                     else f"{publico}/assets/parte_personagem/{chave}/personagem.zip")
+            os.makedirs(pasta, exist_ok=True)
+            dados = requests.get(url, timeout=120).content
+            zipfile.ZipFile(io.BytesIO(dados)).extractall(pasta)
+            if not os.path.exists(os.path.join(pasta, "partes.json")):
+                raise RuntimeError(f"o zip de '{chave}' nao tem partes.json na raiz")
+            total += len(dados) / 1024.0
+            cfg["pasta"] = pasta
+        base = base or cfg["pasta"]
+        print(f"[elenco] {chave}: {cfg['pasta']}")
+    return base, total
+
+
 def buscar_cenarios_e_objetos(spec):
     """Poe cenario e objeto no disco, que e onde o motor cut-out procura.
 
@@ -231,22 +291,16 @@ def main():
     # o dia em que a arte faltar; melhor video feio que producao parada.
     pecas_url = spec.get("personagem_url") or os.environ.get("PERSONAGEM_URL", "")
     motor = "vetor"
-    if pecas_url:
+    if pecas_url or spec.get("elenco"):
         # FORA do try do cut-out: cada download ja falha sozinho e segue.
         # Se estivesse dentro, um erro aqui derrubaria o motor inteiro para
         # o rig vetorial por causa de um FUNDO -- trocar o video certo pelo
         # video da rede de seguranca e o pior desfecho possivel.
         buscar_cenarios_e_objetos(spec)
         try:
-            import zipfile, io
-            pasta = "/tmp/personagem"
-            os.makedirs(pasta, exist_ok=True)
-            dados = requests.get(pecas_url, timeout=120).content
-            zipfile.ZipFile(io.BytesIO(dados)).extractall(pasta)
-            if not os.path.exists(os.path.join(pasta, "partes.json")):
-                raise RuntimeError("o zip nao tem partes.json na raiz")
+            pasta, kb = baixar_elenco(spec, pecas_url)
             from palito_cutout import render as render_cutout
-            print(f"[motor] cut-out ({len(dados)/1024:.0f} KB de arte)")
+            print(f"[motor] cut-out ({kb:.0f} KB de arte)")
             motor = "cutout"
             _, dur = render_cutout(pasta, spec, out, tmpdir="/tmp/render")
         except Exception as e:
