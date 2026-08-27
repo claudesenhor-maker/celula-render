@@ -1690,8 +1690,15 @@ def render(pasta_partes, spec, saida, tmpdir=None):
     audio = voz
     if spec.get("sfx", True) is not False or spec.get("musica", True):
         eventos = SFX.eventos_do_spec(spec) if spec.get("sfx", True) is not False else []
+        # A TRILHA SEGUE A CENA. Os segmentos saem da emoção de cada trecho,
+        # que só existe depois que a voz definiu a timeline -- por isso são
+        # montados aqui e não no n8n.
+        musica = spec.get("musica", True)
+        if isinstance(musica, dict) and not musica.get("arquivo"):
+            musica = dict(musica)
+            musica.setdefault("segmentos", SFX.segmentos_do_spec(spec))
         audio = SFX.mixar(voz, eventos, os.path.join(tmp, "mix.wav"),
-                          musica=spec.get("musica", True), dur_s=total)
+                          musica=musica, dur_s=total)
 
     # LEGENDA: opcional, mas ligada por padrão. Short se assiste no mudo.
     leg = None
