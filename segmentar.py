@@ -147,7 +147,7 @@ def _borda(m):
     return np.column_stack([xs, ys]).astype(float)
 
 
-def pivo_entre(a, b, amostra=1400):
+def pivo_entre(a, b, amostra=1400, devolver_faixa=False):
     """O ponto de articulação entre duas peças vizinhas.
 
     É o meio do VÃO -- mas o meio da FAIXA inteira em que as duas peças se
@@ -206,8 +206,11 @@ def pivo_entre(a, b, amostra=1400):
     if w <= 0:
         i, j = np.unravel_index(int(np.argmin(d2)), d2.shape)
         return ((pa[i][0] + pb[j][0]) / 2.0, (pa[i][1] + pb[j][1]) / 2.0), dmin
-    return (float((meios[:, 0] * peso).sum() / w),
-            float((meios[:, 1] * peso).sum() / w)), dmin
+    ponto = (float((meios[:, 0] * peso).sum() / w),
+             float((meios[:, 1] * peso).sum() / w))
+    if devolver_faixa:
+        return ponto, dmin, meios
+    return ponto, dmin
 
 
 def _um_ponto_por_pixel(meios, peso):
@@ -672,6 +675,66 @@ def _abrir_coluna_grudada(img, comps, figura):
 # onde a arte deixou o vão; estas giram onde o corpo tem eixo.
 NO_EIXO = ("pescoco", "cranio", "cabeca", "mandibula")
 
+# O braço PENDE do alto da cava. Ver `_ombro_no_alto_da_cava`.
+OMBROS = ("braco_sup_e", "braco_sup_d")
+
+
+def _ombro_no_alto_da_cava(pivos, caixas, por_nome, esqueleto, manuais=()):
+    """O ombro fica no ALTO da faixa de contato, não no meio dela.
+
+    POR QUE (27/08, visto no primeiro vídeo com dois personagens)
+        O pivô é o centro da faixa em que duas peças se encaram, e isso vale
+        para toda junta com vão curto: no cotovelo, no joelho e no punho a
+        faixa tem poucos pixels e o centro dela É a articulação.
+
+        O ombro é a exceção, e depende de como a roupa foi desenhada. Na
+        Maya a manga encosta no tronco por 6 px, lá em cima, e o centro cai
+        no lugar certo. No Pal a manga desce colada à lateral do peito e a
+        faixa tem 58 px -- o centro dela cai na altura da AXILA, quase 20 px
+        abaixo do ombro. Com o braço nascendo ali, ele lê como braço curto
+        preso ao meio do peito: foi a queixa de "ombros muito baixos".
+
+        A anatomia do rig resolve o empate: o braço pende do ALTO da cava.
+        Quando a faixa é comprida (mais de 6% da altura da figura), o pivô
+        vai para perto do topo dela em vez do meio. Faixa curta continua
+        como estava -- não há o que corrigir onde a arte já é clara.
+    """
+    alt = max(max(c["bbox"][3] for c in por_nome.values())
+              - min(c["bbox"][1] for c in por_nome.values()), 1)
+    for nome in OMBROS:
+        if nome not in por_nome or nome in manuais:
+            continue
+        pai = _ancestral_presente(nome, esqueleto, por_nome)
+        if not pai or pai not in por_nome:
+            continue
+        hp = por_nome[pai].get("hospedeiro", por_nome[pai])
+        hf = por_nome[nome].get("hospedeiro", por_nome[nome])
+        try:
+            _, _, faixa = pivo_entre(hp, hf, devolver_faixa=True)
+        except Exception:
+            continue
+        if len(faixa) < 3:
+            continue
+        y0, y1 = float(faixa[:, 1].min()), float(faixa[:, 1].max())
+        if (y1 - y0) < alt * 0.06:
+            continue                    # faixa curta: o meio já é o ombro
+        alvo_y = y0 + (y1 - y0) * 0.20
+        # o x acompanha: fica o ponto da faixa mais próximo dessa altura,
+        # senão o pivô sai da junta e a peça descola do tronco
+        k = int(np.argmin(np.abs(faixa[:, 1] - alvo_y)))
+        alvo = (float(faixa[k][0]), float(faixa[k][1]))
+        bx, by = caixas[nome]
+        antes_y = pivos[nome][1] + by
+        d = (alvo[0] - (pivos[nome][0] + bx), alvo[1] - antes_y)
+        pivos[nome] = [alvo[0] - bx, alvo[1] - by]
+        saidas = por_nome[pai].get("saidas") or {}
+        if nome in saidas:
+            sx, sy = saidas[nome]
+            saidas[nome] = (sx + d[0], sy + d[1])
+        print(f"[segmentar] ombro '{nome}' subiu {-d[1]:.0f}px: a manga "
+              f"encosta no tronco por {y1 - y0:.0f}px e o meio da faixa "
+              f"caia na axila")
+
 
 def _alinhar_ao_eixo(pivos, caixas, por_nome, esqueleto, manuais=()):
     """O X da cabeça vem do TRONCO, não da fronteira da gola.
@@ -857,6 +920,7 @@ def segmentar_corpo(img, esqueleto, min_frac_area=0.0012, pivos_manuais=None):
         por_nome[pai].setdefault("saidas", {})[nome] = (ponto[0] - pbx, ponto[1] - pby)
 
     _alinhar_ao_eixo(pivos, caixas, por_nome, esqueleto, manuais)
+    _ombro_no_alto_da_cava(pivos, caixas, por_nome, esqueleto, manuais)
 
     comprimentos = {}
     for nome, c in por_nome.items():
