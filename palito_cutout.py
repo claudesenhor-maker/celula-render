@@ -154,7 +154,219 @@ def _e_fiapo(img, limiar=0.22):
     return (a.sum() / max(a.size, 1)) < limiar
 
 
-def _tapar_entalhe(img, cor=None):
+def _analisar_rosto(img):
+    """Onde está o ROSTO dentro da peça do crânio, medido pelos OLHOS.
+
+    POR QUE (a boca da Maya saiu no pescoço, 27/08)
+        Até aqui as três funções de rosto (`_tapar_entalhe`,
+        `_tapar_boca_desenhada`, `_extrair_feicoes`) usavam a caixa da PEÇA
+        como régua: a boca era "o traço deitado entre 52% e 92% da altura
+        da peça", a feição era "o que está na metade de cima". Isso vale
+        enquanto a peça do crânio for o rosto e mais nada.
+
+        Ela não é. Na Maya o crânio traz cabelo comprido até abaixo do
+        queixo E o pescoço inteiro: 62% da altura da peça cai na altura do
+        NARIZ, e o terço de baixo é pescoço e gola. `_tapar_entalhe` achou
+        ali o vazio entre as duas mechas de cabelo, tomou-o por entalhe de
+        boca e pôs a boca animada no pescoço dela -- com a boca desenhada
+        continuando parada no rosto, porque ninguém foi procurá-la.
+
+        No Zeca o mesmo erro de régua produziu outro sintoma: as
+        sobrancelhas grisalhas têm pixel claro e pixel escuro na mesma
+        mancha, que era a definição de OLHO, e passaram a ser animadas como
+        olhos -- o piscar desenhava um traço na testa. Os olhos de verdade
+        estão fundidos ao aro do óculos numa mancha que atravessa a cara, e
+        eram descartados por tamanho.
+
+        A régua certa não é fração de peça nenhuma: é o par de OLHOS. Todo
+        rosto frontal tem dois, simétricos, e a distância entre eles é a
+        única medida que dá a escala do rosto sem depender de cabelo, de
+        pescoço ou de quanto da figura o desenhista pôs na peça. Com ela,
+        boca e sobrancelha se procuram onde elas ficam num rosto -- e não
+        onde ficariam se a peça fosse só a cara.
+
+    COMO se acham os olhos sem limiar inventado
+        Pela ESCLERA: em arte cut-out o branco do olho é o ponto mais claro
+        do rosto, mais claro que a pele por construção (é o que faz a pupila
+        ler como pupila). Manchas claras dentro do núcleo, pareadas por
+        SIMETRIA em torno do eixo da peça -- mesma altura, mesma área,
+        distâncias iguais ao eixo. Cabelo grisalho não é mais claro que a
+        pele e não forma par simétrico com nada; sobrancelha não tem branco.
+
+        O olho inteiro é o componente de tinta que CONTÉM a esclera (a
+        esclera, a pupila e o traço em volta saem como uma mancha só). Se
+        esse componente for grande demais para ser um olho -- o caso do
+        óculos do Zeca --, o olho é a esclera dilatada: recorta-se o globo
+        de dentro do aro, que continua desenhado no crânio. É o que um
+        animador faria com a mesma arte.
+
+    Devolve None quando não há par de olhos (e aí cada função cai na régua
+    antiga, que é o comportamento de antes desta correção). Senão, um dict
+    com as máscaras já calculadas -- `pele`, `tinta`, `nucleo`, `lum` -- e a
+    geometria do rosto: `eixo`, `linha_olhos`, `d_olhos`, `queixo`, e
+    `olhos` com a máscara e a caixa de cada um.
+    """
+    from segmentar import _componentes
+    a = np.asarray(img.convert("RGBA"))
+    alfa = a[..., 3]
+    dentro = alfa > 128
+    if dentro.sum() < 400:
+        return None
+    ys, xs = np.nonzero(dentro)
+    x0, x1 = float(xs.min()), float(xs.max())
+    y0, y1 = float(ys.min()), float(ys.max())
+    larg_p, alt_p = x1 - x0 + 1, y1 - y0 + 1
+
+    # o raio de erosão sai do tamanho do desenho, não da tela: `_centralizar`
+    # infla a peça até um quadrado que caiba qualquer rotação
+    r = max(3, int(min(larg_p, alt_p) * 0.045))
+    nucleo = np.asarray(img.split()[3].filter(ImageFilter.MinFilter(2 * r + 1))) > 128
+    if nucleo.sum() < 200:
+        return None
+
+    rgb = a[..., :3].astype(np.int16)
+    q = (rgb[nucleo] // 24)
+    chaves, contas = np.unique(q.reshape(-1, 3), axis=0, return_counts=True)
+    pele = chaves[contas.argmax()].astype(np.int16) * 24 + 12
+    tinta = nucleo & (np.abs(rgb - pele).sum(axis=2) > 90)
+    if tinta.sum() < 40:
+        return None
+    lum = rgb.sum(axis=2)
+
+    # --- a esclera: o branco do olho -------------------------------------
+    # O limiar fica no MEIO DO CAMINHO entre a pele e o branco puro, e nunca
+    # abaixo de 690. Cravar 620 (a versão anterior) deixava passar o cabelo
+    # grisalho do Zeca, que tem 600 de luminância contra 612 da pele; exigir
+    # branco puro perderia a esclera de qualquer folha com sombreado.
+    lum_pele = float(pele.sum())
+    lim_claro = max(690.0, (lum_pele + 765.0) / 2.0)
+    claro = nucleo & (lum > lim_claro)
+    area_min = max(15, int(nucleo.sum() * 0.0015))
+    escleras = _componentes(claro, area_min=area_min)
+    if len(escleras) < 2:
+        return None
+
+    eixo_peca = (x0 + x1) / 2.0
+    melhor, nota_melhor = None, 0.0
+    for i in range(len(escleras)):
+        for j in range(i + 1, len(escleras)):
+            e, d = sorted((escleras[i], escleras[j]), key=lambda c: c["cx"])
+            dist = d["cx"] - e["cx"]
+            if dist < larg_p * 0.12 or dist > larg_p * 0.95:
+                continue
+            if abs(e["cy"] - d["cy"]) > dist * 0.30:
+                continue          # olhos ficam na mesma linha
+            meio = (e["cx"] + d["cx"]) / 2.0
+            if abs(meio - eixo_peca) > larg_p * 0.16:
+                continue          # o par tem que abraçar o eixo do desenho
+            razao = min(e["area"], d["area"]) / float(max(e["area"], d["area"]))
+            if razao < 0.45:
+                continue          # dois olhos do mesmo rosto têm o mesmo tamanho
+            nota = (e["area"] + d["area"]) * razao
+            if nota > nota_melhor:
+                melhor, nota_melhor = (e, d), nota
+    if melhor is None:
+        return None
+    esc_e, esc_d = melhor
+
+    # --- o olho inteiro em volta da esclera -------------------------------
+    comps_tinta = _componentes(tinta, area_min=max(20, int(tinta.sum() * 0.005)))
+    olhos = {}
+    for chave, esc in (("olho_e", esc_e), ("olho_d", esc_d)):
+        bx0, by0, bx1, by1 = esc["bbox"]
+        lw, lh = bx1 - bx0 + 1, by1 - by0 + 1
+        m = None
+        for c in comps_tinta:
+            if not (c["mask"] & esc["mask"]).any():
+                continue
+            cw = c["bbox"][2] - c["bbox"][0] + 1
+            ch = c["bbox"][3] - c["bbox"][1] + 1
+            # o componente que contém a esclera só é o olho se tiver tamanho
+            # de olho; o aro do óculos atravessa o rosto e reprova aqui
+            if cw <= max(lw * 3.0, larg_p * 0.30) and ch <= max(lh * 3.5, larg_p * 0.30):
+                m = c["mask"].copy()
+            break
+        if m is None:
+            # sem componente aproveitável, o olho é a própria esclera com uma
+            # folga: o globo sai de dentro do aro e o aro fica no crânio
+            g = max(2, int(min(lw, lh) * 0.30))
+            m = np.asarray(Image.fromarray((esc["mask"] * 255).astype(np.uint8))
+                           .filter(ImageFilter.MaxFilter(2 * g + 1))) > 8
+            m &= nucleo
+        ys_m, xs_m = np.nonzero(m)
+        olhos[chave] = {
+            "mask": m, "area": int(m.sum()),
+            "bbox": (int(xs_m.min()), int(ys_m.min()), int(xs_m.max()), int(ys_m.max())),
+            "cx": float(xs_m.mean()), "cy": float(ys_m.mean()),
+        }
+
+    eixo = (olhos["olho_e"]["cx"] + olhos["olho_d"]["cx"]) / 2.0
+    linha = (olhos["olho_e"]["cy"] + olhos["olho_d"]["cy"]) / 2.0
+    d_olhos = olhos["olho_d"]["cx"] - olhos["olho_e"]["cx"]
+
+    # --- até onde desce o rosto -------------------------------------------
+    # O queixo é onde a mancha de pele ESTRANGULA: abaixo dele vem o pescoço,
+    # que é mais estreito por definição de pescoço. Medir isso é o que impede
+    # a boca de ser procurada no colo -- e sai da arte, sem proporção
+    # inventada. Quando o desenhista fecha o queixo com traço, a mancha já
+    # termina ali e a medida concorda.
+    pele_m = nucleo & ~tinta
+    comp_rosto = None
+    faixa_olhos = pele_m[int(round(linha))] if 0 <= linha < pele_m.shape[0] else None
+    for c in _componentes(pele_m, area_min=max(100, int(nucleo.sum() * 0.02))):
+        if faixa_olhos is not None and c["mask"][int(round(linha)),
+                                                int(round(eixo))]:
+            comp_rosto = c
+            break
+        if comp_rosto is None or c["area"] > comp_rosto["area"]:
+            comp_rosto = c
+    queixo = y1
+    if comp_rosto is not None:
+        larguras = comp_rosto["mask"].sum(axis=1).astype(float)
+        i0, i1 = int(round(linha)), int(round(linha + d_olhos * 0.6))
+        i1 = min(i1, len(larguras) - 1)
+        ref = float(np.median(larguras[i0:i1 + 1])) if i1 > i0 else larguras[i0]
+        queixo = float(comp_rosto["bbox"][3])
+        if ref > 0:
+            for y in range(i1 + 1, len(larguras)):
+                if larguras[y] < ref * 0.5:
+                    queixo = float(y)
+                    break
+    return {
+        "alfa": alfa, "rgb": rgb, "lum": lum, "nucleo": nucleo,
+        "tinta": tinta, "pele": pele, "comps_tinta": comps_tinta,
+        "peca": (x0, y0, x1, y1), "larg_peca": larg_p, "alt_peca": alt_p,
+        "eixo": eixo, "linha_olhos": linha, "d_olhos": d_olhos,
+        "queixo": queixo, "olhos": olhos,
+    }
+
+
+def _faixa_da_boca(rosto):
+    """Onde a boca pode estar: (y_min, y_max, eixo, tolerância em x).
+
+    Num rosto a boca fica entre o nariz e o queixo, no eixo. Com o par de
+    olhos medido, isso deixa de ser fração da peça e passa a ser fração da
+    distância entre os olhos -- a régua do próprio rosto. Medida nas três
+    folhas de produção, a boca cai a 0,77, 0,78 e 0,81 distância interocular
+    abaixo da linha dos olhos: é a proporção mais estável do rosto, e a
+    faixa de 0,45 a 1,35 a cobre com folga em qualquer estilo de desenho.
+
+    O QUEIXO MEDIDO só entra como teto quando é plausível. Ele vem do
+    estrangulamento da mancha de pele, e essa mancha pode terminar na
+    própria linha da boca quando o desenhista a fecha de lado a lado -- foi
+    o que aconteceu com o bigode do Zeca, e usar aquele queixo como teto
+    apagava a boca da lista de candidatas. Abaixo de uma distância
+    interocular do olho não existe queixo de rosto nenhum."""
+    d = rosto["d_olhos"]
+    linha = rosto["linha_olhos"]
+    y_min = linha + d * 0.45
+    y_max = linha + d * 1.35
+    if rosto["queixo"] > linha + d * 1.0:
+        y_max = min(y_max, rosto["queixo"])
+    return y_min, y_max, rosto["eixo"], d * 0.55
+
+
+def _tapar_entalhe(img, cor=None, rosto=None):
     """Fecha o RECORTE DA BOCA no crânio, com a cor da própria pele.
 
     POR QUE (o defeito nº 1 do projeto, e a causa real dele)
@@ -211,9 +423,19 @@ def _tapar_entalhe(img, cor=None):
     ys_, xs_ = np.nonzero(np.asarray(alfa) > 8)
     cx_rosto, y_base = float(xs_.mean()), float(ys_.max())
     alt_peca = float(ys_.max() - ys_.min() + 1)
-    cands = [c for c in _componentes(arr, area_min=max(int(arr.sum() * 0.05), 40))
-             if c["cy"] > y_base - alt_peca * 0.45
-             and abs(c["cx"] - cx_rosto) < img.width * 0.22]
+    todos = _componentes(arr, area_min=max(int(arr.sum() * 0.05), 40))
+    if rosto:
+        # COM OS OLHOS MEDIDOS a faixa é a do rosto, não a da peça. É o que
+        # impede o vazio entre as mechas de cabelo da Maya -- que fica no
+        # pescoço, dois terços abaixo dos olhos dela -- de ser lido como
+        # entalhe de boca.
+        ymin, ymax, eixo, tol = _faixa_da_boca(rosto)
+        cands = [c for c in todos if ymin <= c["cy"] <= ymax
+                 and abs(c["cx"] - eixo) < tol]
+    else:
+        cands = [c for c in todos
+                 if c["cy"] > y_base - alt_peca * 0.45
+                 and abs(c["cx"] - cx_rosto) < img.width * 0.22]
     if not cands:
         return img, None
     boca = max(cands, key=lambda c: c["area"])
@@ -366,7 +588,7 @@ def _boca_desenhada(larg, alt_max, nivel, curva, cor_traco, cor_dentro=None,
     return tela, (tela.width / 2.0, cy)
 
 
-def _extrair_feicoes(img, piv):
+def _extrair_feicoes(img, piv, rosto=None):
     """Recorta olhos e sobrancelhas de DENTRO da peça do crânio.
 
     POR QUE (o defeito nº 3 da lista de 29/08: "adicionar expressões faciais")
@@ -386,20 +608,21 @@ def _extrair_feicoes(img, piv):
         que a boca já usa: nada é inventado por código, só se move o que o
         desenhista entregou.
 
-    COMO
-        Dentro do crânio, longe da borda (para não pegar o contorno nem a
-        orelha), tudo o que não é da cor da pele é feição. Cada mancha vira
-        um componente, e a classificação é a que a arte cut-out permite:
+    COMO (reescrito em 27/08 -- ver `_analisar_rosto`)
+        Os OLHOS já vêm medidos: `_analisar_rosto` os acha pela esclera e os
+        valida por simetria, o que vale para qualquer folha. Aqui só se
+        recorta o que ele apontou.
 
-          * OLHO -- tem branco (a esclera) e tem preto (a pupila) na mesma
-            mancha. Nenhuma outra parte do rosto tem os dois.
-          * SOBRANCELHA -- quase toda escura, mais larga que alta, e ACIMA
-            de um olho.
+        A SOBRANCELHA é o par de manchas logo ACIMA dos olhos, uma de cada
+        lado do eixo, mais larga que alta e do tamanho de um olho. A régua
+        anterior -- "quase toda escura" -- era um limiar de cor e reprovava
+        a sobrancelha loira da Maya (48% de pixel escuro contra os 55%
+        exigidos) enquanto aprovava o cabelo grisalho do Zeca. Posição e
+        tamanho relativos ao olho não dependem da cor que o desenhista
+        escolheu.
 
-        Só vale se saírem DOIS olhos em lados opostos e na mesma altura. Um
-        olho só, ou dois na mesma metade, é detecção errada -- e detecção
-        errada aqui apagaria metade do rosto. Nesse caso devolve nada e o
-        motor segue com a cara parada, que é o comportamento de antes.
+        Sem par de olhos não se recorta nada: detecção errada aqui apaga
+        metade do rosto, e o motor sabe seguir com a cara parada.
 
     Devolve (crânio com as feições apagadas, {nome: sprite}) ou (img, None).
     Cada sprite: {"img": RGBA recortado, "dx","dy": centro da feição
@@ -408,96 +631,73 @@ def _extrair_feicoes(img, piv):
     o cabelo depois disto -- o centro muda, o pivô não.
     """
     from PIL import ImageChops
-    from segmentar import _componentes
+    if rosto is None:
+        rosto = _analisar_rosto(img)
+    if not rosto or not rosto.get("olhos"):
+        return img, None
     a = np.asarray(img.convert("RGBA"))
-    alfa = a[..., 3]
-    dentro = alfa > 128
-    if dentro.sum() < 400:
-        return img, None
+    alfa = rosto["alfa"]
+    nucleo, tinta, pele = rosto["nucleo"], rosto["tinta"], rosto["pele"]
+    eixo, linha, d_olhos = rosto["eixo"], rosto["linha_olhos"], rosto["d_olhos"]
 
-    # afasta-se da borda: o contorno preto externo e a orelha encostam nela.
-    # A medida é o ROSTO, não a imagem: `_centralizar` infla a peça até um
-    # quadrado que caiba qualquer rotação (o crânio de 221px chega aqui numa
-    # tela de 504), e amarrar o raio ao lado da tela erodia 22px em vez de 9
-    # -- com isso o bigode do Zeca se fundia à boca e virava uma mancha de
-    # 150px, que o motor apagou e substituiu por uma boca de meio rosto.
-    ys, xs = np.nonzero(dentro)
-    x0, x1 = float(xs.min()), float(xs.max())
-    y0, y1 = float(ys.min()), float(ys.max())
-    larg_r, alt_r = x1 - x0 + 1, y1 - y0 + 1
-    cx_rosto = (x0 + x1) / 2.0
-
-    r = max(3, int(min(larg_r, alt_r) * 0.045))
-    nucleo = np.asarray(img.split()[3].filter(ImageFilter.MinFilter(2 * r + 1))) > 128
-    if nucleo.sum() < 200:
-        return img, None
-
-    rgb = a[..., :3].astype(np.int16)
-    # a PELE é a cor mais comum do núcleo (quantizada): mediana não serve,
-    # porque metade do núcleo pode ser cabelo num personagem de franja
-    q = (rgb[nucleo] // 24)
-    chaves, contas = np.unique(q.reshape(-1, 3), axis=0, return_counts=True)
-    pele = chaves[contas.argmax()].astype(np.int16) * 24 + 12
-    tinta = nucleo & (np.abs(rgb - pele).sum(axis=2) > 90)
-    if tinta.sum() < 40:
-        return img, None
-
-    lum = rgb.sum(axis=2)
-
-    olhos, cenhos = [], []
-    for c in _componentes(tinta, area_min=max(30, int(tinta.sum() * 0.02))):
+    def _reg(c):
         bx0, by0, bx1, by1 = c["bbox"]
-        w, h = bx1 - bx0 + 1, by1 - by0 + 1
-        m = c["mask"].astype(bool)
-        if w > larg_r * 0.55 or h > alt_r * 0.55:
-            continue                       # cabelo, contorno: grande demais
-        # a feição vive na METADE DE CIMA do rosto; o que está embaixo é
-        # boca, queixo ou sombra de pescoço
-        if (by0 + by1) / 2.0 > y0 + alt_r * 0.62:
+        return {"c": c, "w": bx1 - bx0 + 1, "h": by1 - by0 + 1,
+                "cx": (bx0 + bx1) / 2.0, "cy": (by0 + by1) / 2.0}
+
+    achados = {"olho_e": _reg(rosto["olhos"]["olho_e"]),
+               "olho_d": _reg(rosto["olhos"]["olho_d"])}
+
+    # --- as sobrancelhas, medidas contra os olhos ------------------------
+    larg_olho = max(achados["olho_e"]["w"], achados["olho_d"]["w"])
+    for c in rosto["comps_tinta"]:
+        reg = _reg(c)
+        alvo = achados["olho_e"] if reg["cx"] < eixo else achados["olho_d"]
+        nome = "sobrancelha_" + ("e" if reg["cx"] < eixo else "d")
+        if (c["mask"] & alvo["c"]["mask"]).any():
+            continue                        # é o próprio olho
+        # ACIMA do olho e perto dele: mais de uma distância interocular acima
+        # da linha dos olhos já é franja, não sobrancelha
+        if not (linha - d_olhos * 1.30 <= reg["cy"] <= alvo["cy"] - reg["h"] * 0.3):
             continue
-        claro = float((lum[m] > 620).mean())
-        escuro = float((lum[m] < 260).mean())
-        reg = {"c": c, "w": w, "h": h, "cx": (bx0 + bx1) / 2.0, "cy": (by0 + by1) / 2.0}
-        if claro > 0.15 and escuro > 0.08:
-            olhos.append(reg)
-        elif escuro > 0.55 and w >= h * 1.6:
-            # AS DUAS SOBRANCELHAS PODEM SER UM COMPONENTE SÓ: nesta folha
-            # elas se tocam pelo contorno e saíram como uma mancha de 104px
-            # atravessando o rosto inteiro. Girada como peça única, ela vira
-            # uma barra preta cruzando a testa -- foi o que apareceu em
-            # `bravo` no primeiro teste. Cortar pelo eixo do rosto devolve
-            # as duas, que é o que a arte desenha.
-            if bx0 < cx_rosto < bx1 and w > larg_r * 0.32:
-                for lado in (m & (np.arange(m.shape[1]) < cx_rosto),
-                             m & (np.arange(m.shape[1]) >= cx_rosto)):
-                    if lado.sum() < 20:
-                        continue
-                    ys_l, xs_l = np.nonzero(lado)
-                    cb = (int(xs_l.min()), int(ys_l.min()), int(xs_l.max()), int(ys_l.max()))
-                    cenhos.append({"c": {"mask": lado, "area": int(lado.sum()), "bbox": cb},
-                                   "w": cb[2] - cb[0] + 1, "h": cb[3] - cb[1] + 1,
-                                   "cx": (cb[0] + cb[2]) / 2.0, "cy": (cb[1] + cb[3]) / 2.0})
-            else:
-                cenhos.append(reg)
-
-    # DOIS olhos, um de cada lado, na mesma altura. Qualquer outra coisa é
-    # engano do detector, e engano aqui apaga rosto.
-    olhos = sorted(olhos, key=lambda r: -r["c"]["area"])[:2]
-    if len(olhos) != 2:
-        return img, None
-    esq, dir_ = sorted(olhos, key=lambda r: r["cx"])
-    if not (esq["cx"] < cx_rosto < dir_["cx"]):
-        return img, None
-    if abs(esq["cy"] - dir_["cy"]) > alt_r * 0.10:
-        return img, None
-
-    achados = {"olho_e": esq, "olho_d": dir_}
-    for reg in sorted(cenhos, key=lambda r: -r["c"]["area"])[:2]:
-        alvo = "olho_e" if reg["cx"] < cx_rosto else "olho_d"
-        nome = "sobrancelha_" + alvo[-1]
-        # tem que estar ACIMA do olho daquele lado, e perto dele
-        if reg["cy"] < achados[alvo]["cy"] and nome not in achados:
+        # do lado certo, e não em cima do eixo (a ruga da testa do Zeca fica
+        # no meio da cara e passaria por sobrancelha)
+        if not (d_olhos * 0.12 < abs(reg["cx"] - eixo) < d_olhos * 0.95):
+            continue
+        if reg["w"] < reg["h"] * 1.3:
+            continue                        # sobrancelha é deitada
+        if not (larg_olho * 0.40 <= reg["w"] <= larg_olho * 1.60):
+            continue                        # do tamanho de um olho, não do cabelo
+        # de cada lado fica a mais BAIXA das candidatas: é a que encosta no
+        # olho. Acima dela vem ruga, franja e o contorno do cabelo.
+        if nome not in achados or reg["cy"] > achados[nome]["cy"]:
             achados[nome] = reg
+
+    # AS DUAS SOBRANCELHAS PODEM SER UM COMPONENTE SÓ: em algumas folhas
+    # elas se tocam pelo contorno e saem como uma mancha atravessando a
+    # testa. Girada como peça única, ela vira uma barra preta cruzando o
+    # rosto. Cortar pelo eixo devolve as duas, que é o que a arte desenha.
+    if "sobrancelha_e" not in achados and "sobrancelha_d" not in achados:
+        for c in rosto["comps_tinta"]:
+            reg = _reg(c)
+            bx0, by0, bx1, by1 = c["bbox"]
+            if not (bx0 < eixo < bx1 and reg["w"] > d_olhos * 0.9):
+                continue
+            if not (linha - d_olhos * 1.30 <= reg["cy"]
+                    <= achados["olho_e"]["cy"] - reg["h"] * 0.3):
+                continue
+            if reg["w"] < reg["h"] * 1.6:
+                continue
+            m = c["mask"].astype(bool)
+            for lado, nome in ((m & (np.arange(m.shape[1]) < eixo), "sobrancelha_e"),
+                               (m & (np.arange(m.shape[1]) >= eixo), "sobrancelha_d")):
+                if lado.sum() < 20:
+                    continue
+                ys_l, xs_l = np.nonzero(lado)
+                cb = (int(xs_l.min()), int(ys_l.min()), int(xs_l.max()), int(ys_l.max()))
+                achados[nome] = _reg({"mask": lado, "area": int(lado.sum()), "bbox": cb,
+                                      "cx": float(xs_l.mean()), "cy": float(ys_l.mean())})
+            break
 
     # --- recorta cada feição e apaga o lugar dela com a cor da pele
     limpo = a.copy()
@@ -581,7 +781,7 @@ def _cor_do_anel(arr, mascara, alfa, folga=5):
     return tuple(int(v) for v in np.median(base, axis=0))
 
 
-def _tapar_boca_desenhada(img):
+def _tapar_boca_desenhada(img, rosto=None):
     """Apaga a boca que a ARTE desenhou e devolve onde ela estava.
 
     POR QUE (folha de 26/08)
@@ -635,16 +835,30 @@ def _tapar_boca_desenhada(img):
     if tinta.sum() < 20:
         return img, None, None
 
+    # A FAIXA sai dos olhos quando eles foram medidos (ver `_analisar_rosto`):
+    # entre o nariz e o queixo, no eixo, com a largura contada em distância
+    # interocular. Sem olhos, cai na régua antiga -- frações da peça, que só
+    # valem quando a peça é o rosto e nada mais.
+    if rosto:
+        ymin, ymax, eixo, tol_x = _faixa_da_boca(rosto)
+        # a largura do rosto, contada em distância interocular: num rosto
+        # frontal ela vale por volta de 2,2 vezes o vão entre os olhos
+        larg_ref = rosto["d_olhos"] * 2.2
+    else:
+        ymin, ymax = y0 + alt_r * 0.52, y0 + alt_r * 0.92
+        eixo, tol_x = cx_rosto, larg_r * 0.22
+        larg_ref = larg_r
+
     cands = []
     for c in _componentes(tinta, area_min=max(20, int(tinta.sum() * 0.01))):
         bx0, by0, bx1, by1 = c["bbox"]
         w, h = bx1 - bx0 + 1, by1 - by0 + 1
         cy = (by0 + by1) / 2.0
-        if cy < y0 + alt_r * 0.52 or cy > y0 + alt_r * 0.92:
-            continue                       # olho/sobrancelha em cima, base embaixo
-        if abs((bx0 + bx1) / 2.0 - cx_rosto) > larg_r * 0.22:
+        if cy < ymin or cy > ymax:
+            continue                       # olho/sobrancelha em cima, pescoço embaixo
+        if abs((bx0 + bx1) / 2.0 - eixo) > tol_x:
             continue                       # fora do eixo: bochecha, orelha
-        if w < h * 1.4 or w < larg_r * 0.10 or w > larg_r * 0.75:
+        if w < h * 1.4 or w < larg_ref * 0.10 or w > larg_ref * 0.75:
             continue                       # a boca é deitada, e não atravessa a cara
         cands.append(c)
     if not cands:
@@ -848,6 +1062,20 @@ class Personagem:
             self.tam[nome] = im.size
             self.img[nome], self.piv[nome] = _centralizar(im, pivo)
 
+        # --- ONDE FICA O ROSTO DENTRO DA PEÇA DO CRÂNIO -----------------
+        # Medido UMA vez, pelos olhos, e usado pelas três funções de rosto.
+        # Sem isto cada uma inventava a própria régua a partir da caixa da
+        # peça -- e a peça do crânio traz cabelo e pescoço em quantidade que
+        # é decisão do desenhista. Ver `_analisar_rosto`.
+        self.rosto = _analisar_rosto(self.img["cranio"]) if "cranio" in self.img else None
+        if self.rosto:
+            print(f"[rosto] olhos medidos: vao de {self.rosto['d_olhos']:.0f}px, "
+                  f"linha em y={self.rosto['linha_olhos']:.0f}, "
+                  f"queixo em y={self.rosto['queixo']:.0f}")
+        elif "cranio" in self.img:
+            print("[rosto] nao achei o par de olhos na peca do cranio; a boca e "
+                  "as feicoes vao ser procuradas pela caixa da peca (regra antiga)")
+
         # --- o queixo existe mesmo? -----------------------------------
         self.boca = None            # (dx, dy, largura) relativos ao pivô do crânio
         # curva e espessura de REPOUSO, medidas da boca que a arte desenhou
@@ -856,7 +1084,7 @@ class Personagem:
             self.rosto_articulado = False
             self.img.pop("mandibula", None)     # fiapo em cena é sujeira solta
             if "cranio" in self.img:
-                tapado, caixa = _tapar_entalhe(self.img["cranio"])
+                tapado, caixa = _tapar_entalhe(self.img["cranio"], rosto=self.rosto)
                 if caixa:
                     self.img["cranio"] = tapado
                     px, py = self.piv["cranio"]
@@ -875,7 +1103,8 @@ class Personagem:
                     # 26/08) a boca virou uma LINHA desenhada. No segundo
                     # caso ela é apagada e redesenhada animada, senão o
                     # lipsync some junto com o buraco.
-                    limpo, caixa, estilo = _tapar_boca_desenhada(self.img["cranio"])
+                    limpo, caixa, estilo = _tapar_boca_desenhada(self.img["cranio"],
+                                                                 rosto=self.rosto)
                     if caixa:
                         self.img["cranio"] = limpo
                         px, py = self.piv["cranio"]
@@ -908,7 +1137,8 @@ class Personagem:
         self.feicoes = None
         self._cache_cara = {}
         if "cranio" in self.img and not (self.tem("olho_e") and self.tem("olho_d")):
-            limpo, feic = _extrair_feicoes(self.img["cranio"], self.piv["cranio"])
+            limpo, feic = _extrair_feicoes(self.img["cranio"], self.piv["cranio"],
+                                           rosto=self.rosto)
             if feic:
                 self.img["cranio"] = limpo
                 self.feicoes = feic
