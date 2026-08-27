@@ -150,9 +150,9 @@ def _borda(m):
 def pivo_entre(a, b, amostra=1400):
     """O ponto de articulação entre duas peças vizinhas.
 
-    É o meio do VÃO: o par de pontos mais próximo entre a borda de uma peça
-    e a borda da outra, e o ponto médio entre eles. Girar as duas peças em
-    torno desse ponto preserva o vão em qualquer ângulo.
+    É o meio do VÃO -- mas o meio da FAIXA inteira em que as duas peças se
+    encaram, não o par de pontos mais próximo. Girar as duas peças em torno
+    desse ponto preserva o vão em qualquer ângulo.
 
     Isto é o coração da mudança. Antes o pivô vinha de proporção ("o ombro
     fica a 82% da meia-largura do tronco") e errava sempre que a arte não
@@ -160,13 +160,24 @@ def pivo_entre(a, b, amostra=1400):
     saía descolado. Agora o pivô sai do desenho: onde a arte deixou o vão,
     é ali que a peça gira.
 
-    PEÇAS QUE SE TOCAM (folha sem vão naquela junta, ver `_dividir_por_cor`)
-        Quando as duas bordas se encostam, o par mais próximo tem distância
-        zero -- e existem centenas deles ao longo de toda a fronteira. Pegar
-        o primeiro joga o pivô para a ponta do contato: com a cabeça colada
-        no peito, o pescoço nascia no canto do ombro e a cabeça girava como
-        uma placa pendurada. Com contato, o pivô é o CENTRO da fronteira,
-        que é onde um pescoço fica.
+    POR QUE NÃO É O PAR MAIS PRÓXIMO (corrigido em 27/08, ver `_mapa.png`)
+        Num boneco de papel as duas bordas de uma junta são quase
+        PARALELAS: ao longo de toda a faixa a distância é praticamente a
+        mesma, e qual par ganha o `argmin` é decidido por meio pixel de
+        ruído de contorno. O resultado era um pivô encostado numa PONTA da
+        faixa -- e ele saía numa ponta diferente em cada junta, o que fazia
+        o mapa parecer aleatório: ombro esquerdo na quina de cima, ombro
+        direito na quina de baixo, joelho na lateral externa da coxa.
+        Girar por ali arranca a peça da junta em vez de dobrá-la.
+
+        A correção é ler a faixa inteira em vez de um par: todos os pares
+        cuja distância chega perto da mínima, com peso maior para os mais
+        estreitos. O centro dessa nuvem é o meio geométrico do vão, que é
+        onde o colchete de um boneco articulado fica. Peças encostadas
+        (vão zero, ver `_dividir_por_cor`) já eram tratadas assim desde
+        26/08 -- agora vale para toda junta, com vão ou sem.
+
+    Devolve ((x, y), vão medido em pixels).
     """
     pa, pb = _borda(a["mask"]), _borda(b["mask"])
     # subamostra: a distância mínima entre dois contornos não muda de forma
@@ -176,16 +187,81 @@ def pivo_entre(a, b, amostra=1400):
     if len(pb) > amostra:
         pb = pb[np.linspace(0, len(pb) - 1, amostra).astype(int)]
     d2 = ((pa[:, None, :] - pb[None, :, :]) ** 2).sum(axis=2)
-    i, j = np.unravel_index(int(np.argmin(d2)), d2.shape)
-    dmin = float(np.sqrt(d2[i, j]))
-    if dmin < 3.0:
-        # tolerância de 2px sobre o mínimo: pega a faixa de contato inteira
-        # sem deixar entrar o resto do contorno
-        perto = d2 <= (dmin + 2.0) ** 2
-        ia, ib = np.nonzero(perto)
-        meio = (pa[ia] + pb[ib]) / 2.0
-        return (float(meio[:, 0].mean()), float(meio[:, 1].mean())), dmin
-    return ((pa[i][0] + pb[j][0]) / 2.0, (pa[i][1] + pb[j][1]) / 2.0), dmin
+    dmin = float(np.sqrt(d2.min()))
+
+    # A FAIXA: pares que chegam perto do mínimo. A tolerância cresce com o
+    # vão (uma junta de 12px de folga tem a faixa inteira entre 12 e ~19px)
+    # mas nunca abaixo de 2px, que é o ruído de serrilhado do contorno.
+    tol = max(2.0, dmin * 0.6)
+    ia, ib = np.nonzero(d2 <= (dmin + tol) ** 2)
+    meios = (pa[ia] + pb[ib]) / 2.0
+    dist = np.sqrt(d2[ia, ib])
+    # peso maior para o par mais estreito: se a faixa afunila de um lado
+    # (a manga que desce sobre a axila), é ali que a junta está
+    peso = np.exp(-(((dist - dmin) / tol) ** 2))
+
+    meios, peso = _um_ponto_por_pixel(meios, peso)
+    meios, peso = _faixas_da_junta(meios, peso, dmin)
+    w = float(peso.sum())
+    if w <= 0:
+        i, j = np.unravel_index(int(np.argmin(d2)), d2.shape)
+        return ((pa[i][0] + pb[j][0]) / 2.0, (pa[i][1] + pb[j][1]) / 2.0), dmin
+    return (float((meios[:, 0] * peso).sum() / w),
+            float((meios[:, 1] * peso).sum() / w)), dmin
+
+
+def _um_ponto_por_pixel(meios, peso):
+    """Colapsa a nuvem de pares num ponto por pixel, com o maior peso.
+
+    Sem isto a média é puxada para onde há MAIS PARES, não para onde a
+    junta está: um ponto da borda côncava enxerga uma dezena de vizinhos
+    dentro da tolerância, um ponto da borda convexa enxerga dois. Na
+    fronteira do pescoço isso deslocava o pivô 40px para o lado em que a
+    gola é mais funda -- nos dois personagens, sempre para o mesmo lado."""
+    chave = np.round(meios).astype(np.int64)
+    chave = (chave[:, 0] - chave[:, 0].min()) * 100000 + (chave[:, 1] - chave[:, 1].min())
+    ordem = np.argsort(chave, kind="stable")
+    chave, meios, peso = chave[ordem], meios[ordem], peso[ordem]
+    corte = np.flatnonzero(np.diff(chave)) + 1
+    grupos = np.split(np.arange(len(chave)), corte)
+    idx = np.array([g[int(np.argmax(peso[g]))] for g in grupos])
+    return meios[idx], peso[idx]
+
+
+def _faixas_da_junta(meios, peso, dmin, fracao=0.4):
+    """Os trechos de aproximação que formam a junta, sem os que não formam.
+
+    Duas peças raramente se encaram por uma faixa só. Uma junta em
+    ferradura -- a cabeça dentro do decote -- toca a vizinha nos DOIS
+    cantos da gola e se afasta no meio do V: são dois trechos de peso
+    parecido, e a junta é o centro entre eles, não um dos cantos. Já a mão
+    que volta a chegar perto do antebraço pelo polegar produz um trecho
+    minúsculo ao lado do vão de verdade, e esse não pode entrar na conta.
+
+    A diferença entre os dois casos é o PESO: entram os trechos que chegam
+    a `fracao` do mais forte, e o resto é descartado. Sem esta regra, o
+    pivô do pescoço ia parar num canto do decote -- 40px fora do eixo, no
+    mesmo lado nos dois personagens, porque a gola é assimétrica no
+    desenho."""
+    if len(meios) < 3:
+        return meios, peso
+    base = meios.min(axis=0)
+    gx = np.round(meios[:, 0] - base[0]).astype(int)
+    gy = np.round(meios[:, 1] - base[1]).astype(int)
+    m = np.zeros((int(gy.max()) + 1, int(gx.max()) + 1), dtype=bool)
+    m[gy, gx] = True
+    for _ in range(int(max(2.0, dmin))):
+        m = _dilatar(m)
+    rot, n = _rotular(m)
+    if n <= 1:
+        return meios, peso
+    r = rot[gy, gx]
+    pesos = {k: float(peso[r == k].sum()) for k in range(1, n + 1)}
+    corte = max(pesos.values()) * fracao
+    sel = np.isin(r, [k for k, v in pesos.items() if v >= corte])
+    if not sel.any():
+        return meios, peso
+    return meios[sel], peso[sel]
 
 
 # =====================================================================
@@ -592,6 +668,62 @@ def _abrir_coluna_grudada(img, comps, figura):
     return [c for c in comps if c is not alvo] + list(par)
 
 
+# As peças que giram no PLANO DE SIMETRIA do corpo. Todas as outras giram
+# onde a arte deixou o vão; estas giram onde o corpo tem eixo.
+NO_EIXO = ("pescoco", "cranio", "cabeca", "mandibula")
+
+
+def _alinhar_ao_eixo(pivos, caixas, por_nome, esqueleto, manuais=()):
+    """O X da cabeça vem do TRONCO, não da fronteira da gola.
+
+    POR QUE (27/08)
+        O pivô do pescoço é medido na fronteira desenhada entre a pele e a
+        camisa. Essa fronteira é um decote, e decote é assimétrico: um lado
+        da gola desce mais que o outro, um ombro tem mais tecido. O centro
+        da faixa de contato caía 16px à esquerda do eixo do corpo no Pal e
+        9px no Zeca -- sempre para o mesmo lado, porque o desenho tem o
+        mesmo viés nos dois.
+
+        Deslocado, o pivô faz a cabeça DESCREVER UM ARCO ao inclinar: em vez
+        de girar sobre o pescoço, ela varre para o lado. Numa figura frontal
+        isso lê como cabeça solta.
+
+        A cabeça não gira sobre o desenho da gola, gira sobre a coluna. E a
+        coluna está onde o tronco diz que está: o X do pivô da cintura
+        (peito->abdomen) e o do quadril (a raiz). É a única referência do
+        eixo de simetria que a folha oferece de forma confiável, porque
+        tronco e quadril são peças largas e simétricas.
+
+    Só o X muda. A altura do pescoço continua sendo a que a arte mostra, e
+    a posição da cabeça na tela não se move: o ponto de encaixe no pai anda
+    junto com o pivô.
+
+    Pivô escrito à mão manda: quem digitou a coordenada não quer que ela
+    seja corrigida por regra nenhuma.
+    """
+    refs = [pivos[n][0] + caixas[n][0]
+            for n in ("peito", "abdomen") if n in pivos and n in caixas]
+    if not refs:
+        return
+    eixo = sum(refs) / len(refs)
+    for nome in NO_EIXO:
+        if nome not in pivos or nome in manuais:
+            continue
+        bx = caixas[nome][0]
+        desloc = eixo - (pivos[nome][0] + bx)
+        if abs(desloc) < 0.5:
+            continue
+        pivos[nome][0] = eixo - bx
+        pai = _ancestral_presente(nome, esqueleto, por_nome)
+        if pai and pai in por_nome:
+            saidas = por_nome[pai].get("saidas") or {}
+            if nome in saidas:
+                sx, sy = saidas[nome]
+                saidas[nome] = (sx + desloc, sy)
+        print(f"[segmentar] pivo de '{nome}' alinhado ao eixo do tronco "
+              f"({desloc:+.1f}px em x)")
+
+
 def _ancestral_presente(nome, esqueleto, presentes):
     """O pai mais próximo que existe de fato como peça.
 
@@ -605,12 +737,19 @@ def _ancestral_presente(nome, esqueleto, presentes):
     return pai
 
 
-def segmentar_corpo(img, esqueleto, min_frac_area=0.0012):
+def segmentar_corpo(img, esqueleto, min_frac_area=0.0012, pivos_manuais=None):
     """Folha -> (peças, âncoras).
 
     esqueleto: {peça: peça_pai}, com None na raiz. Vem de
     folha_personagem.py -- este módulo não conhece vocabulário de rig, só
-    sabe achar ilhas e medir vãos."""
+    sabe achar ilhas e medir vãos.
+
+    pivos_manuais: {peça: [x, y]} em pixels DA FOLHA -- as mesmas
+    coordenadas que o `_mapa.png` mostra. É a saída de emergência quando a
+    arte não deixa a junta clara (uma manga que cobre metade do braço, um
+    casaco que engole o quadril): o ponto medido é substituído pelo ponto
+    escrito, e o resto da cadeia -- comprimento do osso, saída no pai --
+    é recalculado a partir dele. Ver PIVOS-MANUAIS.md."""
     img = img.convert("RGBA")
     mask = ~_fundo(img)
     if not mask.any():
@@ -675,15 +814,24 @@ def segmentar_corpo(img, esqueleto, min_frac_area=0.0012):
         caixas[nome] = (bx0, by0)
 
     # --- pivôs: o meio do vão entre cada peça e o pai dela
+    manuais = {k: (float(v[0]), float(v[1]))
+               for k, v in (pivos_manuais or {}).items() if k in por_nome}
+    if manuais:
+        print(f"[segmentar] {len(manuais)} pivô(s) escritos à mão: "
+              f"{', '.join(sorted(manuais))}")
     pivos, vaos = {}, {}
     for nome in esqueleto:
         if nome not in por_nome:
             continue
         pai = _ancestral_presente(nome, esqueleto, por_nome)
         if pai is None or pai not in por_nome:
-            # raiz (ou pai ausente): ancora na base central da própria peça
+            # raiz (ou pai ausente): ancora na base central da própria peça,
+            # salvo se a mão disser outra coisa
             p = pecas[nome]
-            pivos[nome] = [p.size[0] / 2.0, p.size[1] - 1.0]
+            bx, by = caixas[nome]
+            ponto = manuais.get(nome)
+            pivos[nome] = ([ponto[0] - bx, ponto[1] - by] if ponto
+                           else [p.size[0] / 2.0, p.size[1] - 1.0])
             continue
         hp = por_nome[pai].get("hospedeiro", por_nome[pai])
         hf = por_nome[nome].get("hospedeiro", por_nome[nome])
@@ -698,6 +846,8 @@ def segmentar_corpo(img, esqueleto, min_frac_area=0.0012):
             folga = 0.0
         else:
             ponto, folga = pivo_entre(hp, hf)
+        if nome in manuais:
+            ponto = manuais[nome]
         bx, by = caixas[nome]
         pivos[nome] = [ponto[0] - bx, ponto[1] - by]
         vaos[nome] = round(folga, 1)
@@ -705,6 +855,8 @@ def segmentar_corpo(img, esqueleto, min_frac_area=0.0012):
         # vai ser colado, e é assim que o comprimento do osso sai medido
         pbx, pby = caixas[pai]
         por_nome[pai].setdefault("saidas", {})[nome] = (ponto[0] - pbx, ponto[1] - pby)
+
+    _alinhar_ao_eixo(pivos, caixas, por_nome, esqueleto, manuais)
 
     comprimentos = {}
     for nome, c in por_nome.items():
@@ -769,12 +921,16 @@ def segmentar_corpo(img, esqueleto, min_frac_area=0.0012):
     return pecas, ancoras
 
 
-def mapa_de_pecas(img, pecas, ancoras):
+def mapa_de_pecas(img, pecas, ancoras, grade=0):
     """Imagem de conferência: cada peça pintada de uma cor, o pivô marcado.
 
     Existe porque um partes.json com 24 entradas não diz a ninguém se o
     ombro foi parar no cotovelo. O mapa diz, em um olhar, antes dos treze
-    minutos de render."""
+    minutos de render.
+
+    `grade` em pixels desenha uma régua de coordenadas por cima: é o que
+    torna possível LER um pivô da imagem e escrevê-lo no `pivos.json`
+    quando a arte não deixa a junta clara."""
     from PIL import ImageDraw
     paleta = [(228, 87, 74), (240, 154, 82), (233, 196, 78), (129, 181, 106),
               (86, 170, 158), (92, 141, 200), (140, 116, 198), (206, 106, 168),
@@ -786,9 +942,18 @@ def mapa_de_pecas(img, pecas, ancoras):
         cor = paleta[i % len(paleta)]
         ox, oy = caixas.get(nome, (0, 0))
         tela.paste(Image.new("RGB", p.size, cor), (ox, oy), p)
+    if grade:
+        for gx in range(0, img.size[0], grade):
+            d.line([gx, 0, gx, img.size[1]], fill=(70, 78, 74), width=1)
+            d.text((gx + 2, 2), str(gx), fill=(150, 160, 155))
+        for gy in range(0, img.size[1], grade):
+            d.line([0, gy, img.size[0], gy], fill=(70, 78, 74), width=1)
+            d.text((2, gy + 2), str(gy), fill=(150, 160, 155))
     # o pivô marcado em cima da peça é o que denuncia ombro virando cotovelo
     for nome, piv in ancoras.get("pivos", {}).items():
         ox, oy = caixas.get(nome, (0, 0))
         x, y = ox + piv[0], oy + piv[1]
         d.ellipse([x - 5, y - 5, x + 5, y + 5], fill=(255, 255, 255), outline=(0, 0, 0), width=2)
+        if grade:
+            d.text((x + 8, y - 5), f"{nome} {x:.0f},{y:.0f}", fill=(255, 255, 255))
     return tela
