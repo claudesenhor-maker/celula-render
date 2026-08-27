@@ -1676,6 +1676,49 @@ def montar_frame(camada, cenario, cam, quadril_x=W / 2):
     return quadro
 
 
+def _enquadramento(i, n_trechos, n_atores, t):
+    """Plano do trecho `i`: quanto a câmera fecha, e onde ela centra.
+
+    POR QUE ISTO EXISTE
+        Até 27/08 o personagem saía sempre do mesmo tamanho e sempre no
+        meio, do primeiro ao último segundo. Num feed isso lê como imagem
+        parada com áudio por cima -- foi a queixa depois do terceiro vídeo
+        da esteira ("os dois ficam quase parados"). Gesto e cara resolvem
+        metade; a outra metade é a CÂMERA, e ela já existia no motor
+        (`cam["zoom"]`), só que ninguém a usava fora de uma ação.
+
+    O QUE ELE FAZ
+        1. Cada trecho tem um plano diferente do vizinho -- aberto, médio,
+           fechado, girando. A troca de plano entre trechos é o corte que
+           este formato não tem: corte reseta a atenção de quem rola o
+           feed, e é o recurso de retenção mais barato que existe.
+        2. Dentro do trecho a câmera FECHA devagar (push-in). Câmera que
+           anda um pouco o tempo todo é o que separa vídeo de fotografia.
+        3. O último trecho é a virada e fecha no rosto: a piada acontece
+           na cara, e é para ela que se olha quando a tirada cai.
+
+    O TETO DEPENDE DE QUANTA GENTE ESTÁ EM CENA. Com dois atores (em
+    x=296 e x=784 num quadro de 1080) fechar demais corta um deles pela
+    borda, então o teto cai para 1,12 -- com um ator sozinho, no meio do
+    quadro, dá para ir a 1,30 sem perder braço nenhum."""
+    teto = 1.12 if n_atores > 1 else 1.30
+    ciclo = (1.0, 1.0 + (teto - 1.0) * 0.5, teto)
+    if i == n_trechos - 1:
+        base = teto                     # a virada fecha no rosto
+    elif i == n_trechos - 2:
+        base = ciclo[0]                 # e o trecho antes dela ABRE: sem o
+        # contraste, a virada chegaria no mesmo tamanho do que veio antes e
+        # o fechamento nao seria percebido como troca de plano
+    else:
+        base = ciclo[i % len(ciclo)]
+    z = base * (1.0 + 0.035 * max(0.0, min(1.0, t)))
+    # fechar centrado no meio do quadro subiria o corte pelos pés e pela
+    # cabeça em partes iguais; puxar o centro para cima mantém a cara
+    # dentro do quadro, que é onde a piada acontece
+    fechado = (z - 1.0) / max(teto * 1.035 - 1.0, 1e-6)
+    return z, 0.5 - 0.10 * max(0.0, min(1.0, fechado))
+
+
 # =====================================================================
 def _rig_do_trecho(tr, t, pan_base, acoes_do_ator, x_base, falando=True):
     """Ângulos do frame de UM ator. Dois caminhos:
@@ -2019,7 +2062,9 @@ def render(pasta_partes, spec, saida, tmpdir=None):
     # o que cada ator tem na mão; sobrevive de um trecho para o outro
     na_mao = {c: None for c in chaves}
     pan = 0.0            # o quanto o fundo já andou; NÃO zera entre trechos
-    for tr in spec["trechos"]:
+    n_trechos = len(spec["trechos"])
+    planos = []
+    for i_tr, tr in enumerate(spec["trechos"]):
         pedido = tr.get("cenario") or CENARIOS.escolher(tr.get("fala", ""))
         cen, motivo = CENARIOS.resolver(pedido, inventario, tr.get("fala"))
         if cen is None:
@@ -2076,6 +2121,16 @@ def render(pasta_partes, spec, saida, tmpdir=None):
             cam = cam_falante
             if chao_y:
                 cam["chao_y"] = chao_y
+            # ENQUADRAMENTO DO TRECHO, por cima do que a ação já pediu: a
+            # ação usa zoom para pontuar um susto, e isso continua valendo
+            # -- os dois se multiplicam em vez de um apagar o outro.
+            z_tr, zy = _enquadramento(i_tr, n_trechos, len(chaves), t)
+            cam["zoom"] = float(cam.get("zoom", 1.0)) * z_tr
+            # ação que mira o quadro em outra altura (o `susto` mira 0,34)
+            # manda: ela sabe o que está pontuando. Fora isso, vale a altura
+            # do plano do trecho.
+            if abs(float(cam.get("zoom_y", 0.5)) - 0.5) < 0.001:
+                cam["zoom_y"] = zy
             quadro = montar_frame(camada, cenarios[cen], cam, x_falante)
             if leg is not None:
                 # por cima de tudo, e no tempo GLOBAL: o índice do frame é
@@ -2088,9 +2143,11 @@ def render(pasta_partes, spec, saida, tmpdir=None):
         caras.append(EXPR.normalizar(tr.get("expressao", "neutro"))
                      + "".join("+" + EXPR.normalizar(j.get("nome") or j.get("valor"))
                                for j in (tr.get("expressoes") or [])))
+        planos.append(f"{_enquadramento(i_tr, n_trechos, len(chaves), 0.0)[0]:.2f}")
         pan = cam.get("fundo_dx", pan)              # continua de onde parou
     print(f"[cutout] {n} frames ({n/FPS:.1f}s)")
     print(f"[cara] {' -> '.join(caras)}")
+    print(f"[camera] plano por trecho: {' -> '.join(planos)}")
 
     subprocess.run(["ffmpeg", "-y", "-v", "error", "-framerate", str(FPS),
                     "-i", os.path.join(fd, "%05d.png"), "-i", audio,
