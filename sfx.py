@@ -282,30 +282,42 @@ def efeito(nome):
 # `onde` é fração da janela `de`..`ate`: o baque de `cair` toca no fim da
 # queda, o boing de `pular` no impulso, o whoosh de quem entra correndo
 # junto com a entrada.
+#
+# SÓ EVENTO FÍSICO ENTRA AQUI (revisto em 27/08). A tabela anterior dava som
+# a gesto: `apontar` fazia pop, `acenar` fazia pop, `encolher_ombros` fazia
+# pop, `cocar_cabeca` fazia tremido. Nada disso produz barulho no mundo, e o
+# resultado era um vídeo de 20 segundos com oito efeitos, metade deles
+# decorativos, disparando em cima de gente parada falando -- que é
+# exatamente a queixa de "efeito sonoro sem sentido". Som que não tem causa
+# na tela não vira ênfase: vira ruído, e ainda gasta o impacto do som que
+# TEM causa.
+#
+# A régua para entrar: alguém, vendo o quadro no mudo, entenderia de onde
+# veio o som? Corpo batendo no chão, sim. Mão apontando, não.
 DA_ACAO = {
-    "susto":          ("susto", 0.05, 1.0),
-    "pular":          ("boing", 0.12, 0.9),
-    "cair":           ("thud", 0.75, 1.0),
-    "tropecar":       ("thud", 0.45, 0.7),
+    "susto":           ("susto", 0.05, 1.0),
+    "pular":           ("boing", 0.12, 0.9),
+    "cair":            ("thud", 0.75, 1.0),
+    "tropecar":        ("thud", 0.45, 0.7),
     "entrar_correndo": ("whoosh", 0.05, 0.8),
-    "sair_andando":   ("whoosh", 0.60, 0.5),
-    "maos_na_cabeca": ("thud", 0.25, 0.8),
-    "apontar":        ("pop", 0.15, 0.6),
-    "cocar_cabeca":   ("tremido", 0.20, 0.6),
-    "encolher_ombros": ("pop", 0.30, 0.4),
-    "virar":          ("whoosh", 0.20, 0.4),
-    "acenar":         ("pop", 0.20, 0.35),
+    "maos_na_cabeca":  ("thud", 0.25, 0.6),
+    # objeto que encosta em alguma coisa: aqui há contato de verdade
+    "pegar_objeto":    ("pop", 0.55, 0.5),
+    "largar_objeto":   ("thud", 0.60, 0.5),
+    "entregar_objeto": ("pop", 0.70, 0.4),
 }
 
 # Expressões que merecem marca sonora própria, quando entram como JANELA de
 # reação no meio da fala (`expressoes: []`). Cara que muda sem som muda
 # menos: é o mesmo motivo pelo qual o susto tem sting.
+#
+# Encolhida em 27/08 pela mesma razão da tabela acima: `duvida` e `pensando`
+# disparavam um `tremido` toda vez que o roteirista pedia uma cara pensativa,
+# e cara pensativa é o que mais aparece numa esquete de alguém confuso. Ficam
+# só as reações de CHOQUE, que são as que um público espera ouvir sublinhadas.
 DA_EXPRESSAO = {
     "chocado": ("susto", 0.9),
     "surpreso": ("susto", 0.6),
-    "desesperado": ("erro", 0.6),
-    "duvida": ("tremido", 0.5),
-    "pensando": ("tremido", 0.4),
 }
 
 
@@ -356,12 +368,34 @@ def eventos_do_spec(spec):
     fora.sort(key=lambda e: e["t"])
     limpos = []
     for e in fora:
-        if limpos and e["t"] - limpos[-1]["t"] < 0.25:
+        if limpos and e["t"] - limpos[-1]["t"] < 0.6:
             if e["ganho"] > limpos[-1]["ganho"]:
                 limpos[-1] = e
             continue
         limpos.append(e)
+
+    # DENSIDADE. Efeito demais é a mesma doença do efeito sem causa: quando
+    # tudo é sublinhado, nada é. Num Short de 20 segundos, mais de oito
+    # sons transformam a faixa em desenho dos anos 40 -- e o punchline, que
+    # é o único que PRECISA ser ouvido, some no meio dos outros.
+    #
+    # O corte é por ganho, não por ordem: fica o que o roteiro marcou de
+    # propósito e o impacto forte, sai o pop de encosto.
+    teto = max(4, int(_duracao_total(trechos) / 2.5))
+    if len(limpos) > teto:
+        fortes = sorted(limpos, key=lambda e: -e["ganho"])[:teto]
+        cortados = len(limpos) - len(fortes)
+        limpos = sorted(fortes, key=lambda e: e["t"])
+        print(f"[sfx] {cortados} efeito(s) cortado(s) por densidade "
+              f"(teto de {teto} num video de {_duracao_total(trechos):.0f}s)")
     return limpos
+
+
+def _duracao_total(trechos):
+    if not trechos:
+        return 20.0
+    ult = trechos[-1]
+    return float(ult.get("_inicio_s", 0.0)) + float(ult.get("dur", 0.0)) or 20.0
 
 
 # =====================================================================
@@ -372,10 +406,70 @@ def eventos_do_spec(spec):
 # qualquer compasso sem soar interrompida. Um Short dura 20 segundos e
 # termina no meio de tudo.
 _GRAUS = {
-    "leve":  [(0, 4, 7), (7, 11, 14), (9, 12, 16), (5, 9, 12)],
-    "tenso": [(0, 3, 7), (8, 12, 15), (5, 8, 12), (7, 11, 14)],
+    # maior, aberta: o mundo está bem e nada foi revelado ainda
+    "leve":     [(0, 4, 7), (7, 11, 14), (9, 12, 16), (5, 9, 12)],
+    # menor com o VI napolitano: não resolve e não relaxa
+    "tenso":    [(0, 3, 7), (8, 12, 15), (5, 8, 12), (7, 11, 14)],
+    # menor plagal, lenta: derrota, o personagem perdeu
+    "triste":   [(0, 3, 7), (5, 8, 12), (0, 3, 7), (7, 10, 14)],
+    # dois acordes a um semitom: a coisa mais próxima de "algo vem aí"
+    "suspense": [(0, 3, 6), (1, 4, 7), (0, 3, 6), (11, 2, 5)],
+    # maior com sétima e trítono: o soar de quem se acha, deslizando
+    "deboche":  [(0, 4, 10), (5, 9, 15), (0, 4, 10), (6, 10, 16)],
+    # cadência autêntica: só para quando a piada FECHA em vitória
+    "triunfo":  [(0, 4, 7), (5, 9, 12), (7, 11, 14), (0, 4, 7)],
 }
 _TONICA = 261.63          # dó central
+
+# A EMOÇÃO DO TRECHO ESCOLHE A TRILHA. O roteirista já rotula cada trecho com
+# uma expressão (é ela que move a cara e a prosódia da voz); a trilha passa a
+# ler o MESMO rótulo. Sem isto ela tocava a mesma progressão alegre do começo
+# ao fim, inclusive por baixo do desespero -- e era isso que a fazia soar
+# colada por cima do vídeo em vez de dentro dele.
+ESTILO_DA_EMOCAO = {
+    "neutro": "leve", "sorrindo": "leve", "confiante": "triunfo",
+    "surpreso": "suspense", "duvida": "suspense", "pensando": "suspense",
+    "bravo": "tenso", "irritado": "tenso", "chocado": "tenso",
+    "desesperado": "tenso", "triste": "triste", "desdem": "deboche",
+}
+
+# Quanto a trilha "aperta" em cada emoção: andamento e volume relativos.
+INTENSIDADE_DA_EMOCAO = {
+    "neutro": 1.00, "sorrindo": 1.00, "confiante": 1.05,
+    "surpreso": 1.06, "duvida": 0.92, "pensando": 0.88,
+    "bravo": 1.16, "irritado": 1.12, "chocado": 1.18,
+    "desesperado": 1.22, "triste": 0.80, "desdem": 0.95,
+}
+
+
+def segmentos_do_spec(spec):
+    """A trilha, trecho a trecho: [{inicio, dur, estilo, intensidade}].
+
+    O ARCO. Uma esquete de 20 segundos tem começo, escalada e virada, e a
+    trilha precisa acompanhar isso -- é o que separa música de fundo de
+    música em cima. Cada trecho vira um segmento com o estilo que a emoção
+    dele pede.
+
+    O BREQUE DO PUNCHLINE. O último trecho entra com a música cortada: o
+    silêncio antes da tirada é o instrumento mais barato da comédia, e é
+    o mesmo motivo pelo qual `expressao.respiro_sugerido` dá 0,85 s de
+    pausa ali. A trilha volta junto com o rimshot.
+    """
+    trechos = spec.get("trechos") or []
+    fora = []
+    for i, tr in enumerate(trechos):
+        dur = float(tr.get("_dur_voz", 0.0))
+        if dur <= 0:
+            continue
+        emo = str(tr.get("expressao", "neutro")).strip().lower()
+        seg = {"inicio": float(tr.get("_inicio_s", 0.0)),
+               "dur": float(tr.get("dur", dur)),
+               "estilo": ESTILO_DA_EMOCAO.get(emo, "leve"),
+               "intensidade": INTENSIDADE_DA_EMOCAO.get(emo, 1.0)}
+        if i == len(trechos) - 1 and len(trechos) > 1:
+            seg["breque"] = True
+        fora.append(seg)
+    return fora
 
 
 def _nota(f, dur, sr=SR, brilho=0.30):
@@ -390,18 +484,21 @@ def _nota(f, dur, sr=SR, brilho=0.30):
     return x * ataque * _exp(t, 0.16 + 0.4 * (200.0 / max(f, 60.0)))
 
 
-def trilha(dur_s, estilo="leve", bpm=104.0, semente=3, sr=SR):
+def trilha(dur_s, estilo="leve", bpm=104.0, semente=3, sr=SR, segmentos=None):
     """Bed instrumental do tamanho exato do vídeo.
 
     Não é música para se ouvir: é chão. Fica 21 dB abaixo da voz e abaixa
     mais ainda quando alguém fala. O que ela faz é tirar o silêncio de
     estúdio de trás da fala -- que é o que fazia o vídeo soar como áudio de
-    WhatsApp em vez de desenho."""
+    WhatsApp em vez de desenho.
+
+    `segmentos` (ver `segmentos_do_spec`) faz a trilha SEGUIR A CENA: cada
+    trecho toca no estilo que a emoção dele pede, com o andamento e o volume
+    daquela emoção, e o último entra depois de um breque. Sem eles, toca a
+    progressão única do começo ao fim -- que é o que fazia a música soar
+    descolada do que estava acontecendo na tela."""
     n = int(dur_s * sr)
     out = np.zeros(n + sr, dtype=np.float32)
-    acordes = _GRAUS.get(estilo, _GRAUS["leve"])
-    compasso = 4 * 60.0 / bpm
-    colcheia = compasso / 8.0
     rng = np.random.default_rng(semente)
 
     def por(sinal, em, g=1.0):
@@ -411,25 +508,40 @@ def trilha(dur_s, estilo="leve", bpm=104.0, semente=3, sr=SR):
         m = min(len(sinal), len(out) - i)
         out[i:i + m] += sinal[:m].astype(np.float32) * g
 
+    if not segmentos:
+        segmentos = [{"inicio": 0.0, "dur": dur_s, "estilo": estilo,
+                      "intensidade": 1.0}]
+
     c = 0
-    t = 0.0
-    while t < dur_s:
-        grau = acordes[c % len(acordes)]
-        raiz = _TONICA * 2 ** (grau[0] / 12.0)
-        # baixo nos tempos 1 e 3: o mínimo que dá sensação de compasso
-        por(_nota(raiz / 2.0, compasso * 0.5, sr, brilho=0.12), t, 0.55)
-        por(_nota(raiz / 2.0, compasso * 0.4, sr, brilho=0.12), t + compasso * 0.5, 0.35)
-        # arpejo de colcheias, com uma nota trocada de vez em quando para o
-        # laço de 4 compassos não ficar óbvio num vídeo de 20 segundos
-        ordem = [0, 1, 2, 1, 2, 1, 0, 1]
-        for k, idx in enumerate(ordem):
-            if rng.random() < 0.12:
-                continue
-            semi = grau[idx] + (12 if rng.random() < 0.18 else 0)
-            por(_nota(_TONICA * 2 ** (semi / 12.0), colcheia * 2.2, sr),
-                t + k * colcheia, 0.30 if k % 2 else 0.42)
-        t += compasso
-        c += 1
+    for seg in segmentos:
+        acordes = _GRAUS.get(seg.get("estilo", estilo), _GRAUS["leve"])
+        k_int = float(seg.get("intensidade", 1.0))
+        compasso = 4 * 60.0 / (bpm * (0.85 + 0.15 * k_int))
+        colcheia = compasso / 8.0
+        t = float(seg.get("inicio", 0.0))
+        fim = min(t + float(seg.get("dur", 0.0)), dur_s)
+        # BREQUE: a música cai antes da tirada e volta com ela. O silêncio
+        # antes do punchline é o instrumento mais barato da comédia.
+        if seg.get("breque"):
+            t += min(0.85, max(0.0, (fim - t) * 0.35))
+        while t < fim:
+            grau = acordes[c % len(acordes)]
+            raiz = _TONICA * 2 ** (grau[0] / 12.0)
+            # baixo nos tempos 1 e 3: o mínimo que dá sensação de compasso
+            por(_nota(raiz / 2.0, compasso * 0.5, sr, brilho=0.12), t, 0.55 * k_int)
+            por(_nota(raiz / 2.0, compasso * 0.4, sr, brilho=0.12),
+                t + compasso * 0.5, 0.35 * k_int)
+            # arpejo de colcheias, com uma nota trocada de vez em quando para
+            # o laço de 4 compassos não ficar óbvio num vídeo de 20 segundos
+            ordem = [0, 1, 2, 1, 2, 1, 0, 1]
+            for j, idx in enumerate(ordem):
+                if rng.random() < 0.12:
+                    continue
+                semi = grau[idx] + (12 if rng.random() < 0.18 else 0)
+                por(_nota(_TONICA * 2 ** (semi / 12.0), colcheia * 2.2, sr),
+                    t + j * colcheia, (0.30 if j % 2 else 0.42) * k_int)
+            t += compasso
+            c += 1
 
     out = out[:n]
     # pico previsível: o número de notas que se sobrepõem varia com o
@@ -571,10 +683,17 @@ def mixar(voz_wav, eventos, destino, musica=None, dur_s=None, sr=SR):
                 faixa = faixa[:n]
                 print(f"[musica] faixa do disco: {os.path.basename(caminho)}")
             else:
+                segs = cfg.get("segmentos") or None
                 faixa = trilha(n / float(sr), cfg.get("estilo", "leve"),
-                               float(cfg.get("bpm", 104.0)), sr=sr)
-                print(f"[musica] trilha sintetizada ({cfg.get('estilo', 'leve')}, "
-                      f"{float(cfg.get('bpm', 104.0)):.0f} bpm)")
+                               float(cfg.get("bpm", 104.0)), sr=sr, segmentos=segs)
+                if segs:
+                    print("[musica] trilha por trecho: "
+                          + " -> ".join(s.get("estilo", "leve") for s in segs)
+                          + (" (com breque no punchline)"
+                             if any(s.get("breque") for s in segs) else ""))
+                else:
+                    print(f"[musica] trilha sintetizada ({cfg.get('estilo', 'leve')}, "
+                          f"{float(cfg.get('bpm', 104.0)):.0f} bpm)")
             g = _db(float(cfg.get("ganho_db", GANHO_MUSICA_DB)))
             duck = _ducking(_ajustar(voz, n), sr)
             mix += _ajustar(faixa, n) * g * _ajustar(duck, n)
