@@ -303,9 +303,13 @@ def prompt_folha_rosto(identidade=None):
 from segmentar import segmentar_corpo as _segmentar, FolhaGrudada   # noqa: F401
 from fatiar import fatiar_rosto as _fatiar_rosto                    # noqa: F401
 
-def segmentar_folha(img):
-    """Folha -> (peças, âncoras), usando o esqueleto declarado aqui."""
-    return _segmentar(img, ESQUELETO)
+def segmentar_folha(img, pivos_manuais=None):
+    """Folha -> (peças, âncoras), usando o esqueleto declarado aqui.
+
+    `pivos_manuais` vem do `pivos.json` que pode acompanhar a folha no
+    bucket, e sobrescreve o pivô medido peça por peça (ver
+    lab-celula/PIVOS-MANUAIS.md)."""
+    return _segmentar(img, ESQUELETO, pivos_manuais=pivos_manuais)
 
 
 def fatiar_rosto(img):
