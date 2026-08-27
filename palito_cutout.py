@@ -1301,7 +1301,16 @@ def desenhar_personagem(pers, rig, boca_nivel=0.0, piscando=False, objeto=None,
             oi = objeto["img"]
             opv = objeto.get("pivo") or _pivo_de_pega(oi)
             oi, opv = _centralizar(oi, opv)
-            colar(base, oi, opv, pos[nome], ang[nome],
+            # A MÃO SEGURA COM A PALMA, NÃO COM O PUNHO. `pos[nome]` é o
+            # pivô da mão, que fica na junta com o antebraço -- colar o
+            # objeto ali o joga para dentro do corpo, e num objeto grande
+            # ele aparece flutuando na frente da barriga. O ponto certo
+            # fica adiante, na direção em que a mão aponta.
+            comp = pers.comp.get(nome, 0.0) * pers.escala
+            rad = math.radians(ang[nome])
+            palma = (pos[nome][0] + math.cos(rad) * comp * 0.55,
+                     pos[nome][1] + math.sin(rad) * comp * 0.55)
+            colar(base, oi, opv, palma, ang[nome],
                   float(objeto.get("escala", 1.0)))
 
     return base
@@ -1669,7 +1678,11 @@ def render(pasta_partes, spec, saida, tmpdir=None):
         bb = im.getbbox()
         if bb:
             im = im.crop(bb)
-        alvo = ALTURA_ALVO_PX * 0.16
+        # 11% da altura do ator, não 16%: com 16% a xícara ficou do tamanho
+        # do tronco no primeiro vídeo com objeto em cena. Uma caneca tem
+        # ~10 cm contra 1,75 m de gente, e mesmo exagerando para cartoon o
+        # que se lê como "objeto de mão" para de ler bem acima de 12%.
+        alvo = ALTURA_ALVO_PX * 0.11
         k = alvo / max(im.height, 1)
         im = im.resize((max(int(im.width * k), 1), max(int(im.height * k), 1)),
                        Image.LANCZOS)
