@@ -2413,6 +2413,44 @@ def _quem_recebe(por_ator, na_mao, t, objetos):
                                  "escala": float(a.get("escala_objeto", 1.0))}
 
 
+def _um_dono_so(por_ator, na_mao, t):
+    """UM OBJETO ESTÁ NUMA MÃO SÓ. Devolve quem perdeu, ou None.
+
+    `entregar_objeto` resolve o caso em que alguém DÁ. Falta o caso em que
+    alguém TOMA: a Maya faz `pegar_objeto` com a xícara que o Pal está
+    segurando, e nada no spec diz que ele largou -- o roteirista escreveu
+    "toma da mão dele" e considerou o assunto encerrado, do mesmo jeito que
+    escreve "toma" na entrega. Sem esta regra os dois seguram a mesma
+    xícara, que é o defeito da rodada 11 do ciclo (e o terceiro membro da
+    mesma família: ver as leis 39 e 41).
+
+    Quem fica com a coisa é quem tem uma ação de objeto ATIVA agora, e a
+    mais recente delas ganha. Não havendo como decidir -- os dois pegando
+    no mesmo instante --, ninguém perde e o motor avisa: inventar um dono
+    aqui esconderia um spec ambíguo.
+    """
+    chaves = list(na_mao)
+    if len(chaves) != 2:
+        return None
+    a, b = chaves
+    ia, ib = na_mao.get(a), na_mao.get(b)
+    if ia is None or ib is None or id(ia["img"]) != id(ib["img"]):
+        return None
+
+    def pegou_quando(c):
+        return max([float(x.get("de", 0.0)) for x in (por_ator.get(c) or [])
+                    if x.get("nome") in ACOES.ACOES_PEGAM_OBJETO
+                    and x.get("objeto") and float(x.get("de", 0.0)) <= t],
+                   default=-1.0)
+
+    da, db = pegou_quando(a), pegou_quando(b)
+    if da == db:
+        return None
+    perdeu = a if da < db else b
+    na_mao[perdeu] = None
+    return perdeu
+
+
 def _acoes_por_ator(tr, chaves, falante):
     """Distribui as ações do trecho entre os atores.
 
@@ -2668,6 +2706,7 @@ def render(pasta_partes, spec, saida, tmpdir=None, amostra=0):
     n_empurrados = {}
     fora_de_cena = set()          # quem saiu andando no trecho anterior
     dupla_avisada = False         # o aviso de objeto duplicado sai uma vez
+    largou_avisado = set()        # quem já teve o objeto tomado da mão
     # OS FRAMES QUE A AMOSTRA QUER, em índice global. `total` já é a
     # duração real da voz, então dá para escolher antes de desenhar.
     quero, colhidos = None, []
@@ -2759,18 +2798,22 @@ def render(pasta_partes, spec, saida, tmpdir=None, amostra=0):
                 na_mao[chave] = _objeto_na_mao(por_ator[chave], t, objetos,
                                                na_mao.setdefault(chave, None))
             _quem_recebe(por_ator, na_mao, t, objetos)
-            # UM OBJETO, UMA MÃO. Guarda barata contra a família de bugs de
-            # estado que já apareceu duas vezes no ciclo (rodadas 6 e 10):
-            # os dois personagens segurando a mesma coisa ao mesmo tempo. É
-            # só um aviso -- corrigir aqui esconderia a causa --, mas ele
-            # aparece no log de todo render e não depende de alguém olhar a
-            # folha de contato no quadro certo.
+            # UM OBJETO, UMA MÃO. Quem toma da mão do outro fica com ele
+            # (ver `_um_dono_so`); o que não dá para decidir vira aviso no
+            # log, uma vez por render. O aviso é o que faz esta família de
+            # bug parar de depender de alguém olhar a folha de contato no
+            # quadro certo -- ela já apareceu de três jeitos diferentes.
+            _perdeu = _um_dono_so(por_ator, na_mao, t)
+            if _perdeu and _perdeu not in largou_avisado:
+                largou_avisado.add(_perdeu)
+                print(f"[objeto] {_perdeu} larga o objeto em "
+                      f"{n / float(FPS):.1f}s: o outro tomou da mao dele")
             _seguram = [c for c in chaves if na_mao.get(c) is not None]
             if len(_seguram) > 1 and not dupla_avisada:
                 if len({id(na_mao[c]["img"]) for c in _seguram}) < len(_seguram):
                     print(f"[objeto] AVISO: {' e '.join(_seguram)} seguram o "
-                          f"MESMO objeto em {n / float(FPS):.1f}s -- "
-                          f"entrega que nao esvaziou a mao de quem deu")
+                          f"MESMO objeto em {n / float(FPS):.1f}s e o spec "
+                          f"nao diz de quem ele e'")
                     dupla_avisada = True
 
             if quero is not None and n not in quero:
