@@ -1375,6 +1375,57 @@ def _girar(v, graus):
 
 
 
+def _destacar_objeto(img, esp=None):
+    """Põe um contorno escuro em volta do objeto.
+
+    POR QUE (visto no vídeo de 28/08 à noite)
+        A esquete era sobre um BOLETO, o boleto ficou a esquete inteira na
+        mão do Pal, e não aparece: papel branco com traço fino, sobre um
+        cenário claro, some. O objeto é a âncora da piada -- o roteiro é
+        cobrado a ter um justamente por isso --, e um objeto invisível é o
+        mesmo que não ter objeto nenhum.
+
+        As peças do personagem não têm esse problema porque a bíblia visual
+        exige `thick uniform black outline` nelas. O objeto vem de outro
+        pedido ao gerador e nem sempre volta com contorno grosso.
+
+    COMO
+        Dilatar o alfa e pintar de escuro por baixo do próprio objeto. Não
+        é sombra projetada (que precisaria saber de onde vem a luz): é o
+        mesmo recurso do desenho animado, a linha que separa a figura do
+        fundo. Funciona com qualquer arte e não depende da cor dela.
+
+    A espessura sai da MENOR dimensão e tem teto: pela maior, a carteira --
+    que é larga e baixa -- ganhava uma moldura preta de 6px que competia
+    com o próprio desenho. O que se quer é a linha que separa do fundo, não
+    um quadro em volta.
+
+    A imagem CRESCE `r` de cada lado antes de dilatar. Sem isso o contorno
+    é cortado onde o objeto encosta na borda da arte, e o resultado é uma
+    linha em três lados -- pior que nenhuma.
+    """
+    base = img.convert("RGBA")
+    r = esp if esp is not None else max(2, min(4, int(round(min(base.size) * 0.02))))
+    folgada = Image.new("RGBA", (base.width + 2 * r, base.height + 2 * r),
+                        (0, 0, 0, 0))
+    folgada.alpha_composite(base, (r, r))
+    alfa = np.asarray(folgada)[..., 3]
+    if not alfa.any():
+        return img
+    # dilatação por deslocamento: r é pequeno (2 a 4px), e um max sobre os
+    # deslocamentos custa menos que uma convolução
+    grosso = alfa.copy()
+    for dy in range(-r, r + 1):
+        for dx in range(-r, r + 1):
+            if dx * dx + dy * dy > r * r:
+                continue
+            grosso = np.maximum(grosso, np.roll(np.roll(alfa, dy, 0), dx, 1))
+    fora = Image.new("RGBA", folgada.size, (26, 22, 20, 0))
+    fora.putalpha(Image.fromarray((grosso * 0.80).astype(np.uint8)))
+    fora.alpha_composite(folgada)
+    return fora
+
+
 def _pivo_de_pega(img):
     """Onde a mão segura o objeto.
 
@@ -1754,7 +1805,7 @@ def montar_frame(camada, cenario, cam, quadril_x=W / 2):
     return quadro
 
 
-def _enquadramento(i, n_trechos, n_atores, t):
+def _enquadramento(i, n_trechos, n_atores, t, centro_corpo=None):
     """Plano do trecho `i`: quanto a câmera fecha, e onde ela centra.
 
     POR QUE ISTO EXISTE
@@ -1790,11 +1841,27 @@ def _enquadramento(i, n_trechos, n_atores, t):
     else:
         base = ciclo[i % len(ciclo)]
     z = base * (1.0 + 0.035 * max(0.0, min(1.0, t)))
-    # fechar centrado no meio do quadro subiria o corte pelos pés e pela
-    # cabeça em partes iguais; puxar o centro para cima mantém a cara
-    # dentro do quadro, que é onde a piada acontece
-    fechado = (z - 1.0) / max(teto * 1.035 - 1.0, 1e-6)
-    return z, 0.5 - 0.10 * max(0.0, min(1.0, fechado))
+    # ONDE A CÂMERA CENTRA. Fechar no meio do quadro corta pés e cabeça em
+    # partes iguais; o certo é centrar em quem está em cena.
+    #
+    # `centro_corpo` é o meio do corpo, em fração da altura, e ele MUDA com
+    # o cenário: desde que os pés passaram a pousar no chão desenhado, o
+    # personagem pode estar a 78% do quadro (rua) ou a 95% (sala com o
+    # aparador na frente). O valor fixo que existia aqui puxava o corte
+    # para CIMA -- feito quando todo mundo ficava a 78% -- e nos cenários
+    # de chão baixo isso decepava os pés.
+    #
+    # Sem o parâmetro, cai no comportamento antigo: é o que os specs de
+    # conferência e o `enquadramento.py` usam.
+    if centro_corpo is None:
+        fechado = (z - 1.0) / max(teto * 1.035 - 1.0, 1e-6)
+        return z, 0.5 - 0.10 * max(0.0, min(1.0, fechado))
+    # o clamp mantém a janela dentro do quadro: centrar em 0,73 com zoom
+    # 1,12 pediria uma faixa que começa abaixo do topo e acaba fora da
+    # base, e o crop de `montar_frame` a empurraria de volta de qualquer
+    # jeito -- fazer a conta aqui deixa o número honesto no log.
+    meia = 0.5 / z
+    return z, max(meia, min(1.0 - meia, float(centro_corpo)))
 
 
 # =====================================================================
@@ -2037,7 +2104,10 @@ def render(pasta_partes, spec, saida, tmpdir=None):
         k = alvo / max(im.height, 1)
         im = im.resize((max(int(im.width * k), 1), max(int(im.height * k), 1)),
                        Image.LANCZOS)
-        objetos[nome] = im
+        # CONTORNO, depois de redimensionar: a espessura é fração do
+        # tamanho FINAL, senão ela encolhe junto com a arte e some
+        # justamente no objeto pequeno, que é o que mais precisa dela.
+        objetos[nome] = _destacar_objeto(im)
 
     # nenhum vídeo abre sem gatilho -- rede de segurança no motor
     ACOES.garantir_gancho(spec)
@@ -2128,14 +2198,15 @@ def render(pasta_partes, spec, saida, tmpdir=None):
     # ONDE OS PÉS ESTÃO, em repouso. Sai de um frame de teste, uma vez por
     # render: a escala do elenco (0,74 com dois em cena) muda essa altura, e
     # supô-la foi o que fez o personagem flutuar.
-    base_pes = None
+    base_pes, alt_corpo = None, None
     try:
         pers0, x0_, dy0 = elenco[padrao_ator]
         rig0 = merge(REST, {})
         rig0["quadril"] = [x0_, REST["quadril"][1] + dy0]
         bb0 = desenhar_personagem(pers0, rig0).getbbox()
-        base_pes = bb0[3] if bb0 else None
-        print(f"[chao] pes do elenco em y={base_pes}")
+        if bb0:
+            base_pes, alt_corpo = bb0[3], bb0[3] - bb0[1]
+        print(f"[chao] pes do elenco em y={base_pes}, corpo de {alt_corpo}px")
     except Exception as e:
         print(f"[chao] nao consegui medir os pes ({e}); "
               f"o personagem fica na altura do rig")
@@ -2197,6 +2268,13 @@ def render(pasta_partes, spec, saida, tmpdir=None):
         corte = cenarios[cen].ponto_do_trecho(i_tr)
         cortes.append(f"{corte / max(cenarios[cen].faixa, 1):.2f}")
 
+        # ONDE A CÂMERA CENTRA neste cenário: o meio do corpo, que depende
+        # da linha do chão dele. Sem isto o zoom mira sempre a mesma altura
+        # e corta os pés nos cenários de chão baixo.
+        centro_corpo = None
+        if base_pes and alt_corpo:
+            centro_corpo = (cenarios[cen].chao_y - alt_corpo * 0.45) / H
+
         falante = tr.get("ator") if tr.get("ator") in elenco else padrao_ator
         por_ator = _acoes_por_ator(tr, chaves, falante)
         nf = max(1, int(tr["dur"] * FPS))
@@ -2244,7 +2322,8 @@ def render(pasta_partes, spec, saida, tmpdir=None):
             # ENQUADRAMENTO DO TRECHO, por cima do que a ação já pediu: a
             # ação usa zoom para pontuar um susto, e isso continua valendo
             # -- os dois se multiplicam em vez de um apagar o outro.
-            z_tr, zy = _enquadramento(i_tr, n_trechos, len(chaves), t)
+            z_tr, zy = _enquadramento(i_tr, n_trechos, len(chaves), t,
+                                      centro_corpo)
             cam["zoom"] = float(cam.get("zoom", 1.0)) * z_tr
             # ação que mira o quadro em outra altura (o `susto` mira 0,34)
             # manda: ela sabe o que está pontuando. Fora isso, vale a altura
