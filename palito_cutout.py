@@ -59,7 +59,7 @@ Uso:
 """
 import argparse, json, math, os, subprocess, sys, tempfile
 import numpy as np
-from PIL import Image, ImageDraw, ImageFilter
+from PIL import Image, ImageDraw, ImageFilter, ImageFont
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from palito_v4 import REST, POSES, EXPRESSOES, merge, blend, pt
@@ -136,6 +136,36 @@ MAX_EM_CENA = 2
 # =====================================================================
 # Composição: girar em torno do pivô e colar no destino
 # =====================================================================
+# A MESMA PEÇA, NA MESMA ESCALA, TODO FRAME (29/08). `escala` é a escala
+# do personagem: 0,74 com dois em cena, e ela não muda durante o render.
+# Sem cache, cada uma das ~20 peças era reduzida com LANCZOS a cada frame
+# -- 16 mil reduções idênticas num vídeo de 800 frames, e LANCZOS é o
+# reamostrador mais caro que existe no Pillow (é o certo aqui: reduzir arte
+# de traço com um filtro barato serrilha o contorno).
+#
+# A chave guarda a imagem ORIGINAL junto: sem isso a chave seria um id()
+# de objeto que pode ser coletado e reciclado, e o cache devolveria a peça
+# de outra coisa. O teto existe porque `cranio_com_cara` produz uma imagem
+# por expressão -- poucas, mas não uma só.
+_CACHE_ESCALA = {}
+_TETO_CACHE_ESCALA = 400
+
+
+def _na_escala(img, escala):
+    if escala == 1.0:
+        return img
+    chave = (id(img), round(escala, 4))
+    achado = _CACHE_ESCALA.get(chave)
+    if achado is not None and achado[0] is img:
+        return achado[1]
+    if len(_CACHE_ESCALA) >= _TETO_CACHE_ESCALA:
+        _CACHE_ESCALA.clear()
+    p = img.resize((max(int(img.width * escala), 1),
+                    max(int(img.height * escala), 1)), Image.LANCZOS)
+    _CACHE_ESCALA[chave] = (img, p)
+    return p
+
+
 def colar(base, img, pivot, destino, ang, escala=1.0, espelhar=False):
     """Gira `img` em torno de `pivot` e cola de modo que o pivô caia em `destino`.
 
@@ -146,8 +176,7 @@ def colar(base, img, pivot, destino, ang, escala=1.0, espelhar=False):
         p = p.transpose(Image.FLIP_LEFT_RIGHT)
         pivot = (p.width - pivot[0], pivot[1])
     if escala != 1.0:
-        nw, nh = int(p.width * escala), int(p.height * escala)
-        p = p.resize((nw, nh), Image.LANCZOS)
+        p = _na_escala(p, escala)
         pivot = (pivot[0] * escala, pivot[1] * escala)
 
     # expand=False mantem o sistema de coordenadas: o pivo nao se move
@@ -1480,7 +1509,7 @@ def _pivo_de_pega(img):
 
 
 def desenhar_personagem(pers, rig, boca_nivel=0.0, piscando=False, objeto=None,
-                        expr=None):
+                        expr=None, saida_pos=None):
     """Monta o personagem numa CAMADA transparente do tamanho do quadro.
 
     O corpo é percorrido como ÁRVORE, do quadril para fora: a posição de
@@ -1594,12 +1623,19 @@ def desenhar_personagem(pers, rig, boca_nivel=0.0, piscando=False, objeto=None,
         if "boca" in pos:
             pos["boca"] = (pos["boca"][0], pos["boca"][1] + queda)
 
+    # onde cada peça ficou na TELA. Só as ferramentas de conferência
+    # pedem (`ombro.py` precisa saber onde estão as juntas para não
+    # confundir vão de articulação com o vão entre o braço e o corpo).
+    if saida_pos is not None:
+        saida_pos.update(pos)
+
     # --- desenho, de trás para frente
     for nome in ORDEM_Z:
         if nome not in pos or not pers.tem(nome):
             continue
         if piscando and nome in ("olho_e", "olho_d"):
             continue        # piscar = simplesmente não desenhar o olho
+
 
         # INTERIOR DA BOCA. O maxilar desce e deixa um buraco entre ele e o
         # crânio -- e por esse buraco aparecia o CENÁRIO, porque o entalhe
@@ -1775,16 +1811,43 @@ def _sombra_de_contato(quadro, camada, chao_y):
     larg = (x1 - x0) * (0.42 + 0.22 * k)
     alt = max(6.0, larg * 0.15)
     cx = (x0 + x1) / 2.0
-    tinta = Image.new("RGBA", (W, H), (0, 0, 0, 0))
-    ImageDraw.Draw(tinta).ellipse(
-        [cx - larg / 2, chao_y - alt / 2, cx + larg / 2, chao_y + alt / 2],
-        fill=(30, 26, 22, int(96 * (0.45 + 0.55 * k))))
-    tinta = tinta.filter(ImageFilter.GaussianBlur(max(2, int(alt * 0.35))))
-    quadro.alpha_composite(tinta)
+    # SÓ A CAIXA DA ELIPSE, não a tela inteira. O borrão gaussiano custa
+    # pelo número de pixels, e uma sombra ocupa ~2% de um quadro 1080x1920:
+    # borrar o quadro todo era 98% de trabalho em cima de transparência.
+    # Passou a doer quando a sombra virou uma POR ator (29/08) e o custo
+    # dobrou -- 1,2s por frame viraram 2s.
+    raio = max(2, int(alt * 0.35))
+    m = raio * 3 + 4                                   # margem para o borrão
+    cx0, cy0 = int(cx - larg / 2 - m), int(chao_y - alt / 2 - m)
+    cw, ch = int(larg + 2 * m), int(alt + 2 * m)
+    if cw <= 0 or ch <= 0:
+        return
+    tinta = Image.new("RGBA", (cw, ch), (0, 0, 0, 0))
+    ImageDraw.Draw(tinta).ellipse([m, m, m + larg, m + alt],
+                                  fill=(30, 26, 22, int(96 * (0.45 + 0.55 * k))))
+    tinta = tinta.filter(ImageFilter.GaussianBlur(raio))
+    # o pedaço que cai dentro do quadro (a sombra de quem está saindo de
+    # cena fica meio para fora)
+    rx0, ry0 = max(-cx0, 0), max(-cy0, 0)
+    rx1, ry1 = min(cw, W - cx0), min(ch, H - cy0)
+    if rx1 <= rx0 or ry1 <= ry0:
+        return
+    quadro.alpha_composite(tinta.crop((rx0, ry0, rx1, ry1)),
+                           (cx0 + rx0, cy0 + ry0))
 
 
-def montar_frame(camada, cenario, cam, quadril_x=W / 2):
-    """Junta personagem + cenário aplicando o que a câmera pediu."""
+def deformar_ator(camada, cam, quadril_x=W / 2):
+    """Espelhar, achatar e o squash da passada -- as três deformações que
+    são do CORPO de um ator, não do quadro.
+
+    POR QUE ELAS SAÍRAM DE `montar_frame` (29/08)
+        Lá elas se aplicavam à camada JUNTA, e o `cam` que chegava era o do
+        falante. Com dois em cena isso é o movimento de um deformando o
+        outro: `virar` (espelhar + achatar até 0,04) achatava a cena
+        inteira contra o quadril de quem virou, e o `escala_y` da caminhada
+        de um comprimia quem estava parado do lado. Ninguém tinha visto
+        porque `virar` nunca havia entrado num spec de dois.
+    """
     if cam.get("espelhar"):
         # espelhar em torno do PRÓPRIO personagem, não do centro da tela:
         # espelhar a tela inteira teleportaria o corpo para o outro lado
@@ -1814,17 +1877,66 @@ def montar_frame(camada, cenario, cam, quadril_x=W / 2):
             nova = Image.new("RGBA", (W, H), (0, 0, 0, 0))
             nova.alpha_composite(red, (0, int(chao - chao * esc_y)))
             camada = nova
+    return camada
+
+
+def montar_frame(camada, cenario, cam, quadril_x=W / 2, camadas=None,
+                 centro_x=None):
+    """Junta personagem + cenário aplicando o que a câmera pediu.
+
+    `camadas` são os atores SEPARADOS, e existem por dois motivos. A
+    SOMBRA: com dois em cena, a caixa da camada junta vai do braço de um ao
+    braço do outro, e a elipse virava uma mancha só ligando os dois pés --
+    lê como um tapete escuro, não como contato. Uma sombra por corpo. E as
+    DEFORMAÇÕES: quando elas vêm, cada ator já chega deformado pelo que ele
+    mesmo fez (`deformar_ator`), e aqui não se mexe mais nelas."""
+    if camadas is None:
+        camada = deformar_ator(camada, cam, quadril_x)
 
     quadro = cenario.quadro(cam.get("fundo_dx", 0.0)).convert("RGBA")
     if cam.get("chao_y"):
-        _sombra_de_contato(quadro, camada, float(cam["chao_y"]))
+        for c in (camadas or [camada]):
+            _sombra_de_contato(quadro, c, float(cam["chao_y"]))
     quadro.alpha_composite(camada)
     quadro = quadro.convert("RGB")
 
     z = float(cam.get("zoom", 1.0))
+    # O ZOOM NÃO FECHA MAIS DO QUE O CORPO PERMITE (29/08).
+    #
+    # O teto de plano é 1,30 com um ator em cena, e ele foi escolhido
+    # quando o personagem ficava a 78% do quadro e media ~850 px. Com os
+    # pés no chão desenhado ele mede 1151 px, e uma ação que estende o
+    # braço (`tropecar`, `susto`, `comemorar`) põe a silhueta em ~700 px de
+    # largura: a janela de 831 px que o zoom 1,30 recorta não cabe, e o
+    # braço sai cortado pela borda -- foi o que a rodada 4 do ciclo
+    # mostrou.
+    #
+    # Aqui o teto vem do CORPO, não da tabela: mede-se a silhueta que
+    # existe neste frame e limita-se o zoom ao que a comporta, com uma
+    # margem de respiro. Só limita, nunca aumenta -- o plano continua
+    # sendo o que `_enquadramento` pediu quando ele cabe.
+    if camadas and z > 1.002:
+        bb = camada.getbbox()
+        if bb:
+            larg = max(bb[2] - bb[0], 1)
+            alt = max(bb[3] - bb[1], 1)
+            cabe = min(W / (larg * 1.10), H / (alt * 1.04))
+            if cabe < z:
+                z = max(1.0, cabe)
     if abs(z - 1.0) > 0.002:
         lw, lh = W / z, H / z
-        cx, cy = W * 0.5, H * float(cam.get("zoom_y", 0.5))
+        # ONDE A CÂMERA CENTRA NA HORIZONTAL. Era o meio do quadro, sempre,
+        # e com dois em cena isso está certo -- eles ficam simétricos em
+        # torno dele. Errado é quando UM sai: o que fica está a 0,27 ou a
+        # 0,73 do quadro, e fechar no meio deixa metade da tela de parede
+        # vazia com o personagem encostado na borda. `centro_x` é o meio
+        # de quem está EM CENA, e vem dos quadris, não da silhueta: o bbox
+        # muda com cada gesto e faria a câmera tremer junto com os braços.
+        cx = W * 0.5 if centro_x is None else float(centro_x)
+        # nunca até o fim: enquadrar exatamente no boneco tira o cenário do
+        # quadro e o corte deixa de ter lugar nenhum
+        cx = W * 0.5 + (cx - W * 0.5) * 0.75
+        cy = H * float(cam.get("zoom_y", 0.5))
         x0 = min(max(cx - lw / 2, 0), W - lw)
         y0 = min(max(cy - lh / 2, 0), H - lh)
         quadro = quadro.crop((int(x0), int(y0), int(x0 + lw), int(y0 + lh))
@@ -1951,7 +2063,7 @@ def _carregar_elenco(spec, pasta_padrao):
               f"{MAX_EM_CENA}: fico com "
               f"{', '.join(list(elenco)[:MAX_EM_CENA])}")
         elenco = {k: elenco[k] for k in list(elenco)[:MAX_EM_CENA]}
-    fora = {}
+    fora, pedidos = {}, {}
     n = len(elenco)
     for i, (chave, cfg) in enumerate(elenco.items()):
         cfg = cfg if isinstance(cfg, dict) else {"pasta": cfg}
@@ -1966,7 +2078,9 @@ def _carregar_elenco(spec, pasta_padrao):
         # aberto, dois na cena" em vez de "close que deu errado".
         p.escala *= float(cfg.get("escala", 1.0 if n == 1 else 0.74))
         fora[chave] = (p, float(cfg.get("x", padrao)))
-    return _alinhar_pelos_pes(fora)
+        pedidos[chave] = "x" in cfg
+    fora = _alinhar_pelos_pes(fora)
+    return _afastar_o_bastante(fora, pedidos)
 
 
 def _alinhar_pelos_pes(elenco):
@@ -1990,7 +2104,8 @@ def _alinhar_pelos_pes(elenco):
     for chave, (pers, x) in elenco.items():
         rig = merge(REST, {})
         rig["quadril"] = [W / 2.0, REST["quadril"][1]]
-        bb = desenhar_personagem(pers, rig).getbbox()
+        img = desenhar_personagem(pers, rig)
+        bb = img.getbbox()
         base = bb[3] if bb else REST["quadril"][1]
         if base_ref is None:
             base_ref = base
@@ -1998,8 +2113,150 @@ def _alinhar_pelos_pes(elenco):
         if abs(dy) > 1:
             print(f"[elenco] {chave}: {dy:+.0f}px em y para pisar na mesma "
                   f"linha do chao")
+        _medir_corpo(pers, img, bb)
         fora[chave] = (pers, x, float(dy))
     return fora
+
+
+# NINGUÉM ATRAVESSA NINGUÉM (29/08) ------------------------------------
+# Uma coluna da imagem pertence ao CORPO se ela tem pelo menos esta fração
+# da altura da figura preenchida. É o que separa tronco, cabeça e pernas
+# -- que ocupam a coluna inteira -- de um braço estendido, que numa coluna
+# ocupa a espessura do braço. Medido nos três personagens de produção: a
+# 45% o Pal em repouso dá 258px de corpo e 558px de silhueta, e `apontar`
+# muda a silhueta de 558 para 689 sem mexer no corpo. Abaixo de 30% o
+# braço caído entra na conta; acima de 65% a cabeça sai dela.
+LIMIAR_CORPO = 0.45
+# O vão que fica entre dois corpos. Não é estética: encostado, o contorno
+# preto de um vira contorno do outro e os dois lêem como uma figura só.
+FOLGA_ENTRE_ATORES = 40.0
+
+
+def _medir_corpo(pers, img, bb):
+    """Quanto o CORPO deste personagem ocupa à esquerda e à direita do
+    quadril, em pixels de tela. Guardado no próprio Personagem.
+
+    POR QUE MEDIR, E POR QUE UMA VEZ SÓ
+        As posições padrão (0,27 e 0,73 de 1080) deixam 488px entre os dois
+        quadris, e esse número foi escolhido no olho. Medido: o Pal ocupa
+        279px para cada lado em REPOUSO -- os dois já se tocavam parados,
+        antes de qualquer ação. Supor a largura é o mesmo erro que supor a
+        linha do chão (§4.42) e o pivô: mede-se.
+
+        Uma vez só porque o corpo quase não muda de largura -- é o braço
+        que abre, e braço que passa na frente do outro é linguagem normal
+        de cut-out. O que não se aceita é dois troncos no mesmo lugar.
+    """
+    pers.meia_esq = pers.meia_dir = 130.0
+    if not bb:
+        return
+    alt = max(bb[3] - bb[1], 1)
+    col = (np.asarray(img)[..., 3] > 32).sum(axis=0)
+    cheias = np.nonzero(col >= alt * LIMIAR_CORPO)[0]
+    if not len(cheias):
+        cheias = np.nonzero(col)[0]
+    if not len(cheias):
+        return
+    # a passada abre as pernas; a folga cobre o que a medida em repouso não vê
+    pers.meia_esq = max(W / 2.0 - float(cheias[0]), 60.0)
+    pers.meia_dir = max(float(cheias[-1]) - W / 2.0, 60.0)
+
+
+def _afastar_o_bastante(elenco, pedidos=None):
+    """Abre as posições padrão até os corpos caberem lado a lado.
+
+    Só mexe em quem NÃO teve `x` pedido no spec: posição escrita à mão é
+    decisão de quem escreveu, e a guarda por frame (`_separar`) continua
+    valendo para ela de qualquer jeito."""
+    if len(elenco) != 2:
+        return elenco
+    chaves = sorted(elenco, key=lambda c: elenco[c][1])
+    a, b = chaves
+    (pa, xa, dya), (pb, xb, dyb) = elenco[a], elenco[b]
+    minimo = pa.meia_dir + pb.meia_esq + FOLGA_ENTRE_ATORES
+    if xb - xa >= minimo:
+        return elenco
+    meio = (xa + xb) / 2.0
+    nxa, nxb = meio - minimo / 2.0, meio + minimo / 2.0
+    # dentro do quadro: o corpo inteiro tem que aparecer
+    nxa = max(nxa, pa.meia_esq + 8.0)
+    nxb = min(nxb, W - pb.meia_dir - 8.0)
+    if (pedidos or {}).get(a):
+        nxa = xa
+    if (pedidos or {}).get(b):
+        nxb = xb
+    print(f"[elenco] corpos de {minimo:.0f}px: {a} e {b} de "
+          f"({xa:.0f}, {xb:.0f}) para ({nxa:.0f}, {nxb:.0f})")
+    elenco[a] = (pa, nxa, dya)
+    elenco[b] = (pb, nxb, dyb)
+    return elenco
+
+
+def colunas_de_corpo(img, bb=None):
+    """As colunas de tela em que esta figura tem CORPO.
+
+    Não silhueta: uma coluna atravessada só pelo braço tem a espessura do
+    braço preenchida, e braço passando na frente do outro personagem é
+    linguagem normal de cut-out. Tronco dentro de tronco não é."""
+    bb = bb or img.getbbox()
+    if not bb:
+        return np.zeros(W, dtype=bool)
+    alt = max(bb[3] - bb[1], 1)
+    return (np.asarray(img)[..., 3] > 32).sum(axis=0) >= alt * LIMIAR_CORPO
+
+
+def _transladar(img, dx):
+    """Move a camada em x. Um deslocamento do quadril translada o desenho
+    inteiro rigidamente -- toda peça sai da posição do quadril por somas --,
+    então mover a imagem pronta dá exatamente o mesmo resultado que
+    redesenhar, e custa uma cópia em vez de uma árvore de peças."""
+    if abs(dx) < 0.5:
+        return img
+    nova = Image.new("RGBA", (W, H), (0, 0, 0, 0))
+    nova.paste(img, (int(round(dx)), 0))
+    return nova
+
+
+def _separar(camadas, ordem, elenco=None):
+    """NINGUÉM ATRAVESSA NINGUÉM. Mede os dois corpos já desenhados e
+    devolve `{chave: dx}` -- o quanto cada um tem que ceder neste frame.
+
+    POR QUE MEDIR OS PIXELS, E NÃO A LARGURA GUARDADA
+        A primeira versão desta guarda era aritmética: meia-largura medida
+        uma vez em repouso, contas sobre o x do quadril. Ela cobria as
+        ações em pé e passou em dez das onze da régua -- e falhou em
+        `cair`, que DEITA o personagem. Deitado, o corpo mede 700px de
+        largura em vez de 250, e nenhuma medida tirada em pé sabe disso.
+
+        Largura de corpo não é propriedade do personagem, é do frame. Aqui
+        ela é lida do frame: custa uma soma por coluna sobre o canal alfa
+        (~2ms), contra os ~200ms de desenhar a árvore de peças.
+
+    A ordem esquerda/direita vem da posição BASE e nunca inverte: sem isso,
+    alguém atravessando seria "corrigido" para o outro lado no meio do
+    movimento, o que é pior que a colisão.
+    """
+    if len(ordem) != 2:
+        return None
+    a, b = ordem
+    ca, cb = colunas_de_corpo(camadas[a]), colunas_de_corpo(camadas[b])
+    xa, xb = np.nonzero(ca)[0], np.nonzero(cb)[0]
+    if not len(xa) or not len(xb):
+        return None                     # alguém ainda fora do quadro
+    falta = (xa[-1] + FOLGA_ENTRE_ATORES) - xb[0]
+    if falta <= 0:
+        return None
+    # cada um cede metade, e nenhum dos dois sai do quadro
+    da, db = -falta / 2.0, falta / 2.0
+    folga_esq = float(xa[0])                     # o quanto o da esquerda
+    folga_dir = float(W - 1 - xb[-1])            # ainda pode recuar
+    if -da > folga_esq:
+        db += (-da - folga_esq)
+        da = -folga_esq
+    if db > folga_dir:
+        da -= (db - folga_dir)
+        db = folga_dir
+    return {a: da, b: db}
 
 
 def _pastas(spec, pasta_partes, chave_spec, padroes):
@@ -2070,11 +2327,83 @@ def _objeto_na_mao(acoes_do_ator, t, objetos, atual):
         if a.get("nome") in ACOES.ACOES_LARGAM_OBJETO:
             atual = None
             continue
+        # ENTREGAR ESVAZIA A MÃO NO FIM DA AÇÃO. Ver
+        # ACOES_ENTREGAM_OBJETO: durante o gesto a coisa tem que estar na
+        # mão (é o que se está oferecendo); passado o gesto, ela é de quem
+        # recebeu. Sem isto o objeto se duplica e os dois seguram uma
+        # marmita cada -- o defeito da rodada 6 do ciclo.
+        if a.get("nome") in ACOES.ACOES_ENTREGAM_OBJETO \
+                and t >= float(a.get("ate", 1.0)):
+            atual = None
+            continue
         nome = a.get("objeto")
         if nome in objetos:
             atual = {"img": objetos[nome], "mao": a.get("mao", "d"),
                      "escala": float(a.get("escala_objeto", 1.0))}
     return atual
+
+
+def _quem_saiu(por_ator):
+    """Quem terminou este trecho FORA do quadro.
+
+    É `sair_andando` chegando ao fim da fala: quem sai no meio dela volta
+    andando pela lógica normal das ações."""
+    return {c for c, acoes in por_ator.items()
+            if any(a.get("nome") in ACOES.ACOES_DE_SAIDA
+                   and float(a.get("ate", 1.0)) >= 0.95 for a in acoes)}
+
+
+def _fazer_voltar(por_ator, fora_de_cena):
+    """Quem saiu de cena volta ENTRANDO, não aparecendo.
+
+    O primeiro vídeo do ciclo mostrou o defeito inteiro em quatro segundos:
+    o Pal sai andando no fim de um trecho e, no trecho seguinte, está de
+    volta parado no lugar dele. O corte de plano entre trechos justifica
+    muita coisa -- mas não alguém que a plateia acabou de ver indo embora.
+
+    A entrada é curta e no começo da fala: ele chega falando, que é como
+    uma pessoa volta para discutir."""
+    for chave in list(fora_de_cena):
+        acoes = por_ator.get(chave)
+        if acoes is None:
+            continue
+        if any(a.get("nome") in ACOES.ACOES_DE_ENTRADA for a in acoes):
+            continue
+        por_ator[chave] = [{
+            "nome": "entrar_andando", "de": 0.0, "ate": 0.3,
+            "motivo": "voltou a cena; sem isto ele reapareceria no lugar "
+                      "de onde a plateia acabou de ve-lo sair"}] + acoes
+        print(f"[cena] {chave} tinha saido: volta entrando")
+
+
+def _quem_recebe(por_ator, na_mao, t, objetos):
+    """Entregar é PASSAR: o que sai de uma mão entra na outra.
+
+    `_objeto_na_mao` já esvazia a mão de quem entregou. Falta pôr a coisa
+    na mão de quem recebeu, e isso o spec quase nunca escreve -- o
+    roteirista diz "toma" e considera o assunto encerrado. Sem esta parte,
+    o objeto simplesmente desaparece da cena no meio da esquete, que é pior
+    que a duplicação que ela conserta: a âncora da piada some.
+
+    Só age quando o outro ator está de mãos vazias. Se ele já pegou o
+    objeto por conta própria (uma ação de objeto no trecho dele), o spec
+    manda."""
+    if len(por_ator) != 2:
+        return
+    for quem, acoes in por_ator.items():
+        outro = next(c for c in por_ator if c != quem)
+        if na_mao.get(quem) is not None or na_mao.get(outro) is not None:
+            continue
+        for a in acoes:
+            if a.get("nome") not in ACOES.ACOES_ENTREGAM_OBJETO:
+                continue
+            if t < float(a.get("ate", 1.0)):
+                continue
+            nome = a.get("objeto")
+            if nome in objetos:
+                na_mao[outro] = {"img": objetos[nome],
+                                 "mao": "e" if a.get("mao", "d") == "d" else "d",
+                                 "escala": float(a.get("escala_objeto", 1.0))}
 
 
 def _acoes_por_ator(tr, chaves, falante):
@@ -2091,7 +2420,45 @@ def _acoes_por_ator(tr, chaves, falante):
     return por
 
 
-def render(pasta_partes, spec, saida, tmpdir=None):
+def _folha(colhidos, saida, larg=300):
+    """Os quadros da amostra numa grade, com o segundo de cada um."""
+    if not colhidos:
+        return saida
+    saida = os.path.splitext(saida)[0] + "_previa.png"
+    alt = int(larg * H / W)
+    cols = min(5, len(colhidos))
+    linhas = (len(colhidos) + cols - 1) // cols
+    folha = Image.new("RGB", (cols * larg, linhas * alt), "#141414")
+    try:
+        fonte = ImageFont.truetype("segoeuib.ttf", max(13, larg // 16))
+    except OSError:
+        fonte = ImageFont.load_default()
+    for i, (s, q) in enumerate(colhidos):
+        x, y = (i % cols) * larg, (i // cols) * alt
+        folha.paste(q.resize((larg, alt), Image.LANCZOS), (x, y))
+        d = ImageDraw.Draw(folha)
+        rot = f"{s:.1f}s"
+        cx = d.textbbox((0, 0), rot, font=fonte)
+        d.rectangle([x + 4, y + 4, x + 12 + cx[2], y + 10 + cx[3]], fill=(0, 0, 0))
+        d.text((x + 8, y + 6), rot, font=fonte, fill="#FFD54A")
+    folha.save(saida)
+    print(f"[previa] {len(colhidos)} quadros -> {saida}")
+    return saida
+
+
+def render(pasta_partes, spec, saida, tmpdir=None, amostra=0):
+    """O vídeo inteiro, ou uma AMOSTRA dele.
+
+    `amostra=N` desenha só N frames igualmente espaçados e devolve uma
+    folha de contato em vez do MP4. Existe porque o ciclo de melhoria é
+    olhar-corrigir-olhar, e um render completo custa ~12 min para uma
+    pergunta que 12 quadros respondem: os personagens se atravessam? a
+    câmera cortou a cabeça de alguém? o objeto está na mão?
+
+    Tudo o que vem antes do desenho continua rodando igual -- a voz, a
+    timeline, a trilha, a legenda, o cenário --, então os quadros da
+    amostra são os quadros do vídeo, no mesmo instante. O que se pula é
+    desenhar os outros 550."""
     from palito_v5 import sintetizar, envelope, juntar_com_respiro
     tmp = tmpdir or tempfile.mkdtemp()
     fd = os.path.join(tmp, "frames"); os.makedirs(fd, exist_ok=True)
@@ -2099,6 +2466,37 @@ def render(pasta_partes, spec, saida, tmpdir=None):
     elenco = _carregar_elenco(spec, pasta_partes)
     chaves = list(elenco)
     padrao_ator = chaves[0]
+    # A ORDEM ESQUERDA→DIREITA, decidida uma vez pela posição base. É por
+    # ela que `_separar` sabe quem empurrar para que lado, e ela não muda
+    # durante o vídeo: quem está à esquerda continua à esquerda mesmo que
+    # uma ação o jogue para o lado.
+    ordem_x = sorted(chaves, key=lambda c: elenco[c][1])
+
+    # A ALTURA DE VERDADE DO ATOR, medida num frame de repouso. Ela decide
+    # dois números: onde os pés pousam (o chão desenhado, §4.42) e o
+    # TAMANHO DOS OBJETOS.
+    #
+    # Até 29/08 o objeto era medido contra `ALTURA_ALVO_PX`, uma constante
+    # de 1150. Só que a altura do ator não é constante: com dois em cena a
+    # escala cai para 0,74 e o corpo mede 852 px. Todo objeto saía 35%
+    # maior do que a fração pedida -- o guarda-chuva de 40% virava 54% da
+    # altura do ator, o que é o "objeto enorme atravessando o corpo" da
+    # rodada 3 do ciclo. E como as três rodadas de 28/08 tinham dois em
+    # cena, a calibração de `TAMANHO_OBJETO` foi feita inteira com esse
+    # erro embutido.
+    base_pes, alt_corpo = None, None
+    try:
+        pers0, x0_, dy0 = elenco[padrao_ator]
+        rig0 = merge(REST, {})
+        rig0["quadril"] = [x0_, REST["quadril"][1] + dy0]
+        bb0 = desenhar_personagem(pers0, rig0).getbbox()
+        if bb0:
+            base_pes, alt_corpo = bb0[3], bb0[3] - bb0[1]
+        print(f"[chao] pes do elenco em y={base_pes}, corpo de {alt_corpo}px")
+    except Exception as e:
+        print(f"[chao] nao consegui medir os pes ({e}); "
+              f"o personagem fica na altura do rig")
+    altura_ator = float(alt_corpo or ALTURA_ALVO_PX)
 
     pastas_objeto = _pastas(spec, pasta_partes, "pasta_objetos", ("objetos", "objeto"))
 
@@ -2138,7 +2536,9 @@ def render(pasta_partes, spec, saida, tmpdir=None):
         # tronco em 27/08, e os 11% que resolveram aquilo fizeram o boleto
         # sumir em 28/08 -- uma folha de papel na mão ocupa um quarto da
         # altura de uma pessoa, não um décimo.
-        alvo = ALTURA_ALVO_PX * TAMANHO_OBJETO.get(nome, TAMANHO_OBJETO_PADRAO)
+        # contra a altura MEDIDA do ator, não contra a constante: ver o
+        # comentário em `altura_ator`, logo acima
+        alvo = altura_ator * TAMANHO_OBJETO.get(nome, TAMANHO_OBJETO_PADRAO)
         # pela MAIOR dimensão, não pela altura: o boleto e o controle são
         # desenhados deitados, e medir a altura deles deixava o objeto do
         # tamanho de um cartão. O que se lê como tamanho é o lado maior.
@@ -2236,21 +2636,8 @@ def render(pasta_partes, spec, saida, tmpdir=None):
         print(f"[legenda] {len(leg.blocos)} blocos"
               + ("" if any(marcas_por_trecho) else " (sem WordBoundary: tempo repartido)"))
 
-    # ONDE OS PÉS ESTÃO, em repouso. Sai de um frame de teste, uma vez por
-    # render: a escala do elenco (0,74 com dois em cena) muda essa altura, e
-    # supô-la foi o que fez o personagem flutuar.
-    base_pes, alt_corpo = None, None
-    try:
-        pers0, x0_, dy0 = elenco[padrao_ator]
-        rig0 = merge(REST, {})
-        rig0["quadril"] = [x0_, REST["quadril"][1] + dy0]
-        bb0 = desenhar_personagem(pers0, rig0).getbbox()
-        if bb0:
-            base_pes, alt_corpo = bb0[3], bb0[3] - bb0[1]
-        print(f"[chao] pes do elenco em y={base_pes}, corpo de {alt_corpo}px")
-    except Exception as e:
-        print(f"[chao] nao consegui medir os pes ({e}); "
-              f"o personagem fica na altura do rig")
+    # (a altura do ator e a linha dos pés já foram medidas lá em cima, no
+    # carregamento: o tamanho dos objetos depende delas)
 
     pastas_cenario = _pastas(spec, pasta_partes, "pasta_cenarios", ("cenarios", "cenario"))
     # O QUE EXISTE DE VERDADE, medido uma vez. É contra esta lista que o
@@ -2271,6 +2658,30 @@ def render(pasta_partes, spec, saida, tmpdir=None):
     na_mao = {c: None for c in chaves}
     n_trechos = len(spec["trechos"])
     planos, cortes = [], []
+    n_empurrados = {}
+    fora_de_cena = set()          # quem saiu andando no trecho anterior
+    # OS FRAMES QUE A AMOSTRA QUER, em índice global. `total` já é a
+    # duração real da voz, então dá para escolher antes de desenhar.
+    quero, colhidos = None, []
+    if amostra:
+        n_total = max(int(total * FPS), 1)
+        # QUADROS IGUALMENTE ESPAÇADOS MENTEM SOBRE MOVIMENTO CÍCLICO.
+        #
+        # A passada tem 1,7 ciclos por segundo e a amostra pega um quadro a
+        # cada ~1,5 s: os instantes caem quase sempre na mesma fase do
+        # ciclo, e a folha mostra o personagem na mesma pose doze vezes. Foi
+        # o que fez a rodada 4 do ciclo concluir que "ele não anda" -- e
+        # medido depois, o pé percorre 129 px por passada, que se vê muito
+        # bem no vídeo.
+        #
+        # O passo áureo desalinha a amostra de qualquer período: o
+        # deslocamento dentro de cada intervalo nunca se repete, então duas
+        # fases iguais seguidas deixam de ser o caso comum. Continua
+        # determinístico e continua cobrindo o vídeo inteiro em ordem.
+        phi = 0.6180339887
+        quero = {min(int(n_total * (i + (i * phi) % 1.0) / amostra),
+                     n_total - 1)
+                 for i in range(amostra)}
     for i_tr, tr in enumerate(spec["trechos"]):
         pedido = tr.get("cenario") or CENARIOS.escolher(tr.get("fala", ""))
         cen, motivo = CENARIOS.resolver(pedido, inventario, tr.get("fala"))
@@ -2318,15 +2729,25 @@ def render(pasta_partes, spec, saida, tmpdir=None):
 
         falante = tr.get("ator") if tr.get("ator") in elenco else padrao_ator
         por_ator = _acoes_por_ator(tr, chaves, falante)
+        _fazer_voltar(por_ator, fora_de_cena)
+        fora_de_cena = _quem_saiu(por_ator)
         nf = max(1, int(tr["dur"] * FPS))
         cam = dict(ACOES.CAM_NEUTRA)
         for f in range(nf):
             fh = (f // 2) * 2                       # animar "em 2s"
             t = fh / max(1, nf - 1)
             nivel = env[n] if n < len(env) else 0.0
+            if quero is not None and n not in quero:
+                n += 1                              # amostra: pula o desenho
+                continue
 
             camada = Image.new("RGBA", (W, H), (0, 0, 0, 0))
+            por_ator_camada = []
             cam_falante, x_falante = dict(ACOES.CAM_NEUTRA), W / 2
+            # PRIMEIRO O RIG DE TODO MUNDO, DEPOIS O DESENHO. A colisão só
+            # dá para resolver com as duas posições na mão, e resolver
+            # depois de desenhar seria desenhar duas vezes.
+            rigs, cams = {}, {}
             for chave in chaves:
                 pers, x0, dy = elenco[chave]
                 rig, c = _rig_do_trecho(tr, t, corte, por_ator[chave], x0,
@@ -2339,6 +2760,24 @@ def render(pasta_partes, spec, saida, tmpdir=None):
                 # quadril, e as duas correções acompanham o pulo.
                 rig["quadril"] = [rig["quadril"][0],
                                   rig["quadril"][1] + dy + dy_chao]
+                rigs[chave], cams[chave] = rig, c
+            # QUEM FALA FICA NA FRENTE. A ordem é estável dentro do trecho
+            # (o falante não muda no meio de uma fala), então nada pisca de
+            # profundidade; e o braço de quem gesticula passa por cima do
+            # outro, que é a leitura certa -- é ele que está agindo.
+            atras_na_frente = [c for c in chaves if c != falante] + \
+                              [c for c in chaves if c == falante]
+            # O QUE CADA UM TEM NA MÃO, os dois antes de qualquer desenho:
+            # a entrega passa de um para o outro, e para isso é preciso
+            # saber o estado dos dois ao mesmo tempo.
+            for chave in chaves:
+                na_mao[chave] = _objeto_na_mao(por_ator[chave], t, objetos,
+                                               na_mao.setdefault(chave, None))
+            _quem_recebe(por_ator, na_mao, t, objetos)
+            so_dele = {}
+            for chave in atras_na_frente:
+                pers, x0, dy = elenco[chave]
+                rig = rigs[chave]
                 # a cara de QUEM FALA vem do trecho; quem ouve fica na cara
                 # de reação que o roteirista der a ele, ou neutro
                 cara = rosto.para(tr, t, tr["dur"], chave) if chave == falante \
@@ -2348,14 +2787,31 @@ def render(pasta_partes, spec, saida, tmpdir=None):
                                       if chave == falante else "neutro")
                 # SÓ QUEM FALA MEXE A BOCA. Sem isto os dois abrem o
                 # maxilar na mesma envoltória e ninguém sabe quem falou.
-                obj = _objeto_na_mao(por_ator[chave], t, objetos,
-                                     na_mao.setdefault(chave, None))
-                na_mao[chave] = obj
-                camada.alpha_composite(
-                    desenhar_personagem(pers, rig, nivel if chave == falante else 0.0,
-                                        pisca, obj, cara))
+                so_dele[chave] = desenhar_personagem(
+                    pers, rig, nivel if chave == falante else 0.0,
+                    pisca, na_mao[chave], cara)
+            # CADA UM SE DEFORMA SOZINHO. Espelhar, achatar e o squash da
+            # passada são do corpo de quem fez a ação, não do quadro (ver
+            # `deformar_ator`). Vem ANTES da guarda de colisão porque
+            # achatar muda a largura do corpo, e é a largura depois de
+            # deformado que não pode invadir o outro.
+            for chave in chaves:
+                so_dele[chave] = deformar_ator(so_dele[chave], cams[chave],
+                                               rigs[chave]["quadril"][0])
+            # NINGUÉM ATRAVESSA NINGUÉM: medido no frame pronto, corrigido
+            # transladando a camada (ver `_separar`)
+            ceder = _separar(so_dele, ordem_x)
+            if ceder:
+                for chave, dx in ceder.items():
+                    so_dele[chave] = _transladar(so_dele[chave], dx)
+                    rigs[chave]["quadril"][0] += dx
+                    n_empurrados[chave] = n_empurrados.get(chave, 0) + 1
+            for chave in atras_na_frente:
+                por_ator_camada.append(so_dele[chave])
+                camada.alpha_composite(so_dele[chave])
                 if chave == falante:
-                    cam_falante, x_falante = c, rig["quadril"][0]
+                    cam_falante = cams[chave]
+                    x_falante = rigs[chave]["quadril"][0]
             cam = cam_falante
             # a sombra de contato mira o chão DESENHADO, que agora é onde os
             # pés estão de verdade
@@ -2366,17 +2822,48 @@ def render(pasta_partes, spec, saida, tmpdir=None):
             z_tr, zy = _enquadramento(i_tr, n_trechos, len(chaves), t,
                                       centro_corpo)
             cam["zoom"] = float(cam.get("zoom", 1.0)) * z_tr
-            # ação que mira o quadro em outra altura (o `susto` mira 0,34)
-            # manda: ela sabe o que está pontuando. Fora isso, vale a altura
-            # do plano do trecho.
-            if abs(float(cam.get("zoom_y", 0.5)) - 0.5) < 0.001:
-                cam["zoom_y"] = zy
-            quadro = montar_frame(camada, cenarios[cen], cam, x_falante)
+            # A MIRA DA AÇÃO É RELATIVA AO CORPO, NÃO À TELA (29/08).
+            #
+            # Uma ação pode querer olhar mais para cima -- o `susto` pede
+            # `zoom_y: 0.34`, que era "o rosto" quando o personagem ficava
+            # a 78% do quadro. Desde que os pés passaram a pousar no chão
+            # DESENHADO (§4.42), ele pode estar a 95%, e 0,34 deixou de ser
+            # o rosto para virar o teto: na rodada 3 do ciclo, dois terços
+            # do quadro eram prateleira e os dois apareciam cortados no
+            # rodapé.
+            #
+            # O que a ação sabe é o DESVIO que ela quer (0,34 - 0,50 =
+            # subir 0,16), não a altura absoluta. O desvio se aplica a
+            # partir do centro do corpo que `_enquadramento` calculou para
+            # este cenário, e o clamp mantém a janela dentro do quadro.
+            zy_acao = float(cam.get("zoom_y", 0.5))
+            alvo = zy + (zy_acao - 0.5)
+            meia = 0.5 / max(cam["zoom"], 1e-6)
+            cam["zoom_y"] = max(meia, min(1.0 - meia, alvo))
+            # O MEIO DE QUEM ESTÁ EM CENA, para a câmera fechar ali. Só
+            # conta quem tem o corpo dentro do quadro: quem está entrando
+            # ou saindo puxaria o enquadramento para fora junto com ele.
+            dentro = [rigs[c]["quadril"][0] for c in chaves
+                      if 0 < rigs[c]["quadril"][0] < W]
+            quadro = montar_frame(camada, cenarios[cen], cam, x_falante,
+                                  camadas=por_ator_camada,
+                                  centro_x=(sum(dentro) / len(dentro)
+                                            if dentro else None))
             if leg is not None:
                 # por cima de tudo, e no tempo GLOBAL: o índice do frame é
                 # contínuo entre trechos, então n/FPS é o relógio do vídeo
                 leg.desenhar(quadro, n / float(FPS))
-            quadro.save(os.path.join(fd, f"{n:05d}.png"))
+            # COMPRESSÃO 1, NÃO A PADRÃO 6. Estes PNG existem por segundos:
+            # o ffmpeg os lê na linha seguinte e a pasta é temporária.
+            # Medido num frame 1080x1920: 614 ms com a compressão padrão,
+            # que era 31% do tempo TOTAL de render -- mais do que montar o
+            # quadro inteiro. Comprimir com afinco um arquivo que ninguém
+            # guarda é trabalho puro.
+            quadro.save(os.path.join(fd, f"{n:05d}.png"), compress_level=1)
+            if quero is not None:
+                # a folha guarda o relógio: defeito achado numa amostra sem
+                # o segundo obriga a reabrir o vídeo para saber onde está
+                colhidos.append((n / float(FPS), quadro))
             n += 1
         for chave in chaves:
             rosto.fechar(chave)
@@ -2392,6 +2879,13 @@ def render(pasta_partes, spec, saida, tmpdir=None):
     print(f"[cara] {' -> '.join(caras)}")
     print(f"[camera] plano por trecho: {' -> '.join(planos)}")
     print(f"[camera] corte por trecho: {' -> '.join(cortes)} da faixa do cenario")
+    if n_empurrados:
+        print("[colisao] " + ", ".join(f"{c}: {q} frames" for c, q
+                                       in n_empurrados.items())
+              + " cedendo espaco para nao atravessar")
+
+    if quero is not None:
+        return _folha(colhidos, saida), round(total, 2)
 
     subprocess.run(["ffmpeg", "-y", "-v", "error", "-framerate", str(FPS),
                     "-i", os.path.join(fd, "%05d.png"), "-i", audio,
