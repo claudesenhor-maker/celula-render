@@ -167,8 +167,12 @@ class Legenda:
     A fonte e carregada uma vez: `truetype` por frame custa mais que o
     desenho em si num video de 400 frames."""
 
-    def __init__(self, largura, altura, tamanho=None, por_bloco=3):
+    def __init__(self, largura, altura, tamanho=None, por_bloco=3, y_rel=None):
         self.W, self.H = largura, altura
+        # `y_rel` existe para o caso em que se decide encher a faixa de cima
+        # com a propria legenda (ver topo.py). Nao e o padrao: a fala em cima
+        # obriga o olho a largar a boca de quem esta falando embaixo.
+        self.y_rel = float(y_rel) if y_rel else Y_RELATIVO
         self.tam = tamanho or int(altura * 0.048)     # ~92px em 1920
         self.fonte = _fonte(self.tam)
         self.fonte_ativa = _fonte(int(self.tam * ESCALA_ATIVA))
@@ -231,7 +235,7 @@ class Legenda:
             total = sum(larguras) + espaco * (len(textos) - 1)
 
         x = (self.W - total) / 2.0
-        y = self.H * Y_RELATIVO
+        y = self.H * self.y_rel
         desl = max(3, self.tam // 16)
         for s, larg, f, ativa in zip(textos, larguras, fontes, ativas):
             # sombra deslocada: o contorno preto sozinho some quando o
