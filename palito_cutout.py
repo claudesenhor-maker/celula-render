@@ -2019,12 +2019,18 @@ def render(pasta_partes, spec, saida, tmpdir=None):
         audio = SFX.mixar(voz, eventos, os.path.join(tmp, "mix.wav"),
                           musica=musica, dur_s=total)
 
+    # A FAIXA DE CIMA. Com dois em cena, um quinto do quadro era parede
+    # lisa do primeiro ao último frame -- ver topo.py.
+    import topo as TOPO
+    faixa_topo = TOPO.do_spec(spec, W, H)
+
     # LEGENDA: opcional, mas ligada por padrão. Short se assiste no mudo.
     leg = None
     if spec.get("legenda", True):
         from legendas import Legenda
         leg = Legenda(W, H, tamanho=spec.get("legenda_px"),
-                      por_bloco=spec.get("legenda_palavras", 3))
+                      por_bloco=spec.get("legenda_palavras", 3),
+                      y_rel=spec.get("legenda_y"))
         for tr, m in zip(spec["trechos"], marcas_por_trecho):
             leg.adicionar(tr["fala"], m, tr["_inicio_s"], tr["_dur_voz"])
         print(f"[legenda] {len(leg.blocos)} blocos"
@@ -2132,6 +2138,10 @@ def render(pasta_partes, spec, saida, tmpdir=None):
             if abs(float(cam.get("zoom_y", 0.5)) - 0.5) < 0.001:
                 cam["zoom_y"] = zy
             quadro = montar_frame(camada, cenarios[cen], cam, x_falante)
+            # a faixa de cima vai ANTES da legenda e depois do zoom: as duas
+            # são grudadas na tela, não na cena
+            if faixa_topo is not None:
+                faixa_topo.desenhar(quadro, n / float(FPS))
             if leg is not None:
                 # por cima de tudo, e no tempo GLOBAL: o índice do frame é
                 # contínuo entre trechos, então n/FPS é o relógio do vídeo
