@@ -32,11 +32,39 @@ O CATÁLOGO É FECHADO, DE PROPÓSITO
     trabalho) caia na chave que tem arte.
 """
 
+# A LINHA DO CHÃO (`chao`), em fração da altura do quadro
+# ---------------------------------------------------------------------
+# É onde os pés do personagem pousam. Sem ela o motor punha todo mundo na
+# mesma altura fixa do rig (78% do quadro com dois em cena) e a arte tinha
+# o chão em qualquer lugar entre 65% e 90% -- na sala a diferença chegava a
+# 192px, e o resultado é o que o dono do projeto viu em 28/08: "os
+# personagens parecem que estão flutuando".
+#
+# POR QUE ISTO É ANOTADO E NÃO MEDIDO. Três detectores automáticos foram
+# tentados e os três erraram em pelo menos metade dos oito cenários: cor
+# dominante do piso (tábua listrada não tem cor dominante), densidade de
+# borda vertical (ladrilho tem borda vertical) e estabilidade da linha
+# (carpete é tão estável quanto parede lisa). É a mesma conclusão a que o
+# projeto já tinha chegado para o pivô: medida que é UMA por asset e dura
+# para sempre se anota, não se adivinha. A régua é
+# `ferramentas/regua_chao.py`, e ler o número leva trinta segundos.
+#
+# O valor fica um pouco ABAIXO do encontro entre parede e chão, de
+# propósito: o personagem está na frente dos móveis, mais perto da câmera,
+# e em perspectiva isso é mais para baixo no quadro.
+#
+# Vale igual na arte e na tira: o motor cobre a arte para 1920 de altura e
+# todo cenário é mais largo que 9:16, então a altura entra inteira e não há
+# corte vertical para deslocar a conta.
+CHAO_PADRAO = 0.86
+
 # chave -> (o que é, sinônimos que o roteirista pode escrever,
-#           cenários aceitáveis como substituto, em ordem de preferência)
+#           cenários aceitáveis como substituto, em ordem de preferência,
+#           e a linha do chão)
 CATALOGO = {
     "rua": {
         "e": "rua de cidade, calçada, prédios baixos",
+        "chao": 0.84,
         "sinonimos": ("calcada", "esquina", "cidade", "fora", "bairro",
                       "ponto", "praca", "avenida"),
         "parecidos": ("comercio", "onibus"),
@@ -45,6 +73,7 @@ CATALOGO = {
     },
     "sala": {
         "e": "sala de estar com sofá",
+        "chao": 0.88,
         "sinonimos": ("casa", "estar", "sofa", "tv", "apartamento"),
         "parecidos": ("quarto", "cozinha"),
         "palavras": ("sofa", "televisao", "tv", "novela", "controle",
@@ -52,6 +81,7 @@ CATALOGO = {
     },
     "cozinha": {
         "e": "cozinha com fogão, pia e geladeira",
+        "chao": 0.87,
         "sinonimos": ("copa", "fogao", "geladeira", "pia"),
         "parecidos": ("sala", "comercio"),
         "palavras": ("cozinha", "geladeira", "fogao", "panela", "almoco",
@@ -60,6 +90,7 @@ CATALOGO = {
     },
     "escritorio": {
         "e": "escritório com mesas e computadores",
+        "chao": 0.80,
         "sinonimos": ("trabalho", "empresa", "servico", "reuniao", "coworking"),
         "parecidos": ("comercio", "sala"),
         "palavras": ("trabalho", "chefe", "reuniao", "email", "planilha",
@@ -68,6 +99,7 @@ CATALOGO = {
     },
     "comercio": {
         "e": "loja com balcão de atendimento e maquininha",
+        "chao": 0.88,
         "sinonimos": ("loja", "padaria", "mercado", "supermercado", "caixa",
                       "balcao", "farmacia", "banco", "fila", "atendimento"),
         "parecidos": ("escritorio", "cozinha"),
@@ -78,6 +110,7 @@ CATALOGO = {
     },
     "quarto": {
         "e": "quarto com cama e criado-mudo",
+        "chao": 0.82,
         "sinonimos": ("cama", "dormir", "sono", "despertador"),
         "parecidos": ("sala", "banheiro"),
         "palavras": ("cama", "dormir", "acordei", "sono", "despertador",
@@ -85,6 +118,7 @@ CATALOGO = {
     },
     "onibus": {
         "e": "dentro de um ônibus urbano",
+        "chao": 0.90,
         "sinonimos": ("busao", "coletivo", "transporte", "metro", "lotacao"),
         "parecidos": ("rua", "comercio"),
         "palavras": ("onibus", "busao", "passagem", "catraca", "motorista",
@@ -92,6 +126,7 @@ CATALOGO = {
     },
     "banheiro": {
         "e": "banheiro com pia, espelho e box",
+        "chao": 0.90,
         "sinonimos": ("chuveiro", "box", "espelho", "lavabo"),
         "parecidos": ("quarto", "cozinha"),
         "palavras": ("banho", "chuveiro", "banheiro", "espelho", "escova",
@@ -100,6 +135,16 @@ CATALOGO = {
 }
 
 PADRAO = "sala"
+
+
+def chao_de(chave):
+    """A linha do chão de um cenário, em fração da altura do quadro.
+
+    Cenário gerado sob demanda ainda não tem número anotado: cai no
+    `CHAO_PADRAO`, que é a mediana dos oito. Errar por 3% põe o pé um pouco
+    dentro ou um pouco fora do piso; errar por 10% é o boneco flutuando."""
+    return float((CATALOGO.get(normalizar(chave)) or {}).get("chao",
+                                                             CHAO_PADRAO))
 
 
 def _limpo(s):
