@@ -52,6 +52,20 @@ jobs:
           # para quando a identidade nao trouxer nenhum.
           ELEVEN_API_KEY:  ${{ secrets.ELEVEN_API_KEY }}
           ELEVEN_VOICE_ID: ${{ secrets.ELEVEN_VOICE_ID }}
+          # ARTE SOB DEMANDA (28/08). O cenario que o roteiro pediu e que
+          # ninguem desenhou e gerado aqui mesmo, durante o render: ele vai
+          # para assets_bruto e nao passa por rembg (rembg destroi cenario),
+          # entao custa ~20s e ja entra no video de hoje. Ver sob_demanda.py.
+          #
+          # OBJETO nao segue por este caminho: ele precisa de alfa, alfa vem
+          # do rembg e o rembg so roda no Action `assets`. Objeto faltante e
+          # ENCOMENDADO em assets_pendentes e chega no video seguinte.
+          #
+          # Sem o secret o modulo avisa no log e o motor cai no cenario mais
+          # parecido do catalogo, como sempre fez: a producao nao quebra, so
+          # deixa de crescer o catalogo.
+          CF_API_TOKEN:   ${{ secrets.CF_API_TOKEN }}
+          CF_ACCOUNT_ID:  04483caa8b5f9674b84399fcdd1ef9d5
         run: python job.py
 
       - name: Guardar o MP4 como artefato (util para depurar)
