@@ -771,6 +771,89 @@ def _nota(f, dur, sr=SR, brilho=0.30):
 
 
 # ---------------------------------------------------------------------
+# OS OUTROS INSTRUMENTOS (28/08)
+# ---------------------------------------------------------------------
+# Até aqui existia UM timbre -- a marimba -- e ele tocava em todo vídeo do
+# canal, qualquer que fosse a história. O que mudava era a progressão, o
+# que é diferença de HARMONIA: quem assiste ouve o mesmo som de sempre e
+# não relaciona a música com nada do que está vendo. Foi a queixa de 28/08
+# ("trilha sem nexo com o contexto").
+#
+# Cada função abaixo é um timbre inteiro em cinco linhas, porque timbre é
+# só isto: quais harmônicos existem, como o volume nasce e como ele morre.
+# Nenhuma delas baixa arquivo nem depende de licença.
+def _corda(f, dur, sr=SR, brilho=0.30):
+    """Naipe de cordas: dente de serra suave, ataque lento, vibrato. É o
+    som que sustenta -- o contrário de uma barra percutida."""
+    t = _t(dur, sr)
+    vib = 1.0 + 0.004 * np.sin(2 * np.pi * 5.2 * t)
+    x = np.zeros(len(t))
+    for h, g in ((1, 1.0), (2, 0.5), (3, 0.32), (4, 0.18), (5, 0.10)):
+        x += g * np.sin(2 * np.pi * f * h * t * vib)
+    ataque = np.minimum(1.0, t / 0.09)
+    solta = np.minimum(1.0, np.maximum(0.0, (dur - t) / 0.12))
+    return x * 0.45 * ataque * solta
+
+
+def _pluck(f, dur, sr=SR, brilho=0.30):
+    """Corda dedilhada (cavaquinho, ukulele): harmônicos ímpares fortes e
+    decaimento rápido. É o que dá o staccato de samba e de circo."""
+    t = _t(dur, sr)
+    x = (np.sin(2 * np.pi * f * t)
+         + 0.55 * np.sin(2 * np.pi * 3 * f * t)
+         + 0.28 * np.sin(2 * np.pi * 5 * f * t))
+    ataque = np.minimum(1.0, t / 0.003)
+    return x * 0.6 * ataque * _exp(t, 0.085)
+
+
+def _eletrico(f, dur, sr=SR, brilho=0.30):
+    """Piano elétrico: uma senoide modulada por outra (FM curta), decaindo.
+    É o timbre redondo de lo-fi, e o que menos ocupa espaço da voz."""
+    t = _t(dur, sr)
+    mod = np.sin(2 * np.pi * f * 2 * t) * _exp(t, 0.05) * 2.2
+    x = np.sin(2 * np.pi * f * t + mod)
+    ataque = np.minimum(1.0, t / 0.008)
+    return x * 0.7 * ataque * _exp(t, 0.30)
+
+
+def _guitarra(f, dur, sr=SR, brilho=0.30):
+    """Guitarra distorcida: onda quadrada arredondada pela tangente.
+    Sustenta e é grossa -- por isso toca poucas notas, e curtas."""
+    t = _t(dur, sr)
+    x = np.tanh(3.2 * np.sin(2 * np.pi * f * t))
+    x = _passa_baixa(x, 3400, sr)
+    ataque = np.minimum(1.0, t / 0.004)
+    solta = np.minimum(1.0, np.maximum(0.0, (dur - t) / 0.02))
+    return x * 0.5 * ataque * solta
+
+
+def _sino(f, dur, sr=SR, brilho=0.30):
+    """Sino/celesta: parciais INARMÔNICOS e cauda longa. O timbre que soa
+    errado de propósito -- é a base do terror e do suspense de brinquedo."""
+    t = _t(dur, sr)
+    x = (np.sin(2 * np.pi * f * t)
+         + 0.6 * np.sin(2 * np.pi * f * 2.76 * t)
+         + 0.35 * np.sin(2 * np.pi * f * 5.4 * t))
+    return x * 0.45 * np.minimum(1.0, t / 0.002) * _exp(t, 0.55)
+
+
+def _orgao(f, dur, sr=SR, brilho=0.30):
+    """Órgão/sopro: harmônicos inteiros e volume plano do começo ao fim.
+    Não tem ataque nem morte -- é o que faz uma nota parecer suspensa."""
+    t = _t(dur, sr)
+    x = (np.sin(2 * np.pi * f * t) + 0.5 * np.sin(2 * np.pi * 2 * f * t)
+         + 0.3 * np.sin(2 * np.pi * 3 * f * t) + 0.2 * np.sin(2 * np.pi * 4 * f * t))
+    env = np.minimum(np.minimum(1.0, t / 0.05),
+                     np.maximum(0.0, (dur - t) / 0.05))
+    return x * 0.4 * np.minimum(env, 1.0)
+
+
+TIMBRES = {"marimba": _nota, "cordas": _corda, "pluck": _pluck,
+           "eletrico": _eletrico, "guitarra": _guitarra, "sino": _sino,
+           "orgao": _orgao}
+
+
+# ---------------------------------------------------------------------
 # A SEÇÃO RÍTMICA (27/08 à noite)
 # ---------------------------------------------------------------------
 # A trilha antiga era só marimba: harmonia bonita, andamento de sala de
@@ -814,6 +897,61 @@ def _palma():
     return _fade(x * 0.45)
 
 
+def bipe(dur, sr=SR):
+    """O "piiii" da TV: onda de 1 kHz, que é a frequência padronizada para
+    censura em transmissão e que o ouvido reconhece na hora.
+
+    Senoide pura com 8ms de rampa nas pontas -- sem elas o corte estala, e
+    o estalo soa como defeito de áudio em vez de censura."""
+    t = _t(max(dur, 0.08), sr)
+    x = np.sin(2 * np.pi * 1000.0 * t)
+    r = max(8, int(0.008 * sr))
+    x[:r] *= np.linspace(0, 1, r)
+    x[-r:] *= np.linspace(1, 0, r)
+    return x.astype(np.float32) * 0.55
+
+
+def _censurar_voz(voz, janelas, sr=SR):
+    """Apaga a voz nas janelas de palavrão e põe o bipe no lugar.
+
+    A voz é apagada de VERDADE, não abaixada: o que sobrasse por baixo do
+    tom seria justamente a sílaba que se quer esconder. As rampas de 15ms
+    nas bordas evitam o clique do corte seco.
+
+    O LIPSYNC NÃO MUDA. O envelope da boca é medido antes desta função
+    (ver palito_cutout.render): o personagem continua articulando enquanto
+    o bipe toca, que é exatamente o que a TV mostra."""
+    if not janelas:
+        return voz
+    x = np.array(voz, dtype=np.float32, copy=True)
+    r = max(8, int(0.015 * sr))
+    for t0, t1 in janelas:
+        i0, i1 = int(max(0.0, t0) * sr), int(max(0.0, t1) * sr)
+        i1 = min(i1, len(x))
+        if i1 <= i0:
+            continue
+        janela = np.zeros(i1 - i0, dtype=np.float32)
+        m = min(r, len(janela) // 2)
+        if m:
+            janela[:m] = np.linspace(1, 0, m)
+            janela[-m:] = np.linspace(0, 1, m)
+        x[i0:i1] *= janela
+        tom = bipe((i1 - i0) / float(sr), sr)
+        cabe = min(len(tom), len(x) - i0)
+        x[i0:i0 + cabe] += tom[:cabe]
+    return x
+
+
+def _caixa():
+    """Caixa: ruído de esteira em cima de um corpo curto. É o que separa
+    rock e funk de "marimba com palma" -- a palma é festa, a caixa é
+    batida."""
+    t = _t(0.16)
+    corpo = np.sin(2 * np.pi * 190 * t) * _exp(t, 0.02) * 0.5
+    esteira = _passa_alta(_ruido(len(t), 59), 1800) * _exp(t, 0.055)
+    return _fade(corpo + esteira, ms=2)
+
+
 def _baixo(f, dur, sr=SR):
     """Nota de baixo: quase só fundamental. Ele vive abaixo de 130 Hz, que
     é a faixa que o vídeo inteiro tinha vazia -- e é a faixa que dá a
@@ -825,8 +963,129 @@ def _baixo(f, dur, sr=SR):
     return x * ataque * corte * _exp(t, 0.5)
 
 
-def trilha(dur_s, estilo="leve", bpm=BPM_PADRAO, semente=3, sr=SR, segmentos=None):
+def _808(f, dur, sr=SR):
+    """O grave do trap: senoide que CAI de afinação nos primeiros 40ms e
+    depois sustenta. É uma nota e um bumbo na mesma coisa."""
+    t = _t(dur, sr)
+    fase = 2 * np.pi * (f * t + (f * 1.9) * 0.04 * (1 - np.exp(-t / 0.04)))
+    x = np.sin(fase)
+    corte = np.minimum(1.0, np.maximum(0.0, (dur - t) / 0.04))
+    return np.tanh(x * 1.4) * corte * _exp(t, 0.42)
+
+
+def _pedal(f, dur, sr=SR):
+    """Nota grave longa e imóvel: o baixo do suspense, que não anda a
+    lugar nenhum de propósito."""
+    t = _t(dur, sr)
+    x = np.sin(2 * np.pi * f * t) * (1.0 + 0.03 * np.sin(2 * np.pi * 4.5 * t))
+    env = np.minimum(np.minimum(1.0, t / 0.15), np.maximum(0.0, (dur - t) / 0.2))
+    return x * np.minimum(env, 1.0)
+
+
+BAIXOS = {"colcheias": _baixo, "808": _808, "pedal": _pedal}
+
+# ---------------------------------------------------------------------
+# LEVADAS -- onde cai cada peça da bateria, em fração do compasso
+# ---------------------------------------------------------------------
+# `bumbo`, `caixa` e `chimbal` são listas de (posição, ganho). A posição é
+# fração do compasso, então a mesma levada serve para qualquer andamento.
+# `nenhuma` existe porque suspense e terror precisam de AUSÊNCIA de
+# bateria: pulso de bateria embaixo de tensão vira desenho animado.
+LEVADAS = {
+    "pop":    {"bumbo": [(0, 1.0), (0.5, 0.85), (0.75, 0.5)],
+               "caixa": [(0.25, 0.75), (0.75, 0.75)],
+               "chimbal": [(i / 8.0, 0.55 if i % 2 == 0 else 0.32) for i in range(8)]},
+    # tamborzão: o bumbo em três, sincopado, e a caixa no contratempo
+    "funk":   {"bumbo": [(0, 1.0), (0.1875, 0.8), (0.375, 0.9), (0.6875, 0.85)],
+               "caixa": [(0.25, 0.8), (0.5, 0.6), (0.75, 0.9)],
+               "chimbal": [(i / 16.0, 0.30) for i in range(16)]},
+    # samba: surdo no 2 e no 4, tamborim miúdo em cima
+    "samba":  {"bumbo": [(0.25, 0.7), (0.75, 1.0)],
+               "caixa": [(0.375, 0.5), (0.625, 0.6), (0.875, 0.7)],
+               "chimbal": [(i / 16.0, 0.34 if i % 2 else 0.20) for i in range(16)]},
+    "rock":   {"bumbo": [(0, 1.0), (0.375, 0.7), (0.5, 0.9)],
+               "caixa": [(0.25, 1.0), (0.75, 1.0)],
+               "chimbal": [(i / 8.0, 0.5) for i in range(8)]},
+    # half-time: a caixa só no 3, e o chimbal picotado em tercinas
+    "trap":   {"bumbo": [(0, 1.0), (0.4375, 0.7)],
+               "caixa": [(0.5, 1.0)],
+               "chimbal": [(i / 16.0, 0.34) for i in range(16)]
+                          + [(0.75 + i / 48.0, 0.30) for i in range(3)]},
+    "lofi":   {"bumbo": [(0, 0.8), (0.5625, 0.6)],
+               "caixa": [(0.25, 0.55), (0.75, 0.55)],
+               "chimbal": [(i / 8.0, 0.22) for i in range(8)]},
+    # marcha de circo: oompah -- grave no tempo, tampa no contratempo
+    "marcha": {"bumbo": [(0, 1.0), (0.5, 1.0)],
+               "caixa": [(0.25, 0.8), (0.75, 0.8)],
+               "chimbal": [(i / 8.0, 0.4) for i in range(8)]},
+    "epica":  {"bumbo": [(0, 1.0), (0.25, 0.5), (0.5, 0.9), (0.75, 0.5)],
+               "caixa": [(0.5, 0.7)],
+               "chimbal": []},
+    "nenhuma": {"bumbo": [(0, 0.55)], "caixa": [], "chimbal": []},
+}
+
+
+# ---------------------------------------------------------------------
+# GÊNEROS -- a trilha que o ROTEIRO escolhe (28/08)
+# ---------------------------------------------------------------------
+# O que estava errado até aqui: a trilha era uma só, sempre a mesma
+# marimba a 122 bpm, em todo vídeo do canal. A emoção do trecho mudava a
+# progressão -- o que é uma diferença real, mas pequena demais para quem
+# assiste: som igual em cima de histórias diferentes lê como música
+# genérica colada por cima, que foi a queixa de 28/08.
+#
+# Agora o vídeo tem um GÊNERO, e quem o escolhe é o roteirista, junto com
+# a história -- é ele que sabe se a esquete é uma perseguição de boleto
+# (funk), uma espera de call center (espera), um drama de novela sobre uma
+# cebola (novela) ou um terror de barata na cozinha (terror). A escolha
+# entra no spec em `musica.genero`, sai de lista fechada e é validada no
+# "Montar Spec do Palito", como todo vocabulário deste projeto.
+#
+# O que o gênero decide: instrumento, levada de bateria, tipo de baixo,
+# andamento e quanto de percussão. O que ele NÃO decide: a progressão de
+# acordes, que continua vindo da emoção de cada trecho -- é assim que a
+# trilha muda dentro do vídeo sem trocar de música no meio.
+GENEROS = {
+    "comedia_leve": {"bpm": 120, "timbre": "marimba", "levada": "pop",
+                     "baixo": "colcheias", "peso": 1.00, "oitava": 0},
+    "funk":         {"bpm": 130, "timbre": "pluck", "levada": "funk",
+                     "baixo": "808", "peso": 1.15, "oitava": 0},
+    "samba":        {"bpm": 100, "timbre": "pluck", "levada": "samba",
+                     "baixo": "colcheias", "peso": 1.00, "oitava": 12},
+    "rock":         {"bpm": 148, "timbre": "guitarra", "levada": "rock",
+                     "baixo": "colcheias", "peso": 1.10, "oitava": -12},
+    "trap":         {"bpm": 140, "timbre": "sino", "levada": "trap",
+                     "baixo": "808", "peso": 1.05, "oitava": 12},
+    "lofi":         {"bpm": 82, "timbre": "eletrico", "levada": "lofi",
+                     "baixo": "colcheias", "peso": 0.75, "oitava": 0},
+    "suspense":     {"bpm": 96, "timbre": "sino", "levada": "nenhuma",
+                     "baixo": "pedal", "peso": 0.50, "oitava": 0},
+    "terror":       {"bpm": 76, "timbre": "sino", "levada": "nenhuma",
+                     "baixo": "pedal", "peso": 0.45, "oitava": -12},
+    "epico":        {"bpm": 104, "timbre": "cordas", "levada": "epica",
+                     "baixo": "colcheias", "peso": 1.10, "oitava": -12},
+    "novela":       {"bpm": 88, "timbre": "cordas", "levada": "lofi",
+                     "baixo": "colcheias", "peso": 0.60, "oitava": 0},
+    "circo":        {"bpm": 136, "timbre": "orgao", "levada": "marcha",
+                     "baixo": "colcheias", "peso": 1.05, "oitava": 0},
+    # a musiquinha de espera de call center, que é o som de metade das
+    # esquetes deste canal acontecendo
+    "espera":       {"bpm": 96, "timbre": "orgao", "levada": "lofi",
+                     "baixo": "colcheias", "peso": 0.55, "oitava": 0},
+}
+GENERO_PADRAO = "comedia_leve"
+
+
+def trilha(dur_s, estilo="leve", bpm=None, semente=3, sr=SR, segmentos=None,
+           genero=None):
     """Bed instrumental do tamanho exato do vídeo, em três camadas.
+
+    `genero` (28/08) é a escolha do ROTEIRO -- funk, suspense, novela,
+    circo, espera... Ele decide o INSTRUMENTO, a levada de bateria, o tipo
+    de baixo e o andamento; ver GENEROS. `segmentos` continua decidindo a
+    PROGRESSÃO e a intensidade trecho a trecho, pela emoção. Os dois eixos
+    são independentes de propósito: o vídeo tem uma música só, e ela segue
+    a cena por dentro.
 
     O QUE MUDOU EM 27/08 À NOITE
         A trilha era só marimba, a 104 bpm: calma, relaxante e exatamente o
@@ -857,6 +1116,13 @@ def trilha(dur_s, estilo="leve", bpm=BPM_PADRAO, semente=3, sr=SR, segmentos=Non
     trecho toca no estilo que a emoção dele pede, com o andamento, o volume
     e o PESO DE BATERIA daquela emoção, e o último entra depois de um
     breque."""
+    gen = GENEROS.get(str(genero or "").strip().lower()) or GENEROS[GENERO_PADRAO]
+    bpm = float(bpm or gen["bpm"])
+    instrumento = TIMBRES.get(gen["timbre"], _nota)
+    nota_grave = BAIXOS.get(gen["baixo"], _baixo)
+    levada = LEVADAS.get(gen["levada"], LEVADAS["pop"])
+    oitava = float(gen.get("oitava", 0))
+
     n = int(dur_s * sr)
     harmonia = np.zeros(n + sr, dtype=np.float32)
     ritmo = np.zeros(n + sr, dtype=np.float32)
@@ -865,8 +1131,11 @@ def trilha(dur_s, estilo="leve", bpm=BPM_PADRAO, semente=3, sr=SR, segmentos=Non
 
     # a percussão é a mesma onda toda vez: sintetizar por batida custaria
     # mais que o resto da trilha inteira num vídeo de 20 segundos
-    bumbo, palma = _bumbo(), _palma()
+    bumbo, palma, caixa = _bumbo(), _palma(), _caixa()
     chimbal, chimbal_ab = _chimbal(False), _chimbal(True)
+    # samba e circo levam PALMA no lugar da caixa: é a diferença entre
+    # "banda tocando" e "bateria de estúdio"
+    tampa = palma if gen["levada"] in ("samba", "marcha", "pop") else caixa
 
     def por(bus, sinal, em, g=1.0):
         i = int(em * sr)
@@ -884,7 +1153,7 @@ def trilha(dur_s, estilo="leve", bpm=BPM_PADRAO, semente=3, sr=SR, segmentos=Non
         est = seg.get("estilo", estilo)
         acordes = _GRAUS.get(est, _GRAUS["leve"])
         k_int = float(seg.get("intensidade", 1.0))
-        k_bat = PESO_RITMO.get(est, 1.0) * k_int
+        k_bat = PESO_RITMO.get(est, 1.0) * k_int * float(gen.get("peso", 1.0))
         compasso = 4 * 60.0 / (bpm * (0.85 + 0.15 * k_int))
         colcheia = compasso / 8.0
         t = float(seg.get("inicio", 0.0))
@@ -895,33 +1164,57 @@ def trilha(dur_s, estilo="leve", bpm=BPM_PADRAO, semente=3, sr=SR, segmentos=Non
             t += min(0.85, max(0.0, (fim - t) * 0.35))
         while t < fim:
             grau = acordes[c % len(acordes)]
-            # --- RITMO. Bumbo no 1, no 3 e na síncope antes do 4; palma no
-            # 2 e no 4; chimbal em todas as colcheias, aberto na última --
-            # o chimbal aberto no fim do compasso é o que faz a volta do
-            # laço soar como decisão e não como emenda.
-            for j, g in ((0.0, 1.00), (0.5, 0.85), (0.75, 0.50)):
-                por(ritmo, bumbo, t + j * compasso, g * k_bat)
-            for j in (0.25, 0.75):
-                por(ritmo, palma, t + j * compasso, 0.75 * k_bat)
-            for j in range(8):
-                por(ritmo, chimbal_ab if j == 7 else chimbal, t + j * colcheia,
-                    (0.55 if j % 2 == 0 else 0.32) * k_bat)
-            # --- GRAVE. Colcheias na raiz e a quinta no fim do compasso,
-            # que é o mínimo que faz um baixo ANDAR em vez de segurar nota.
-            for j in range(8):
-                semi = grau[0] + (7 if j >= 6 else 0)
-                por(grave, _baixo(_TONICA * 2 ** (semi / 12.0) / 4.0,
-                                  colcheia * 0.9, sr),
-                    t + j * colcheia, (0.9 if j % 2 == 0 else 0.55) * k_int)
+            # --- RITMO. Onde cai cada peça é a LEVADA do gênero: o mesmo
+            # motor toca pop, tamborzão, samba, rock ou half-time só
+            # mudando esta tabela (ver LEVADAS).
+            for pos, gg in levada["bumbo"]:
+                por(ritmo, bumbo, t + pos * compasso, gg * k_bat)
+            for pos, gg in levada["caixa"]:
+                por(ritmo, tampa, t + pos * compasso, gg * 0.9 * k_bat)
+            ult = len(levada["chimbal"]) - 1
+            for j, (pos, gg) in enumerate(levada["chimbal"]):
+                # o chimbal aberto no fim do compasso é o que faz a volta do
+                # laço soar como decisão e não como emenda
+                por(ritmo, chimbal_ab if j == ult else chimbal,
+                    t + pos * compasso, gg * k_bat)
+            # --- GRAVE. Colcheias andando, ou uma nota longa só, conforme o
+            # gênero: baixo que anda embaixo de suspense desmancha a tensão,
+            # e nota parada embaixo de funk mata o que ele tem de melhor.
+            if gen["baixo"] == "pedal":
+                por(grave, nota_grave(_TONICA * 2 ** (grau[0] / 12.0) / 4.0,
+                                      compasso, sr), t, 0.9 * k_int)
+            elif gen["baixo"] == "808":
+                for j, dur_n in ((0.0, compasso * 0.45), (0.5, compasso * 0.30),
+                                 (0.75, compasso * 0.22)):
+                    semi = grau[0] + (7 if j >= 0.75 else 0)
+                    por(grave, nota_grave(_TONICA * 2 ** (semi / 12.0) / 4.0,
+                                          dur_n, sr),
+                        t + j * compasso, 0.95 * k_int)
+            else:
+                for j in range(8):
+                    semi = grau[0] + (7 if j >= 6 else 0)
+                    por(grave, nota_grave(_TONICA * 2 ** (semi / 12.0) / 4.0,
+                                          colcheia * 0.9, sr),
+                        t + j * colcheia, (0.9 if j % 2 == 0 else 0.55) * k_int)
             # --- HARMONIA. Arpejo de colcheias, com uma nota trocada de vez
-            # em quando para o laço de 4 compassos não ficar óbvio.
-            ordem = [0, 1, 2, 1, 2, 1, 0, 1]
-            for j, idx in enumerate(ordem):
-                if rng.random() < 0.12:
-                    continue
-                semi = grau[idx] + (12 if rng.random() < 0.18 else 0)
-                por(harmonia, _nota(_TONICA * 2 ** (semi / 12.0), colcheia * 2.2, sr),
-                    t + j * colcheia, (0.30 if j % 2 else 0.42) * k_int)
+            # em quando para o laço de 4 compassos não ficar óbvio. Timbre
+            # que SUSTENTA (cordas, órgão) toca acorde parado em vez de
+            # arpejo: arpejo rápido de naipe de cordas vira confusão.
+            if gen["timbre"] in ("cordas", "orgao"):
+                for idx in range(3):
+                    semi = grau[idx] + oitava
+                    por(harmonia, instrumento(_TONICA * 2 ** (semi / 12.0),
+                                              compasso * 0.96, sr),
+                        t, 0.30 * k_int)
+            else:
+                ordem = [0, 1, 2, 1, 2, 1, 0, 1]
+                for j, idx in enumerate(ordem):
+                    if rng.random() < 0.12:
+                        continue
+                    semi = grau[idx] + oitava + (12 if rng.random() < 0.18 else 0)
+                    por(harmonia, instrumento(_TONICA * 2 ** (semi / 12.0),
+                                              colcheia * 2.2, sr),
+                        t + j * colcheia, (0.30 if j % 2 else 0.42) * k_int)
             t += compasso
             c += 1
 
@@ -1019,12 +1312,15 @@ def _ducking(voz, sr, ataque=0.05, saida=0.32):
     return _ajustar(np.repeat(g, jan), len(voz))
 
 
-def mixar(voz_wav, eventos, destino, musica=None, dur_s=None, sr=SR):
+def mixar(voz_wav, eventos, destino, musica=None, dur_s=None, sr=SR, bipes=None):
     """Voz + efeitos + trilha -> um WAV só, que é o que o ffmpeg recebe.
 
     `musica` é o bloco `musica` do spec (ou None/False para desligar):
-        {"estilo": "leve", "bpm": 104, "ganho_db": -21, "url": "..."}
-    Com `url` a faixa é lida do disco (job.py baixa); sem ela, sintetizada.
+        {"genero": "funk", "bpm": 130, "ganho_db": -18, "url": "..."}
+    `genero` é a escolha do roteirista (ver GENEROS) e decide o som do
+    vídeo; `segmentos` (montado no render, a partir da emoção de cada
+    trecho) decide como ele se move por dentro. Com `url` a faixa é lida
+    do disco (job.py baixa); sem ela, sintetizada.
 
     Devolve o caminho do mix. Falha em qualquer etapa devolve a voz
     original: o vídeo pode sair sem trilha, não pode sair sem voz."""
@@ -1035,6 +1331,14 @@ def mixar(voz_wav, eventos, destino, musica=None, dur_s=None, sr=SR):
         return voz_wav
     if sr_voz != sr:
         sr = sr_voz
+    # CENSURA ANTES DE TUDO: o bipe entra na voz, não por cima da mistura.
+    # Assim ele é abafado pelo mesmo ducking e sai no mesmo nível da fala
+    # que ele substitui -- um tom somado no fim soaria colado por cima.
+    if bipes:
+        voz = _censurar_voz(voz, bipes, sr)
+        print(f"[censura] {len(bipes)} bipe(s): "
+              + ", ".join(f"{a:.1f}-{b:.1f}s" for a, b in bipes))
+
     n = len(voz)
     if dur_s:
         n = max(n, int(dur_s * sr))
@@ -1076,16 +1380,30 @@ def mixar(voz_wav, eventos, destino, musica=None, dur_s=None, sr=SR):
                 print(f"[musica] faixa do disco: {os.path.basename(caminho)}")
             else:
                 segs = cfg.get("segmentos") or None
+                gen = str(cfg.get("genero") or "").strip().lower()
+                if gen and gen not in GENEROS:
+                    print(f"[musica] genero '{gen}' nao existe; caindo em "
+                          f"{GENERO_PADRAO}")
+                    gen = ""
+                # SEMENTE POR VÍDEO: duas esquetes do mesmo gênero não podem
+                # sair com o arpejo idêntico nota por nota. O fila_id é o que
+                # há de único em cada vídeo, e ele já está no spec.
+                sem = abs(hash(str(cfg.get("semente", 3)))) % 10000
                 faixa = trilha(n / float(sr), cfg.get("estilo", "leve"),
-                               float(cfg.get("bpm", BPM_PADRAO)), sr=sr, segmentos=segs)
+                               cfg.get("bpm"), semente=sem, sr=sr,
+                               segmentos=segs, genero=gen)
+                g_nome = gen or GENERO_PADRAO
                 if segs:
-                    print("[musica] trilha por trecho: "
+                    print(f"[musica] genero {g_nome} "
+                          f"({GENEROS[g_nome]['timbre']} + {GENEROS[g_nome]['levada']}, "
+                          f"{float(cfg.get('bpm') or GENEROS[g_nome]['bpm']):.0f} bpm); "
+                          "por trecho: "
                           + " -> ".join(s.get("estilo", "leve") for s in segs)
                           + (" (com breque no punchline)"
                              if any(s.get("breque") for s in segs) else ""))
                 else:
-                    print(f"[musica] trilha sintetizada ({cfg.get('estilo', 'leve')}, "
-                          f"{float(cfg.get('bpm', 104.0)):.0f} bpm)")
+                    print(f"[musica] genero {g_nome}, "
+                          f"{float(cfg.get('bpm') or GENEROS[g_nome]['bpm']):.0f} bpm")
             g = _db(float(cfg.get("ganho_db", GANHO_MUSICA_DB)))
             duck = _ducking(_ajustar(voz, n), sr)
             mix += _ajustar(faixa, n) * g * _ajustar(duck, n)
@@ -1101,10 +1419,27 @@ def mixar(voz_wav, eventos, destino, musica=None, dur_s=None, sr=SR):
     return _escrever_wav(destino, mix, sr)
 
 
+def demo_generos(saida="generos_demo.wav", segundos=6.0, sr=SR):
+    """Um wav com TODOS os gêneros em fila, 6 segundos cada, para ouvir a
+    diferença antes de gastar um render. `python sfx.py --generos`."""
+    partes = []
+    for nome in GENEROS:
+        x = trilha(segundos, genero=nome, semente=7, sr=sr)
+        partes.append(x)
+        partes.append(np.zeros(int(0.6 * sr), dtype=np.float32))
+    _escrever_wav(saida, np.concatenate(partes), sr)
+    print(f"[ok] {saida}  ordem: {', '.join(GENEROS)}")
+    return saida
+
+
 if __name__ == "__main__":
     # Demonstração: um wav com todos os efeitos em fila, para ouvir de uma
     # vez o que existe. `python sfx.py [saida.wav]`
     import sys
+    if "--generos" in sys.argv:
+        alvo = [a for a in sys.argv[1:] if not a.startswith("--")]
+        demo_generos(alvo[0] if alvo else "generos_demo.wav")
+        raise SystemExit(0)
     saida = sys.argv[1] if len(sys.argv) > 1 else "sfx_demo.wav"
     nomes = ["susto", "thud", "boing", "whoosh", "pop", "plim", "erro",
              "tremido", "passo", "rimshot",
