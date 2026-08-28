@@ -80,6 +80,33 @@ W, H, FPS = 1080, 1920, 24
 # altura de referencia do personagem no quadro; objetos sao medidos contra ela
 ALTURA_ALVO_PX = 1150
 
+# TAMANHO DE CADA OBJETO, em fração da altura do ator
+# ---------------------------------------------------------------------
+# Era 11% para todos, e 11% é o tamanho de um CELULAR. O vídeo de 28/08 era
+# sobre um boleto e o boleto mal se via: uma folha de papel na mão de uma
+# pessoa ocupa perto de um quarto da altura dela, não um décimo.
+#
+# O 11% chapado veio de outro erro na direção oposta -- a xícara saiu do
+# tamanho do tronco em 27/08 --, e a correção de então tratou o sintoma
+# escolhendo um número pequeno o bastante para nada estourar. O tamanho
+# certo é por objeto, e é uma medida que se anota uma vez.
+#
+# `escala_objeto` na ação continua multiplicando isto, para o roteiro poder
+# exagerar de propósito (a chave gigante da esquete da bicicleta).
+TAMANHO_OBJETO = {
+    "celular":               0.11,
+    "chave":                 0.09,
+    "xicara_de_cafe":        0.11,
+    "carteira":              0.12,
+    "controle_remoto":       0.13,
+    "boleto":                0.22,   # papel A4 na mão, pelo lado maior
+    "marmita":               0.17,
+    "sacola_de_compras":     0.26,
+    "caixa_de_papelao":      0.30,
+    "guarda_chuva_quebrado": 0.40,   # o único que é maior que o tronco
+}
+TAMANHO_OBJETO_PADRAO = 0.13
+
 # A CÂMERA CORTA, NÃO DESLIZA (28/08, noite)
 # ---------------------------------------------------------------------
 # A primeira versão da arte panorâmica veio com uma deriva contínua: a
@@ -2093,15 +2120,29 @@ def render(pasta_partes, spec, saida, tmpdir=None):
         # foi o que aconteceu no primeiro teste. O tamanho vira fração da
         # altura do ator, que é a única referência de escala que existe na
         # cena. `escala_objeto` na ação ajusta a partir daí.
-        bb = im.getbbox()
-        if bb:
-            im = im.crop(bb)
-        # 11% da altura do ator, não 16%: com 16% a xícara ficou do tamanho
-        # do tronco no primeiro vídeo com objeto em cena. Uma caneca tem
-        # ~10 cm contra 1,75 m de gente, e mesmo exagerando para cartoon o
-        # que se lê como "objeto de mão" para de ler bem acima de 12%.
-        alvo = ALTURA_ALVO_PX * 0.11
-        k = alvo / max(im.height, 1)
+        # RECORTE PELO ALFA SÓLIDO, não por `getbbox()` (28/08). O rembg
+        # devolve alfa residual baixo -- 1 ou 2 de 255 -- em quase todo o
+        # PNG, e `getbbox()` considera isso conteúdo: ele devolvia a imagem
+        # INTEIRA em todos os dez objetos do catálogo. Como a escala é
+        # medida sobre a caixa devolvida, o objeto de verdade saía menor do
+        # que o pedido, e quanto mais margem a arte tinha, menor ele ficava:
+        # no boleto o desenho ocupa 37% da altura do arquivo, então ele
+        # aparecia com um terço do tamanho e sumia na mão.
+        _a = np.asarray(im)[..., 3]
+        _ys, _xs = np.nonzero(_a > 128)
+        if len(_ys):
+            im = im.crop((int(_xs.min()), int(_ys.min()),
+                          int(_xs.max()) + 1, int(_ys.max()) + 1))
+        # O TAMANHO É POR OBJETO (ver TAMANHO_OBJETO). Um número só para
+        # todos errava nas duas pontas: 16% fez a xícara ficar do tamanho do
+        # tronco em 27/08, e os 11% que resolveram aquilo fizeram o boleto
+        # sumir em 28/08 -- uma folha de papel na mão ocupa um quarto da
+        # altura de uma pessoa, não um décimo.
+        alvo = ALTURA_ALVO_PX * TAMANHO_OBJETO.get(nome, TAMANHO_OBJETO_PADRAO)
+        # pela MAIOR dimensão, não pela altura: o boleto e o controle são
+        # desenhados deitados, e medir a altura deles deixava o objeto do
+        # tamanho de um cartão. O que se lê como tamanho é o lado maior.
+        k = alvo / max(im.width, im.height, 1)
         im = im.resize((max(int(im.width * k), 1), max(int(im.height * k), 1)),
                        Image.LANCZOS)
         # CONTORNO, depois de redimensionar: a espessura é fração do
