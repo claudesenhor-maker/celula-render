@@ -2332,8 +2332,15 @@ def _objeto_na_mao(acoes_do_ator, t, objetos, atual):
         # mão (é o que se está oferecendo); passado o gesto, ela é de quem
         # recebeu. Sem isto o objeto se duplica e os dois seguram uma
         # marmita cada -- o defeito da rodada 6 do ciclo.
+        #
+        # A MARGEM NÃO É ENFEITE (rodada 10). O motor anima "em 2s"
+        # (`fh = (f // 2) * 2`), então num trecho de número par de frames o
+        # `t` do último frame é (nf-2)/(nf-1) e NUNCA chega a 1,0. Com
+        # `t >= ate` e uma entrega de `ate: 1.0`, a condição jamais era
+        # verdadeira: a rodada 6 passou porque lá a entrega acabava em 0,6,
+        # e a de 1,0 duplicou a caixa de papelão do mesmo jeito de antes.
         if a.get("nome") in ACOES.ACOES_ENTREGAM_OBJETO \
-                and t >= float(a.get("ate", 1.0)):
+                and t >= float(a.get("ate", 1.0)) - 0.02:
             atual = None
             continue
         nome = a.get("objeto")
@@ -2397,7 +2404,7 @@ def _quem_recebe(por_ator, na_mao, t, objetos):
         for a in acoes:
             if a.get("nome") not in ACOES.ACOES_ENTREGAM_OBJETO:
                 continue
-            if t < float(a.get("ate", 1.0)):
+            if t < float(a.get("ate", 1.0)) - 0.02:   # ver a margem acima
                 continue
             nome = a.get("objeto")
             if nome in objetos:
@@ -2660,6 +2667,7 @@ def render(pasta_partes, spec, saida, tmpdir=None, amostra=0):
     planos, cortes = [], []
     n_empurrados = {}
     fora_de_cena = set()          # quem saiu andando no trecho anterior
+    dupla_avisada = False         # o aviso de objeto duplicado sai uma vez
     # OS FRAMES QUE A AMOSTRA QUER, em índice global. `total` já é a
     # duração real da voz, então dá para escolher antes de desenhar.
     quero, colhidos = None, []
@@ -2737,6 +2745,34 @@ def render(pasta_partes, spec, saida, tmpdir=None, amostra=0):
             fh = (f // 2) * 2                       # animar "em 2s"
             t = fh / max(1, nf - 1)
             nivel = env[n] if n < len(env) else 0.0
+
+            # O QUE CADA UM TEM NA MÃO, ANTES do desvio da amostra. O
+            # objeto é ESTADO: ele passa de mão num frame e continua lá nos
+            # seguintes. Calcular isso só nos frames desenhados faz a
+            # PRÉVIA mentir -- se nenhum quadro da amostra cair no instante
+            # em que a entrega se completa, a mão de quem deu nunca esvazia
+            # e a folha mostra os dois segurando a mesma caixa. Foi
+            # exatamente o que aconteceu na rodada 10 do ciclo, e a caça ao
+            # bug foi no motor até o teste isolado mostrar que o motor
+            # estava certo. Custa microssegundos por frame pulado.
+            for chave in chaves:
+                na_mao[chave] = _objeto_na_mao(por_ator[chave], t, objetos,
+                                               na_mao.setdefault(chave, None))
+            _quem_recebe(por_ator, na_mao, t, objetos)
+            # UM OBJETO, UMA MÃO. Guarda barata contra a família de bugs de
+            # estado que já apareceu duas vezes no ciclo (rodadas 6 e 10):
+            # os dois personagens segurando a mesma coisa ao mesmo tempo. É
+            # só um aviso -- corrigir aqui esconderia a causa --, mas ele
+            # aparece no log de todo render e não depende de alguém olhar a
+            # folha de contato no quadro certo.
+            _seguram = [c for c in chaves if na_mao.get(c) is not None]
+            if len(_seguram) > 1 and not dupla_avisada:
+                if len({id(na_mao[c]["img"]) for c in _seguram}) < len(_seguram):
+                    print(f"[objeto] AVISO: {' e '.join(_seguram)} seguram o "
+                          f"MESMO objeto em {n / float(FPS):.1f}s -- "
+                          f"entrega que nao esvaziou a mao de quem deu")
+                    dupla_avisada = True
+
             if quero is not None and n not in quero:
                 n += 1                              # amostra: pula o desenho
                 continue
@@ -2767,13 +2803,6 @@ def render(pasta_partes, spec, saida, tmpdir=None, amostra=0):
             # outro, que é a leitura certa -- é ele que está agindo.
             atras_na_frente = [c for c in chaves if c != falante] + \
                               [c for c in chaves if c == falante]
-            # O QUE CADA UM TEM NA MÃO, os dois antes de qualquer desenho:
-            # a entrega passa de um para o outro, e para isso é preciso
-            # saber o estado dos dois ao mesmo tempo.
-            for chave in chaves:
-                na_mao[chave] = _objeto_na_mao(por_ator[chave], t, objetos,
-                                               na_mao.setdefault(chave, None))
-            _quem_recebe(por_ator, na_mao, t, objetos)
             so_dele = {}
             for chave in atras_na_frente:
                 pers, x0, dy = elenco[chave]
