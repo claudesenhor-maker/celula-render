@@ -176,6 +176,28 @@ CORRECAO_POSE_T = {
     "braco_sup_d": 90, "braco_inf_d": 90, "mao_d": 90,
 }
 
+# =====================================================================
+# ENCAIXE_OMBRO — a manga sobe, o pivô fica onde está (28/08)
+# =====================================================================
+# O pivô do ombro passou a vir da linha do cotovelo (lei 20) e gira no
+# lugar certo. O que sobrou foi de ARTE: a folha é desenhada em T, e com o
+# braço horizontal a manga encosta no tronco pela borda de BAIXO dela. Ao
+# cair para a vertical, essa mesma borda vira a lateral do braço, e o topo
+# da manga -- que na folha era a ponta do ombro -- fica abaixo da linha do
+# ombro do tronco. Resultado: uma falha entre a camisa e a manga em todo
+# frame de braço baixo, exatamente onde o olho procura a articulação.
+#
+# A correção é deslocar a CADEIA INTEIRA do braço (manga, antebraço e mão)
+# para cima no referencial do tronco. Só a arte sobe: o pivô continua
+# sendo o que o segmentador mediu, e por isso o giro não muda -- era o que
+# estava certo e não podia ser mexido.
+#
+# A medida é fração da altura do CRÂNIO porque essa é a única régua de
+# escala que existe dentro do personagem (a mesma que a expressão facial
+# usa): folha nova, maior ou menor, encaixa sem ninguém recalibrar.
+SUBIR_BRACO_HC = 0.10
+ENCAIXE_OMBRO = ("braco_sup_e", "braco_sup_d")
+
 # feições seguem a cabeça: giram com ela, não por conta própria
 SEGUE = {
     "cabelo": "cranio", "nariz": "cranio", "boca": "mandibula",
