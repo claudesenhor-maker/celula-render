@@ -186,11 +186,14 @@ def buscar_cenarios_e_objetos(spec):
     pasta_cen, pasta_obj = "/tmp/cenarios", "/tmp/objetos"
     publico = f"{SB}/storage/v1/object/public/{BUCKET}"
 
+    import sob_demanda as SD
+
     urls = dict(spec.get("cenarios") or {})
     for tr in spec.get("trechos") or []:
         nome = tr.get("cenario")
         if nome and nome not in urls:
             urls[nome] = None                    # marca para tentar o padrao
+    faltaram = []
     for nome, url in urls.items():
         # a URL do spec primeiro; sem ela, as grafias possiveis do bucket.
         # O `.png` do BRUTO entrou em 28/08: o gerador de imagem devolve ora
@@ -203,6 +206,20 @@ def buscar_cenarios_e_objetos(spec):
                 f"{publico}/assets/cenario/geral/{nome}.png"]:
             if _baixar_para(c, pasta_cen, nome):
                 break
+        else:
+            faltaram.append(nome)
+
+    # CENARIO SOB DEMANDA (28/08). O que o roteiro pediu e ninguem desenhou
+    # e gerado AGORA, e ja entra neste video: cenario vai para o bruto e nao
+    # passa por rembg, entao custa ~20s e nao ha por que adiar. Ver
+    # sob_demanda.py -- inclusive o teto, que existe porque roteiro que pede
+    # tres cenarios novos trocou de lugar tres vezes em vinte segundos.
+    for nome in faltaram[:SD.MAX_POR_VIDEO]:
+        SD.gerar_cenario(nome, pasta_cen)
+    for nome in faltaram[SD.MAX_POR_VIDEO:]:
+        print(f"[sob-demanda] '{nome}' passou do teto de "
+              f"{SD.MAX_POR_VIDEO} por video; fica para depois")
+        SD.encomendar("cenario", nome, "passou do teto num video")
     spec["pasta_cenarios"] = pasta_cen
 
     objetos = spec.get("objetos") or {}
@@ -210,7 +227,16 @@ def buscar_cenarios_e_objetos(spec):
     for nome, ref in objetos.items():
         alvo = (ref if isinstance(ref, str) and ref.startswith("http")
                 else f"{publico}/assets/objeto/geral/{ref or nome}.png")
-        locais[nome] = nome if _baixar_para(alvo, pasta_obj, nome) else ref
+        if _baixar_para(alvo, pasta_obj, nome):
+            locais[nome] = nome
+            continue
+        # OBJETO SOB DEMANDA E ENCOMENDA, NAO GERACAO NA HORA: ele precisa
+        # de alfa, alfa vem do rembg e o rembg so roda no Action `assets`
+        # (5 a 20 min). Prender a esteira nisso trocaria um defeito pequeno
+        # -- o gesto com a mao vazia numa esquete -- por um grande, que e a
+        # fila parada. Decisao do dono do projeto em 28/08.
+        locais[nome] = ref
+        SD.encomendar("objeto", nome, "pedido por um roteiro e sem arte")
     if objetos:
         spec["objetos"] = locais
     spec["pasta_objetos"] = pasta_obj
