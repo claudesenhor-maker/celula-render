@@ -50,8 +50,15 @@ SR = 24000                     # o mesmo do palito_v5; misturar exige igualdade
 # Ganhos de mixagem, em dB relativos à voz. A voz manda: efeito que compete
 # com a fala faz o espectador perder a piada, que é o oposto do objetivo.
 GANHO_SFX_DB = -7.0
-GANHO_MUSICA_DB = -21.0
-DUCK_DB = -9.0                 # o quanto a trilha abaixa quando há voz
+# -18 dB, não -21: com bateria e baixo a trilha tem que ser OUVIDA nas
+# pausas -- é ali que ela segura quem está prestes a rolar o feed. O que a
+# mantém fora do caminho da fala é o ducking, não o volume geral.
+GANHO_MUSICA_DB = -18.0
+# ...e por isso o ducking fundo mais: -11 dB sobre -18 dá -29 dB por baixo
+# da voz, mais silencioso do que os -30 que a trilha antiga tinha ali. Mais
+# alta na pausa, mais baixa embaixo da fala: é o contraste que prende, não
+# o volume médio.
+DUCK_DB = -11.0                # o quanto a trilha abaixa quando há voz
 
 
 def _db(x):
@@ -231,6 +238,148 @@ def _tremido():
     return _fade(x * _exp(t, 0.22) * 0.35)
 
 
+# =====================================================================
+# SOM DE COISA (27/08 à noite)
+# =====================================================================
+# Os dez efeitos acima são de DESENHO: baque, mola, susto, rimshot. Eles
+# pontuam o corpo. O que faltava era o som do MUNDO -- "fui cancelar no
+# celular" e não se ouve o clique, "andei" e não se ouve o passo. Sem isso
+# a faixa continua sabendo o que o personagem SENTE e não sabendo o que ele
+# FAZ, e o objeto na mão vira adereço mudo.
+#
+# Todos continuam sintetizados: uma biblioteca de samples seria melhor de
+# ouvir e pior de manter (dezenas de arquivos com licenças diferentes, no
+# bucket, baixados no runner), e o que se pede aqui é o som ESQUEMÁTICO que
+# o desenho animado usa -- ninguém precisa do clique verdadeiro de um
+# iPhone, precisa do clique que se lê como "ele mexeu no telefone".
+def _clique():
+    """O toque na tela do celular. Curtíssimo: um estalo agudo e um blip.
+
+    Um toque de dedo em vidro não faz som nenhum no mundo real; o que se
+    reconhece como "mexeu no celular" é o clique da interface. É o mesmo
+    tipo de convenção do rimshot."""
+    t = _t(0.06)
+    estalo = _passa_alta(_ruido(len(t), 21), 2800) * _exp(t, 0.005)
+    blip = np.sin(2 * np.pi * 1900 * t) * _exp(t, 0.012)
+    return _fade(estalo * 0.8 + blip * 0.45, ms=2)
+
+
+def _digitar():
+    """Rajada de toques: mexendo no aplicativo, digitando a senha. Um
+    clique solto lê como defeito de áudio; a rajada lê como alguém
+    operando a coisa."""
+    total = int(0.62 * SR)
+    x = np.zeros(total)
+    c = _clique()
+    for k, em in enumerate((0.0, 0.11, 0.19, 0.31, 0.44)):
+        i = int(em * SR)
+        m = min(len(c), total - i)
+        x[i:i + m] += c[:m] * (0.7 + 0.3 * ((k * 7) % 5) / 4.0)
+    return _fade(x * 0.85)
+
+
+def _notificacao():
+    """O 'blim' do telefone: duas notas subindo, curtas e limpas."""
+    x = np.zeros(int(0.55 * SR))
+    for em, f in ((0.0, 1318.5), (0.11, 1760.0)):
+        t = _t(0.30)
+        nota = (np.sin(2 * np.pi * f * t)
+                + 0.3 * np.sin(2 * np.pi * 2 * f * t)) * _exp(t, 0.09)
+        i = int(em * SR)
+        m = min(len(nota), len(x) - i)
+        x[i:i + m] += nota[:m] * 0.55
+    return _fade(x)
+
+
+def _chaves():
+    """Molho de chaves. O parcial inarmônico agudo é o que faz ler como
+    METAL; a irregularidade dos tempos é o que faz ler como MOLHO -- em
+    tempos regulares soaria como sino."""
+    n = int(0.75 * SR)
+    x = np.zeros(n)
+    rng = np.random.default_rng(17)
+    for em in rng.uniform(0.0, 0.42, 9):
+        t = _t(0.30)
+        f = rng.uniform(2400.0, 5200.0)
+        tin = (np.sin(2 * np.pi * f * t)
+               + 0.6 * np.sin(2 * np.pi * f * 2.73 * t)) * _exp(t, 0.045)
+        i = int(em * SR)
+        m = min(len(tin), n - i)
+        x[i:i + m] += tin[:m] * rng.uniform(0.35, 0.8)
+    return _fade(x * 0.55)
+
+
+def _gole():
+    """Gole: duas deglutições. Ruído grave com o corte do filtro caindo --
+    é a queda de altura que se lê como líquido descendo."""
+    n = int(0.62 * SR)
+    x = np.zeros(n)
+    for em, dur in ((0.0, 0.22), (0.26, 0.18)):
+        t = _t(dur)
+        env = np.sin(np.pi * np.linspace(0, 1, len(t))) ** 1.4
+        base = _passa_baixa(_ruido(len(t), 31), 520) * 1.2
+        f = 180.0 * np.exp(-3.0 * t) + 70.0
+        tom = np.sin(2 * np.pi * np.cumsum(f) / SR) * 0.5
+        i = int(em * SR)
+        m = min(len(t), n - i)
+        x[i:i + m] += ((base + tom) * env)[:m]
+    return _fade(x * 0.7)
+
+
+def _papel():
+    """Sacola / papel amassado: rajadas curtas de ruído agudo em tempos
+    irregulares. A irregularidade é o que separa 'papel' de 'chuveiro'."""
+    n = int(0.55 * SR)
+    rng = np.random.default_rng(5)
+    base = _passa_alta(_ruido(n, 13), 1800)
+    env = np.zeros(n)
+    for em in rng.uniform(0.0, 0.45, 14):
+        i = int(em * SR)
+        d = max(3, int(rng.uniform(0.010, 0.045) * SR))
+        janela = np.hanning(d) * rng.uniform(0.4, 1.0)
+        m = min(d, n - i)
+        if m > 0:
+            env[i:i + m] += janela[:m]
+    return _fade(base * np.minimum(env, 1.4) * 0.5)
+
+
+def _louca():
+    """Xícara pousada: batida curta com ressonância de cerâmica."""
+    t = _t(0.35)
+    x = sum(a * np.sin(2 * np.pi * f * t) * _exp(t, d)
+            for f, a, d in ((760.0, 0.6, 0.10), (1930.0, 0.3, 0.06),
+                            (3410.0, 0.15, 0.04)))
+    estalo = _passa_alta(_ruido(len(t), 9), 2000) * _exp(t, 0.006)
+    return _fade(x * 0.7 + estalo * 0.4)
+
+
+def _rangido():
+    """Dobradiça emperrada, guarda-chuva que não abre. Onda quadrada com
+    a altura tremendo devagar: é assim que soa atrito de coisa presa."""
+    t = _t(0.7)
+    f = 320.0 + 180.0 * np.sin(2 * np.pi * 2.3 * t) + 60.0 * np.sin(2 * np.pi * 13.0 * t)
+    x = np.sign(np.sin(2 * np.pi * np.cumsum(f) / SR))
+    env = np.sin(np.pi * np.linspace(0, 1, len(t))) ** 1.2
+    return _fade(_passa_baixa(x, 2200) * env * 0.35)
+
+
+def _caixa():
+    """Caixa registradora: o sino e a gaveta. É o som de dinheiro saindo, e
+    metade das esquetes deste canal é sobre dinheiro saindo."""
+    n = int(1.0 * SR)
+    x = np.zeros(n)
+    t = _t(0.8)
+    sino = sum(a * np.sin(2 * np.pi * f * t) * _exp(t, d)
+               for f, a, d in ((1568.0, 0.5, 0.30), (2349.0, 0.3, 0.20),
+                               (3136.0, 0.2, 0.12)))
+    x[:len(sino)] += sino * 0.6
+    gaveta = _varredura(220, 90, 0.30, curva=4.0) * _exp(_t(0.30), 0.08)
+    i = int(0.22 * SR)
+    m = min(len(gaveta), n - i)
+    x[i:i + m] += gaveta[:m] * 0.7
+    return _fade(x * 0.85)
+
+
 CATALOGO = {
     "thud": _thud, "batida": _thud,
     "boing": _boing, "mola": _boing,
@@ -242,6 +391,16 @@ CATALOGO = {
     "rimshot": _rimshot, "piada": _rimshot,
     "passo": _passo,
     "tremido": _tremido,
+    # som de coisa
+    "clique": _clique, "toque": _clique,
+    "digitar": _digitar, "teclado": _digitar,
+    "notificacao": _notificacao, "blim": _notificacao,
+    "chaves": _chaves, "tilintar": _chaves,
+    "gole": _gole, "sorver": _gole,
+    "papel": _papel, "sacola": _papel,
+    "louca": _louca, "xicara": _louca,
+    "rangido": _rangido, "porta": _rangido,
+    "caixa": _caixa, "dinheiro": _caixa, "registradora": _caixa,
 }
 
 # Peso de cada efeito na mistura, depois de todos serem levados ao mesmo
@@ -252,6 +411,12 @@ GANHO_BASE = {
     "susto": 1.00, "thud": 1.00, "boing": 0.85, "whoosh": 0.70,
     "rimshot": 0.95, "erro": 0.80, "plim": 0.70,
     "pop": 0.40, "tremido": 0.35, "passo": 0.30,
+    # SOM DE COISA fica ABAIXO do som de desenho, de propósito: ele existe
+    # para dar textura ao que está acontecendo, não para pontuar. Clique
+    # alto demais rouba a fala que está por cima dele.
+    "caixa": 0.85, "notificacao": 0.62, "chaves": 0.55, "louca": 0.55,
+    "gole": 0.50, "digitar": 0.45, "papel": 0.45, "rangido": 0.45,
+    "clique": 0.42,
 }
 
 _CACHE = {}
@@ -301,10 +466,13 @@ DA_ACAO = {
     "tropecar":        ("thud", 0.45, 0.7),
     "entrar_correndo": ("whoosh", 0.05, 0.8),
     "maos_na_cabeca":  ("thud", 0.25, 0.6),
-    # objeto que encosta em alguma coisa: aqui há contato de verdade
+    # objeto que encosta em alguma coisa: aqui há contato de verdade.
+    # Estas linhas são o GENÉRICO -- o objeto que tem som próprio manda
+    # sobre elas (ver DO_OBJETO).
     "pegar_objeto":    ("pop", 0.55, 0.5),
     "largar_objeto":   ("thud", 0.60, 0.5),
     "entregar_objeto": ("pop", 0.70, 0.4),
+    "usar_objeto":     ("pop", 0.35, 0.4),
 }
 
 # Expressões que merecem marca sonora própria, quando entram como JANELA de
@@ -319,6 +487,100 @@ DA_EXPRESSAO = {
     "chocado": ("susto", 0.9),
     "surpreso": ("susto", 0.6),
 }
+
+# =====================================================================
+# O OBJETO MANDA NO SOM DA AÇÃO (27/08 à noite)
+# =====================================================================
+# `usar_objeto` não tem som próprio: usar um CELULAR é um clique, usar uma
+# XÍCARA é um gole, usar uma CHAVE é o tilintar. A tabela acima só sabia da
+# ação, então a esquete inteira sobre cancelar assinatura pelo aplicativo
+# passava sem um único toque de tela -- que é exatamente a queixa de "som
+# que não tem a ver com o que está acontecendo".
+#
+# O vocabulário de objeto é fechado (LEI 11), então esta tabela é fechada
+# junto: objeto novo entra aqui no mesmo dia em que entra no bucket. Objeto
+# sem linha aqui cai no som genérico de contato de `DA_ACAO`.
+DO_OBJETO = {
+    "celular": {
+        "usar_objeto":     ("digitar", 0.30, 0.9),
+        "pegar_objeto":    ("clique", 0.60, 0.6),
+        "mostrar_objeto":  ("notificacao", 0.45, 0.7),
+        "entregar_objeto": ("clique", 0.70, 0.5),
+    },
+    "xicara_de_cafe": {
+        "usar_objeto":     ("gole", 0.35, 1.0),
+        "pegar_objeto":    ("louca", 0.55, 0.7),
+        "largar_objeto":   ("louca", 0.60, 0.9),
+        "entregar_objeto": ("louca", 0.70, 0.6),
+    },
+    "chave": {
+        "usar_objeto":     ("chaves", 0.35, 1.0),
+        "pegar_objeto":    ("chaves", 0.55, 0.8),
+        "mostrar_objeto":  ("chaves", 0.40, 0.7),
+        "entregar_objeto": ("chaves", 0.65, 0.8),
+        "largar_objeto":   ("chaves", 0.60, 0.9),
+    },
+    "sacola_de_compras": {
+        "usar_objeto":     ("papel", 0.35, 0.9),
+        "pegar_objeto":    ("papel", 0.55, 0.7),
+        "largar_objeto":   ("papel", 0.60, 0.8),
+        "entregar_objeto": ("papel", 0.65, 0.6),
+    },
+    "guarda_chuva_quebrado": {
+        "usar_objeto":     ("rangido", 0.30, 1.0),
+        "pegar_objeto":    ("rangido", 0.55, 0.6),
+        "mostrar_objeto":  ("rangido", 0.40, 0.7),
+    },
+}
+
+# Locomoção: som em CADÊNCIA, não um som só. Ver `_cadencia_de_passos`.
+ANDANDO = {
+    "andar":           (1.7, 1.00),
+    "entrar_andando":  (1.7, 1.00),
+    "sair_andando":    (1.7, 1.00),
+    "entrar_correndo": (3.2, 1.25),
+}
+
+
+def _cadencia_de_passos(a, t0, dur):
+    """Um som por PISADA, na fase em que o pé encosta no chão.
+
+    POR QUE ISTO É DIFERENTE DO RESTO DA TABELA
+        Todo o resto aqui é pontuação: um evento, um som. Andar não é um
+        evento, é um estado -- e um baque solto no meio de uma caminhada de
+        três segundos soa como tropeço, não como passo. Foi por isso que
+        `passo` existia no catálogo desde 29/08 e nunca tocou: não havia
+        como pendurá-lo em `DA_ACAO`, que só sabe disparar uma vez.
+
+    ONDE CAI CADA PISADA
+        `acoes._ciclo_passo_lateral` recebe `fase = 2*pi*passos*u*dur` e os
+        dois pés estão juntos no chão quando `sin(fase) = 0`, ou seja a cada
+        meia volta. As pisadas são, então, em `k / (2*passos)` segundos
+        depois do início da ação -- medido no mesmo ciclo que desenha a
+        perna, e não estimado. Som de passo fora da pisada é pior que
+        silêncio: denuncia que o áudio e o vídeo não se conhecem.
+    """
+    nome = str(a.get("nome", "")).strip().lower()
+    padrao = ANDANDO.get(nome)
+    if not padrao:
+        return []
+    passos = float(a.get("passos_por_s", padrao[0]))
+    de, ate = float(a.get("de", 0.0)), float(a.get("ate", 1.0))
+    janela = max(0.0, (ate - de) * dur)
+    if passos <= 0 or janela < 0.25:
+        return []
+    intervalo = 1.0 / (2.0 * passos)
+    base = t0 + de * dur
+    fora = []
+    k = 1
+    while k * intervalo < janela and len(fora) < 40:
+        fora.append({"nome": "passo", "t": base + k * intervalo,
+                     # pé alternado soa mais pesado que o outro; sem essa
+                     # variação a cadência vira metrônomo
+                     "ganho": padrao[1] * (1.0 if k % 2 else 0.75),
+                     "cadencia": True})
+        k += 1
+    return fora
 
 
 def eventos_do_spec(spec):
@@ -337,7 +599,13 @@ def eventos_do_spec(spec):
             continue
 
         for a in (tr.get("acoes") or []):
-            reg = DA_ACAO.get(str(a.get("nome", "")).strip().lower())
+            acao = str(a.get("nome", "")).strip().lower()
+            # PISADAS primeiro: locomoção rende uma cadência, não um evento
+            fora.extend(_cadencia_de_passos(a, t0, dur))
+            # o objeto na mão manda sobre a tabela da ação: usar um celular
+            # é um clique, usar uma xícara é um gole
+            obj = str(a.get("objeto") or "").strip().lower()
+            reg = (DO_OBJETO.get(obj) or {}).get(acao) or DA_ACAO.get(acao)
             if not reg:
                 continue
             nome, onde, g = reg
@@ -365,6 +633,13 @@ def eventos_do_spec(spec):
     # `susto` que o motor injeta como gancho e o `susto` que o roteirista
     # escreveu caíram a 200ms um do outro no teste de 29/08, e o resultado
     # foi um estalo duplo que soa como defeito de áudio.
+    # A CADÊNCIA NÃO PASSA POR AQUI. Passo é um som de textura, contínuo por
+    # construção: fundir passos a 250ms um do outro apagaria a caminhada
+    # inteira, e cortá-los por densidade apagaria a única coisa que dá peso
+    # a quem anda. Eles têm teto próprio (40 por ação) e ganho baixo.
+    passos = [e for e in fora if e.get("cadencia")]
+    fora = [e for e in fora if not e.get("cadencia")]
+
     fora.sort(key=lambda e: e["t"])
     limpos = []
     for e in fora:
@@ -388,7 +663,9 @@ def eventos_do_spec(spec):
         limpos = sorted(fortes, key=lambda e: e["t"])
         print(f"[sfx] {cortados} efeito(s) cortado(s) por densidade "
               f"(teto de {teto} num video de {_duracao_total(trechos):.0f}s)")
-    return limpos
+    if passos:
+        print(f"[sfx] {len(passos)} pisada(s) em cadencia")
+    return sorted(limpos + passos, key=lambda e: e["t"])
 
 
 def _duracao_total(trechos):
@@ -472,6 +749,15 @@ def segmentos_do_spec(spec):
     return fora
 
 
+# Quanto de BATERIA cada estilo aguenta. Groove por baixo de derrota soa
+# como deboche do personagem, e a trilha triste é a única que precisa
+# respirar; o resto do arco pede pulso.
+PESO_RITMO = {"leve": 1.00, "tenso": 1.05, "triste": 0.30,
+              "suspense": 0.55, "deboche": 0.95, "triunfo": 1.10}
+
+BPM_PADRAO = 122.0
+
+
 def _nota(f, dur, sr=SR, brilho=0.30):
     """Uma nota de marimba: fundamental, oitava e uma quinta acima, com
     envelope percussivo. Instrumento de barra é quase só fundamental --
@@ -484,29 +770,110 @@ def _nota(f, dur, sr=SR, brilho=0.30):
     return x * ataque * _exp(t, 0.16 + 0.4 * (200.0 / max(f, 60.0)))
 
 
-def trilha(dur_s, estilo="leve", bpm=104.0, semente=3, sr=SR, segmentos=None):
-    """Bed instrumental do tamanho exato do vídeo.
+# ---------------------------------------------------------------------
+# A SEÇÃO RÍTMICA (27/08 à noite)
+# ---------------------------------------------------------------------
+# A trilha antiga era só marimba: harmonia bonita, andamento de sala de
+# espera e nada abaixo de 130 Hz. Ela cumpria o que se pediu dela em 29/08
+# -- "tirar o silêncio de estúdio de trás da voz" -- e não cumpre o que se
+# pede agora, que é PRENDER. O que segura alguém que está rolando o feed é
+# pulso: bumbo, chimbal e um baixo andando.
+#
+# E é a maneira de encher a faixa sem estourar nada: a voz mora entre 200 e
+# 4000 Hz, o baixo mora abaixo de 130 e o chimbal acima de 6 kHz. As três
+# coisas ocupam sentidos diferentes do mesmo ouvido, e nenhuma delas
+# disputa espectro com a fala -- que é o que faz "mais música" virar "menos
+# inteligível" quando se erra a faixa.
+def _bumbo():
+    """Bumbo: varredura grave rápida, mais um estalo de pele."""
+    t = _t(0.24)
+    corpo = _varredura(115, 44, 0.24, curva=6.5) * _exp(t, 0.055)
+    pele = _passa_baixa(_ruido(len(t), 41), 2400) * _exp(t, 0.004) * 0.30
+    return _fade(corpo + pele, ms=3)
 
-    Não é música para se ouvir: é chão. Fica 21 dB abaixo da voz e abaixa
-    mais ainda quando alguém fala. O que ela faz é tirar o silêncio de
-    estúdio de trás da fala -- que é o que fazia o vídeo soar como áudio de
-    WhatsApp em vez de desenho.
+
+def _chimbal(aberto=False):
+    dur = 0.17 if aberto else 0.045
+    t = _t(dur)
+    x = _passa_alta(_ruido(len(t), 43 if aberto else 47), 6500)
+    return _fade(x * _exp(t, 0.055 if aberto else 0.012) * 0.5, ms=2)
+
+
+def _palma():
+    """Palma no 2 e no 4. As três cópias muito juntas são o que faz soar
+    como VÁRIAS mãos em vez de um estalo só -- é assim que a palma de
+    música gravada é feita."""
+    n = int(0.24 * SR)
+    x = np.zeros(n)
+    for em, g in ((0.0, 1.0), (0.008, 0.7), (0.017, 0.5)):
+        t = _t(0.20)
+        c = _passa_alta(_passa_baixa(_ruido(len(t), 53), 5200), 1100) * _exp(t, 0.035)
+        i = int(em * SR)
+        m = min(len(c), n - i)
+        x[i:i + m] += c[:m] * g
+    return _fade(x * 0.45)
+
+
+def _baixo(f, dur, sr=SR):
+    """Nota de baixo: quase só fundamental. Ele vive abaixo de 130 Hz, que
+    é a faixa que o vídeo inteiro tinha vazia -- e é a faixa que dá a
+    sensação física de "tem música tocando" sem tapar uma sílaba."""
+    t = _t(dur, sr)
+    x = np.sin(2 * np.pi * f * t) + 0.25 * np.sin(2 * np.pi * 2 * f * t)
+    ataque = np.minimum(1.0, t / 0.008)
+    corte = np.minimum(1.0, np.maximum(0.0, (dur - t) / 0.03))
+    return x * ataque * corte * _exp(t, 0.5)
+
+
+def trilha(dur_s, estilo="leve", bpm=BPM_PADRAO, semente=3, sr=SR, segmentos=None):
+    """Bed instrumental do tamanho exato do vídeo, em três camadas.
+
+    O QUE MUDOU EM 27/08 À NOITE
+        A trilha era só marimba, a 104 bpm: calma, relaxante e exatamente o
+        contrário do que um Short precisa. "Tirar o silêncio de estúdio",
+        que era o pedido de 29/08, ela cumpria; PRENDER quem está rolando o
+        feed, não -- para isso é preciso PULSO, e pulso é bumbo, chimbal e
+        um baixo andando em colcheias.
+
+        Entraram três camadas separadas, e é a separação que impede o
+        estouro:
+
+        HARMONIA  marimba, o arpejo que já existia -- 200 Hz a 2 kHz
+        RITMO     bumbo, chimbal e palma -- grave curto e agudo curto
+        GRAVE     baixo em colcheias -- abaixo de 130 Hz
+
+        Cada uma é normalizada SOZINHA antes de se somarem, em proporção
+        fixa. Sem isso a proporção entre elas dependeria de quantas notas
+        por acaso se sobrepuseram, e a mesma esquete sairia com mistura
+        diferente a cada render.
+
+        E as três ocupam faixas diferentes do ouvido: a voz mora de 200 Hz
+        a 4 kHz, o baixo abaixo de 130 e o chimbal acima de 6k. É por isso
+        que dá para encher mais o áudio sem tapar uma sílaba -- "mais
+        música" só vira "menos inteligível" quando se põe mais coisa NA
+        FAIXA DA VOZ.
 
     `segmentos` (ver `segmentos_do_spec`) faz a trilha SEGUIR A CENA: cada
-    trecho toca no estilo que a emoção dele pede, com o andamento e o volume
-    daquela emoção, e o último entra depois de um breque. Sem eles, toca a
-    progressão única do começo ao fim -- que é o que fazia a música soar
-    descolada do que estava acontecendo na tela."""
+    trecho toca no estilo que a emoção dele pede, com o andamento, o volume
+    e o PESO DE BATERIA daquela emoção, e o último entra depois de um
+    breque."""
     n = int(dur_s * sr)
-    out = np.zeros(n + sr, dtype=np.float32)
+    harmonia = np.zeros(n + sr, dtype=np.float32)
+    ritmo = np.zeros(n + sr, dtype=np.float32)
+    grave = np.zeros(n + sr, dtype=np.float32)
     rng = np.random.default_rng(semente)
 
-    def por(sinal, em, g=1.0):
+    # a percussão é a mesma onda toda vez: sintetizar por batida custaria
+    # mais que o resto da trilha inteira num vídeo de 20 segundos
+    bumbo, palma = _bumbo(), _palma()
+    chimbal, chimbal_ab = _chimbal(False), _chimbal(True)
+
+    def por(bus, sinal, em, g=1.0):
         i = int(em * sr)
-        if i >= len(out):
+        if i >= len(bus):
             return
-        m = min(len(sinal), len(out) - i)
-        out[i:i + m] += sinal[:m].astype(np.float32) * g
+        m = min(len(sinal), len(bus) - i)
+        bus[i:i + m] += sinal[:m].astype(np.float32) * g
 
     if not segmentos:
         segmentos = [{"inicio": 0.0, "dur": dur_s, "estilo": estilo,
@@ -514,8 +881,10 @@ def trilha(dur_s, estilo="leve", bpm=104.0, semente=3, sr=SR, segmentos=None):
 
     c = 0
     for seg in segmentos:
-        acordes = _GRAUS.get(seg.get("estilo", estilo), _GRAUS["leve"])
+        est = seg.get("estilo", estilo)
+        acordes = _GRAUS.get(est, _GRAUS["leve"])
         k_int = float(seg.get("intensidade", 1.0))
+        k_bat = PESO_RITMO.get(est, 1.0) * k_int
         compasso = 4 * 60.0 / (bpm * (0.85 + 0.15 * k_int))
         colcheia = compasso / 8.0
         t = float(seg.get("inicio", 0.0))
@@ -526,29 +895,51 @@ def trilha(dur_s, estilo="leve", bpm=104.0, semente=3, sr=SR, segmentos=None):
             t += min(0.85, max(0.0, (fim - t) * 0.35))
         while t < fim:
             grau = acordes[c % len(acordes)]
-            raiz = _TONICA * 2 ** (grau[0] / 12.0)
-            # baixo nos tempos 1 e 3: o mínimo que dá sensação de compasso
-            por(_nota(raiz / 2.0, compasso * 0.5, sr, brilho=0.12), t, 0.55 * k_int)
-            por(_nota(raiz / 2.0, compasso * 0.4, sr, brilho=0.12),
-                t + compasso * 0.5, 0.35 * k_int)
-            # arpejo de colcheias, com uma nota trocada de vez em quando para
-            # o laço de 4 compassos não ficar óbvio num vídeo de 20 segundos
+            # --- RITMO. Bumbo no 1, no 3 e na síncope antes do 4; palma no
+            # 2 e no 4; chimbal em todas as colcheias, aberto na última --
+            # o chimbal aberto no fim do compasso é o que faz a volta do
+            # laço soar como decisão e não como emenda.
+            for j, g in ((0.0, 1.00), (0.5, 0.85), (0.75, 0.50)):
+                por(ritmo, bumbo, t + j * compasso, g * k_bat)
+            for j in (0.25, 0.75):
+                por(ritmo, palma, t + j * compasso, 0.75 * k_bat)
+            for j in range(8):
+                por(ritmo, chimbal_ab if j == 7 else chimbal, t + j * colcheia,
+                    (0.55 if j % 2 == 0 else 0.32) * k_bat)
+            # --- GRAVE. Colcheias na raiz e a quinta no fim do compasso,
+            # que é o mínimo que faz um baixo ANDAR em vez de segurar nota.
+            for j in range(8):
+                semi = grau[0] + (7 if j >= 6 else 0)
+                por(grave, _baixo(_TONICA * 2 ** (semi / 12.0) / 4.0,
+                                  colcheia * 0.9, sr),
+                    t + j * colcheia, (0.9 if j % 2 == 0 else 0.55) * k_int)
+            # --- HARMONIA. Arpejo de colcheias, com uma nota trocada de vez
+            # em quando para o laço de 4 compassos não ficar óbvio.
             ordem = [0, 1, 2, 1, 2, 1, 0, 1]
             for j, idx in enumerate(ordem):
                 if rng.random() < 0.12:
                     continue
                 semi = grau[idx] + (12 if rng.random() < 0.18 else 0)
-                por(_nota(_TONICA * 2 ** (semi / 12.0), colcheia * 2.2, sr),
+                por(harmonia, _nota(_TONICA * 2 ** (semi / 12.0), colcheia * 2.2, sr),
                     t + j * colcheia, (0.30 if j % 2 else 0.42) * k_int)
             t += compasso
             c += 1
 
-    out = out[:n]
-    # pico previsível: o número de notas que se sobrepõem varia com o
-    # sorteio, e sem normalizar o ganho de -21 dB significaria uma coisa
-    # diferente a cada render
+    def _nivelar(bus, alvo):
+        x = bus[:n]
+        p = float(np.max(np.abs(x)))
+        return x * (alvo / p) if p > 1e-6 else x
+
+    # proporção fixa entre as camadas: a harmonia continua sendo a que se
+    # ouve, o baixo dá o corpo e a bateria dá o pulso sem virar o assunto
+    out = (_nivelar(harmonia, 0.60) + _nivelar(grave, 0.52)
+           + _nivelar(ritmo, 0.46))
+    # LIMITADOR ANTES do nível final. A tangente arredonda os picos em vez
+    # de cortá-los, e é o que permite subir a energia média da trilha sem
+    # que o pico suba junto -- "prende sem estourar" é exatamente isto.
+    out = np.tanh(out * 0.9) / math.tanh(0.9)
     p = float(np.max(np.abs(out))) or 1.0
-    out *= 0.8 / p
+    out = (out * (0.8 / p)).astype(np.float32)
     # entrada e saída: a trilha nasce e morre fora do quadro
     fi, fo = int(0.9 * sr), int(1.4 * sr)
     if n > fi + fo:
@@ -663,7 +1054,8 @@ def mixar(voz_wav, eventos, destino, musica=None, dur_s=None, sr=SR):
         m = min(len(onda), n - i)
         base = GANHO_BASE.get(str(e.get("nome", "")).strip().lower(), 0.7)
         mix[i:i + m] += onda[:m] * (g_sfx * base * float(e.get("ganho", 1.0)))
-        usados.append(f"{e['nome']}@{float(e.get('t', 0)):.1f}s")
+        if not e.get("cadencia"):        # a cadência já se anunciou em bloco
+            usados.append(f"{e['nome']}@{float(e.get('t', 0)):.1f}s")
     if usados:
         print(f"[sfx] {len(usados)} efeitos: {', '.join(usados)}")
 
@@ -685,7 +1077,7 @@ def mixar(voz_wav, eventos, destino, musica=None, dur_s=None, sr=SR):
             else:
                 segs = cfg.get("segmentos") or None
                 faixa = trilha(n / float(sr), cfg.get("estilo", "leve"),
-                               float(cfg.get("bpm", 104.0)), sr=sr, segmentos=segs)
+                               float(cfg.get("bpm", BPM_PADRAO)), sr=sr, segmentos=segs)
                 if segs:
                     print("[musica] trilha por trecho: "
                           + " -> ".join(s.get("estilo", "leve") for s in segs)
@@ -715,7 +1107,9 @@ if __name__ == "__main__":
     import sys
     saida = sys.argv[1] if len(sys.argv) > 1 else "sfx_demo.wav"
     nomes = ["susto", "thud", "boing", "whoosh", "pop", "plim", "erro",
-             "tremido", "passo", "rimshot"]
+             "tremido", "passo", "rimshot",
+             "clique", "digitar", "notificacao", "chaves", "gole",
+             "papel", "louca", "rangido", "caixa"]
     dur = len(nomes) * 1.6 + 2.0
     x = trilha(dur, "leve") * _db(GANHO_MUSICA_DB + 8)
     for i, nm in enumerate(nomes):
