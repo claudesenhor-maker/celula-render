@@ -68,7 +68,8 @@ import expressao as EXPR
 import cenarios as CENARIOS
 import sfx as SFX
 from folha_personagem import (ESQUELETO, ORDEM_Z, FONTE_ANGULO,
-                              CORRECAO_POSE_T, SEGUE)
+                              CORRECAO_POSE_T, SEGUE,
+                              ENCAIXE_OMBRO, SUBIR_BRACO_HC)
 
 # repouso da cara: o dicionário completo com todo campo em zero, para que
 # desenhar_personagem nunca precise checar chave faltando
@@ -78,6 +79,12 @@ W, H, FPS = 1080, 1920, 24
 
 # altura de referencia do personagem no quadro; objetos sao medidos contra ela
 ALTURA_ALVO_PX = 1150
+
+# Quanto da faixa de arte que sobra dos lados a câmera percorre ao longo do
+# vídeo inteiro (ver Cenario e a rolagem em `render`). 0,7 deixa uma folga
+# nas duas pontas: chegar à borda e refletir no meio de uma fala seria um
+# movimento que muda de sentido sem motivo na cena.
+DERIVA_CENARIO = 0.70
 
 # quantos personagens cabem no quadro ao mesmo tempo. Dois é o teto do
 # formato: no 9:16 o terceiro só entra encolhendo todo mundo até a cara
@@ -1432,6 +1439,15 @@ def desenhar_personagem(pers, rig, boca_nivel=0.0, piscando=False, objeto=None,
             pv = pers.pivos[pai]
             d = _girar(((saida[0] - pv[0]) * e, (saida[1] - pv[1]) * e), ang[pai])
             pos[f] = (pos[pai][0] + d[0], pos[pai][1] + d[1])
+            # ENCAIXE DO OMBRO: a manga sobe, o pivô medido continua sendo o
+            # pivô. Sem isto o braço baixo deixa uma falha entre a camisa e a
+            # manga -- ver folha_personagem.SUBIR_BRACO_HC. O deslocamento é
+            # feito no referencial do TRONCO (girado por `ang[pai]`), senão
+            # o personagem inclinado subiria o braço na vertical da tela e a
+            # manga sairia do ombro para o lado.
+            if f in ENCAIXE_OMBRO and SUBIR_BRACO_HC:
+                s = _girar((0.0, -SUBIR_BRACO_HC * hc * e), ang[pai])
+                pos[f] = (pos[f][0] + s[0], pos[f][1] + s[1])
             ang[f] = _angulo(f, rig, boca_nivel) + corr.get(f, 0.0)
             fila.append(f)
 
@@ -1558,42 +1574,62 @@ def desenhar(pers, rig, fundo, boca_nivel=0.0, piscando=False):
 # CÂMERA — fundo que anda, personagem que vira, zoom
 # =====================================================================
 class Cenario:
-    """Um fundo que pode correr para os lados sem fim e sem emenda.
+    """Um cenário COMPRIDO por onde a câmera passeia.
 
-    O truque é ladrilhar a imagem com uma cópia ESPELHADA ao lado: a
-    borda direita do original encosta na borda direita da cópia, então
-    os pixels casam exatamente e não existe a linha vertical que denuncia
-    um fundo repetido. O ladrilho tem 2W de largura e o deslocamento é
-    tomado módulo 2W -- deslocamento infinito com duas imagens.
+    O QUE MUDOU EM 28/08, E POR QUÊ
+        Até aqui a arte era quadrada e o fundo corria em ladrilho
+        ESPELHADO: a imagem mais uma cópia invertida ao lado, deslocamento
+        módulo 2W, fundo infinito com duas cópias. O espelho não tem
+        emenda de PIXEL -- as bordas casam exatamente --, mas tem emenda
+        de LEITURA: a mesma janela aparece duas vezes, a porta que estava
+        à esquerda reaparece à direita, e o texto na placa sai ao
+        contrário. Enquanto a câmera ficava parada quase o vídeo inteiro
+        ninguém via; com ela passeando o tempo todo, é a primeira coisa
+        que aparece -- foi a queixa de 28/08 ("tentou esticar a imagem
+        fazendo uma imagem infinita, os erros ficam evidentes").
 
-    O enquadramento é COBRIR, não esticar. O gerador de imagem em uso (o
-    endpoint gratuito da Cloudflare) aceita só prompt e steps: não tem
-    largura nem altura, e devolve sempre 1024x1024. Esticar um quadrado
-    para 9:16 deforma tudo -- prédio vira torre, sofá vira pilar. Cobrir
-    mantém a proporção e corta o excesso, que num cenário (feito de
-    propósito com o centro vazio) é a parte que menos importa."""
+        Agora não se inventa cenário nenhum: a arte é PANORÂMICA, escalada
+        para cobrir a altura do quadro, e sobra material dos dois lados.
+        A câmera anda dentro desse material, e cada pixel aparece uma vez
+        só. Quem gera a arte é o workflow `gerar-assets`, que passou a
+        pedir cenário deitado (ver `Montar Pedidos`).
+
+    O QUE ACONTECE SE A ARTE FOR ESTREITA
+        Nada quebra. Um cenário quadrado de 1024, coberto para 1920 de
+        altura, vira uma tira de 1920x1920: ainda sobram 840px de passeio
+        real -- menos do que um panorâmico dá, e sem uma emenda sequer.
+
+    NA BORDA, REFLETE
+        Deslocamento que passa do fim da arte volta pelo mesmo caminho, em
+        vez de dar a volta. Voltar repete um trajeto que a pessoa já viu;
+        dar a volta é um salto no meio do movimento, que é justamente o
+        que se está tirando daqui.
+    """
 
     def __init__(self, img):
         base = img.convert("RGB")
+        # COBRIR: a arte precisa preencher a altura do quadro e ter pelo
+        # menos a largura dele. Esticar deformaria (prédio vira torre); o
+        # excesso é o que vira faixa de passeio.
         k = max(W / base.width, H / base.height)
         nl, na = max(int(base.width * k), W), max(int(base.height * k), H)
         base = base.resize((nl, na), Image.LANCZOS)
-        # o chão fica na parte de baixo do cenário: cortar pelo centro
-        # jogaria a linha do chão para fora do quadro
-        cx = (nl - W) // 2
-        base = base.crop((cx, na - H, cx + W, na))
-        self.tile = Image.new("RGB", (2 * W, H))
-        self.tile.paste(base, (0, 0))
-        self.tile.paste(base.transpose(Image.FLIP_LEFT_RIGHT), (W, 0))
+        # o chão fica embaixo: cortar pelo centro jogaria a linha do chão
+        # para fora do quadro
+        self.tira = base.crop((0, na - H, nl, na))
+        self.faixa = max(0, self.tira.width - W)      # o quanto dá para andar
+
+    def _posicao(self, dx):
+        """Deslocamento pedido -> coluna da arte, refletindo nas bordas."""
+        if self.faixa <= 0:
+            return 0
+        v = self.faixa * 0.5 + float(dx)
+        m = v % (2 * self.faixa)
+        return int(m if m <= self.faixa else 2 * self.faixa - m)
 
     def quadro(self, dx):
-        x = int(dx) % (2 * W)
-        out = Image.new("RGB", (W, H))
-        primeiro = min(W, 2 * W - x)
-        out.paste(self.tile.crop((x, 0, x + primeiro, H)), (0, 0))
-        if primeiro < W:
-            out.paste(self.tile.crop((0, 0, W - primeiro, H)), (primeiro, 0))
-        return out
+        x = self._posicao(dx)
+        return self.tira.crop((x, 0, x + W, H))
 
 
 def _sombra_de_contato(quadro, camada, chao_y):
@@ -2006,8 +2042,20 @@ def render(pasta_partes, spec, saida, tmpdir=None):
     # EFEITOS E TRILHA (ver sfx.py). O spec pode desligar com
     # "musica": false / "sfx": false; ligados é o padrão, porque um Short de
     # humor com faixa de voz seca soa como recado de secretária eletrônica.
+    # O PIIII (28/08). O palavrão já chega cortado na primeira sílaba do
+    # n8n ("Ca—"); aqui ele some atrás do bipe de 1 kHz e a legenda mostra
+    # os símbolos. As duas coisas saem do MESMO casamento entre texto e
+    # marcas de palavra que a legenda usa, senão o som e o texto
+    # divergiriam justamente na fala em que o TTS perdeu uma palavra.
+    from legendas import janelas_censuradas
+    bipes = []
+    for tr, m in zip(spec["trechos"], marcas_por_trecho):
+        bipes += janelas_censuradas(tr["fala"], m, tr["_inicio_s"], tr["_dur_voz"])
+
     audio = voz
-    if spec.get("sfx", True) is not False or spec.get("musica", True):
+    # `bipes` entra na condição porque a censura não é opcional: um spec com
+    # trilha e efeitos desligados ainda não pode deixar o palavrão passar
+    if bipes or spec.get("sfx", True) is not False or spec.get("musica", True):
         eventos = SFX.eventos_do_spec(spec) if spec.get("sfx", True) is not False else []
         # A TRILHA SEGUE A CENA. Os segmentos saem da emoção de cada trecho,
         # que só existe depois que a voz definiu a timeline -- por isso são
@@ -2016,13 +2064,12 @@ def render(pasta_partes, spec, saida, tmpdir=None):
         if isinstance(musica, dict) and not musica.get("arquivo"):
             musica = dict(musica)
             musica.setdefault("segmentos", SFX.segmentos_do_spec(spec))
+            # a trilha é de ESTE vídeo: o gênero vem do roteiro (`genero`) e
+            # a semente do fila_id, para que duas esquetes do mesmo gênero
+            # não saiam com o mesmo arpejo nota por nota
+            musica.setdefault("semente", spec.get("fila_id", "sem-fila"))
         audio = SFX.mixar(voz, eventos, os.path.join(tmp, "mix.wav"),
-                          musica=musica, dur_s=total)
-
-    # A FAIXA DE CIMA. Com dois em cena, um quinto do quadro era parede
-    # lisa do primeiro ao último frame -- ver topo.py.
-    import topo as TOPO
-    faixa_topo = TOPO.do_spec(spec, W, H)
+                          musica=musica, dur_s=total, bipes=bipes)
 
     # LEGENDA: opcional, mas ligada por padrão. Short se assiste no mudo.
     leg = None
@@ -2097,11 +2144,22 @@ def render(pasta_partes, spec, saida, tmpdir=None):
             t = fh / max(1, nf - 1)
             nivel = env[n] if n < len(env) else 0.0
 
+            # ROLAGEM PELO CENÁRIO (28/08). O fundo andava só quando alguém
+            # caminhava, ou seja quase nunca: numa esquete de dois parados
+            # conversando ele ficava imóvel do primeiro ao último frame, e a
+            # cena inteira lia como foto com áudio por cima. Agora a câmera
+            # percorre devagar a faixa de arte que sobra dos lados (ver
+            # `Cenario`) ao longo do vídeo inteiro, e a caminhada continua
+            # somando o deslocamento dela por cima. É movimento que existe
+            # sem custar frame nenhum -- só um recorte diferente da mesma
+            # tira.
+            deriva = (cenarios[cen].faixa * DERIVA_CENARIO
+                      * (n / float(max(total * FPS, 1)) - 0.5))
             camada = Image.new("RGBA", (W, H), (0, 0, 0, 0))
             cam_falante, x_falante = dict(ACOES.CAM_NEUTRA), W / 2
             for chave in chaves:
                 pers, x0, dy = elenco[chave]
-                rig, c = _rig_do_trecho(tr, t, pan, por_ator[chave], x0,
+                rig, c = _rig_do_trecho(tr, t, pan + deriva, por_ator[chave], x0,
                                         falando=(chave == falante))
                 # o deslocamento que põe este ator na linha do chão comum
                 # (ver _alinhar_pelos_pes) entra DEPOIS das ações: pular e
@@ -2138,10 +2196,6 @@ def render(pasta_partes, spec, saida, tmpdir=None):
             if abs(float(cam.get("zoom_y", 0.5)) - 0.5) < 0.001:
                 cam["zoom_y"] = zy
             quadro = montar_frame(camada, cenarios[cen], cam, x_falante)
-            # a faixa de cima vai ANTES da legenda e depois do zoom: as duas
-            # são grudadas na tela, não na cena
-            if faixa_topo is not None:
-                faixa_topo.desenhar(quadro, n / float(FPS))
             if leg is not None:
                 # por cima de tudo, e no tempo GLOBAL: o índice do frame é
                 # contínuo entre trechos, então n/FPS é o relógio do vídeo
@@ -2154,7 +2208,10 @@ def render(pasta_partes, spec, saida, tmpdir=None):
                      + "".join("+" + EXPR.normalizar(j.get("nome") or j.get("valor"))
                                for j in (tr.get("expressoes") or [])))
         planos.append(f"{_enquadramento(i_tr, n_trechos, len(chaves), 0.0)[0]:.2f}")
-        pan = cam.get("fundo_dx", pan)              # continua de onde parou
+        # o pan de CAMINHADA continua de onde parou; a deriva da câmera sai
+        # da conta porque ela é função do tempo global e seria contada duas
+        # vezes no trecho seguinte
+        pan = cam.get("fundo_dx", pan) - deriva
     print(f"[cutout] {n} frames ({n/FPS:.1f}s)")
     print(f"[cara] {' -> '.join(caras)}")
     print(f"[camera] plano por trecho: {' -> '.join(planos)}")
