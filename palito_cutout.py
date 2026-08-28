@@ -2052,7 +2052,21 @@ def _carregar_elenco(spec, pasta_padrao):
     existe elenco."""
     elenco = spec.get("elenco")
     if not elenco:
-        return {"_": (Personagem(pasta_padrao), W / 2)}
+        # TRÊS VALORES, SEMPRE. Este atalho devolvia `(Personagem, x)` --
+        # duas posições --, enquanto o caminho com `elenco` passa por
+        # `_alinhar_pelos_pes` e devolve `(Personagem, x, dy)`. Todo o
+        # resto do motor desempacota TRÊS, então um spec de um personagem
+        # só derrubava o cut-out inteiro com "not enough values to unpack
+        # (expected 3, got 2)" -- e o job caía no rig vetorial, que é a
+        # rede de segurança.
+        #
+        # O bug estava aqui desde que o elenco existe e nunca tinha
+        # aparecido: TODO spec de produção vinha com dois em cena, porque
+        # o prompt pedia sempre uma cena de dois. O primeiro vídeo gerado
+        # com a forma `monologo_fisico` (o rodízio de 29/08) o encontrou
+        # na primeira tentativa. É a lei 34 pelo avesso -- o que a forma
+        # não exercita não falha à vista.
+        return _alinhar_pelos_pes({"_": (Personagem(pasta_padrao), W / 2)})
     if len(elenco) > MAX_EM_CENA:
         # DOIS, NO MAXIMO. Num quadro 9:16 o terceiro boneco ou sai do
         # enquadramento ou obriga um recuo em que ninguem mais tem cara --
