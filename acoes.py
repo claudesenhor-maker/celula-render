@@ -68,6 +68,11 @@ CAM_NEUTRA = {"fundo_dx": 0.0, "zoom": 1.0, "zoom_y": 0.5,
 # vídeo sem uma delas -- ver `garantir_gancho`.
 ACOES_DE_GANCHO = ("susto", "pular", "tropecar", "entrar_correndo", "cair")
 
+# Quem entra e quem sai do quadro. O motor usa as duas listas para saber
+# se um ator terminou o trecho FORA de cena -- ver `_quem_saiu`.
+ACOES_DE_ENTRADA = ("entrar_andando", "entrar_correndo")
+ACOES_DE_SAIDA = ("sair_andando",)
+
 
 def _suave(u):
     """Ease in-out. Movimento que começa e termina bruscamente parece
@@ -91,6 +96,11 @@ def _pulso(u):
 # personagem de pernas tortas, parado.
 PERNA_RETA_E = [90.0, 0.0, 0.0]
 PERNA_RETA_D = [90.0, 0.0, 0.0]
+
+# O quadro, e o quanto uma entrada começa FORA dele. Vive aqui para que
+# `entrar_andando`/`sair_andando` não voltem a cravar 540 (ver lá).
+LARG_QUADRO = 1080.0
+FORA_DO_QUADRO = 340.0
 
 
 def _pernas_retas(rig):
@@ -205,20 +215,45 @@ def andar(u, rig, dur, a):
 
 
 def entrar_andando(u, rig, dur, a):
-    """Entra pela borda do quadro andando até o centro. Serve de gancho
-    fraco: alguma coisa acontece já no primeiro frame."""
-    cam = andar(u, rig, dur, a)
-    sentido = 1 if a.get("sentido", 1) >= 0 else -1
-    borda = 540 - sentido * 760
-    rig["quadril"] = [borda + (540 - borda) * _suave(u), rig["quadril"][1]]
+    """Entra pela borda do quadro andando até O LUGAR DELE em cena. Serve
+    de gancho fraco: alguma coisa acontece já no primeiro frame.
+
+    O DESTINO É O X DO ATOR, NÃO O CENTRO DO QUADRO (29/08). Até aqui a
+    função escrevia `540` cravado nos dois extremos -- ela nasceu quando só
+    existia um personagem, e para um só o lugar dele É o centro. Com dois em
+    cena isso é atravessamento garantido: quem entra vai parar no meio do
+    quadro, a 244px de quem já estava a 784, e as duas silhuetas se cruzam
+    (o corpo de cada um ocupa ~250px de meia-largura). Foi o defeito visto
+    no vídeo da rodada 3 -- o Pal entrando correndo e passando dentro do
+    Zeca. `rig["quadril"][0]` já traz o x do ator, posto por
+    `_rig_do_trecho`; a ação só precisa não jogá-lo fora."""
+    alvo = rig["quadril"][0]
+    sentido = _lado_de_entrada(a, alvo)
+    cam = andar(u, rig, dur, dict(a, sentido=sentido))
+    borda = -FORA_DO_QUADRO if sentido > 0 else LARG_QUADRO + FORA_DO_QUADRO
+    rig["quadril"] = [borda + (alvo - borda) * _suave(u), rig["quadril"][1]]
     cam["fundo_dx"] *= 0.25          # entrando, quase todo o avanço é do corpo
     return cam
 
 
+def _lado_de_entrada(a, alvo):
+    """CADA UM ENTRA E SAI PELO SEU LADO. Sem `sentido` no spec, quem fica
+    à esquerda usa a borda esquerda: pelo lado oposto ele teria que
+    atravessar quem já está em cena, e nenhuma guarda de colisão conserta
+    isso -- a travessia seria o que o roteiro pediu."""
+    padrao = 1 if alvo <= LARG_QUADRO / 2 else -1
+    return 1 if a.get("sentido", padrao) >= 0 else -1
+
+
 def sair_andando(u, rig, dur, a):
-    cam = andar(u, rig, dur, a)
-    sentido = 1 if a.get("sentido", 1) >= 0 else -1
-    rig["quadril"] = [540 + sentido * 760 * _suave(u), rig["quadril"][1]]
+    """Sai DO LUGAR DELE para fora do quadro (ver `entrar_andando`)."""
+    origem = rig["quadril"][0]
+    # sair é o espelho de entrar: quem está à esquerda sai pela esquerda
+    sentido = -_lado_de_entrada(a, origem) if "sentido" not in a \
+        else (1 if a["sentido"] >= 0 else -1)
+    cam = andar(u, rig, dur, dict(a, sentido=sentido))
+    borda = LARG_QUADRO + FORA_DO_QUADRO if sentido > 0 else -FORA_DO_QUADRO
+    rig["quadril"] = [origem + (borda - origem) * _suave(u), rig["quadril"][1]]
     cam["fundo_dx"] *= 0.25
     return cam
 
@@ -515,9 +550,18 @@ def pegar_objeto(u, rig, dur, a):
     lado = a.get("mao", "d")
     desce = _suave(min(1.0, u * 2.2))
     sobe = _suave(max(0.0, (u - 0.45) / 0.55))
-    # desce até junto do quadril, depois recolhe à frente do peito
-    ombro = 92.0 - 26.0 * sobe
-    ante = 96.0 * (1.0 - sobe) + (168.0 if lado == "d" else 12.0) * sobe
+    # desce até junto do quadril, depois recolhe à frente do peito.
+    #
+    # PEITO BAIXO, NÃO PEITO ALTO (29/08). Os números antigos (ombro 66,
+    # antebraço 168) punham a mão à altura do esterno, e isso está certo
+    # para uma chave -- mas a caixa de papelão, a sacola e o guarda-chuva
+    # ocupam 25 a 40% da altura do ator, então o objeto subia junto e
+    # encostava no queixo. Medido em `ferramentas/objeto.py`: os três
+    # grandes tapavam o rosto em `pegar_objeto`, e nenhum dos sete
+    # pequenos. Descer o alvo resolve para os dez de uma vez, e não muda
+    # nada visível nos pequenos.
+    ombro = 92.0 - 14.0 * sobe
+    ante = 96.0 * (1.0 - sobe) + (148.0 if lado == "d" else 32.0) * sobe
     _braco(rig, lado, ombro if lado == "d" else 180.0 - ombro,
            ante if lado == "d" else 180.0 - ante, 0.0, max(desce, sobe))
     rig["tronco"] = -90.0 + 4.0 * desce * (1.0 - sobe)
@@ -586,6 +630,13 @@ def largar_objeto(u, rig, dur, a):
 ACOES_PEGAM_OBJETO = ("pegar_objeto", "mostrar_objeto", "usar_objeto",
                       "entregar_objeto")
 ACOES_LARGAM_OBJETO = ("largar_objeto",)
+# ENTREGAR É PASSAR, NÃO COPIAR (29/08). `entregar_objeto` estica o braço
+# oferecendo a coisa, e por isso ela precisa estar na mão DURANTE a ação --
+# mas ao fim dela a mão fica vazia, senão o objeto se duplica. Foi o que a
+# rodada 6 do ciclo mostrou: o Zeca entrega a marmita ao Pal no terceiro
+# trecho e no quarto os DOIS aparecem segurando uma. Larga no fim, não no
+# começo, e por isso a ação está numa lista só dela.
+ACOES_ENTREGAM_OBJETO = ("entregar_objeto",)
 
 
 CATALOGO = {
@@ -708,12 +759,40 @@ def aplicar_postura(rig, expressao, intensidade=1.0):
 
 
 # =====================================================================
+# POSTURA É ESTADO, GESTO É EVENTO (29/08)
+#
+# Um gesto vai e volta: acenar, encolher os ombros, levar um susto, coçar a
+# cabeça. Uma POSTURA o corpo assume e mantém: mão na cintura, braços
+# cruzados, mão no queixo, mãos na cabeça, e -- literalmente -- estar caído
+# no chão.
+#
+# Até 29/08 as duas eram tratadas igual: fora da janela `de/ate`, a ação
+# simplesmente não era aplicada e o corpo voltava ao repouso no frame
+# seguinte. O efeito na tela é o defeito que sobreviveu a todas as sessões
+# de "movimento": o roteiro pede duas ações por trecho, elas acontecem, e
+# mesmo assim o vídeo é de dois bonecos parados de braços caídos -- porque
+# cada pose dura o pedaço da fala que a janela cobre e o resto do trecho é
+# repouso. Numa fala de 5 s, `maos_na_cintura` de 0 a 0,45 aparece por
+# UM segundo.
+#
+# É a mesma lição que o objeto já tinha ensinado (`_objeto_na_mao`): quem
+# pega, segura. Aqui, quem cruza os braços continua de braços cruzados até
+# fazer outra coisa. `cair` é o caso que denuncia sozinho -- a docstring
+# dele diz "termina deitado, não volta", e fora da janela ele levantava.
+ACOES_QUE_FICAM = frozenset((
+    "maos_na_cintura", "bracos_cruzados", "mao_no_queixo", "maos_na_cabeca",
+    "apontar", "apresentar", "cair",
+))
+
+
 def aplicar(acoes, t_rel, rig, dur_trecho):
-    """Aplica, em ordem, todas as ações cuja janela contém t_rel (0..1).
+    """Aplica, em ordem, todas as ações cuja janela contém t_rel (0..1) --
+    e mantém a pose final das que são POSTURA e já terminaram.
 
     Ordem = precedência: a última ação da lista escreve por cima. É como
     "andar apontando" funciona -- `andar` mexe nos dois braços, `apontar`
-    vem depois e sobrescreve um deles.
+    vem depois e sobrescreve um deles. É também o que faz uma postura que
+    ficou ceder para a ação seguinte, sem regra nenhuma a mais.
     """
     cam = dict(CAM_NEUTRA)
     for a in acoes or []:
@@ -722,10 +801,22 @@ def aplicar(acoes, t_rel, rig, dur_trecho):
             continue
         de = float(a.get("de", 0.0))
         ate = float(a.get("ate", 1.0))
-        if not (de <= t_rel <= ate) or ate <= de:
+        if ate <= de or t_rel < de:
             continue
-        u = (t_rel - de) / (ate - de)
+        if t_rel > ate:
+            # já passou: só as posturas permanecem, e na pose final
+            if a.get("nome") not in ACOES_QUE_FICAM:
+                continue
+            u = 1.0
+        else:
+            u = (t_rel - de) / (ate - de)
         d = f(u, rig, dur_trecho * (ate - de), a) or {}
+        if t_rel > ate:
+            # a POSE fica; o que a ação pediu de CÂMERA, não. Zoom e
+            # deslocamento de fundo são do instante em que a coisa
+            # aconteceu -- congelar o zoom de um susto pelo resto do
+            # trecho seria a câmera parada em cima do nada.
+            continue
         for k, v in d.items():
             # deslocamento de fundo é cumulativo; o resto, o último manda
             cam[k] = cam.get(k, 0.0) + v if k == "fundo_dx" else v
@@ -738,9 +829,20 @@ def garantir_gancho(spec):
 
     Isto é de propósito uma rede de segurança no MOTOR e não só uma
     instrução no prompt: prompt o modelo desobedece, motor não.
+
+    MAS ELA OBEDECE À FORMA (29/08). `gancho_forte: false` no spec desliga
+    a injeção. Um episódio escrito para ser parado -- em que o gancho está
+    na FRASE e não no corpo -- abria com a personagem levando um susto que
+    nada na cena justifica: exatamente o defeito que a lei 34 descreve, o
+    código desmentindo o pedido, e o código ganhando. Quem escreve o spec
+    diz o que quer; a rede de segurança vale para quem não disse nada.
     """
     trechos = spec.get("trechos") or []
     if not trechos:
+        return spec
+    if spec.get("gancho_forte") is False:
+        print("[acoes] spec pede abertura sem susto; gancho automatico "
+              "desligado")
         return spec
     t0 = trechos[0]
     acoes = t0.get("acoes") or []
