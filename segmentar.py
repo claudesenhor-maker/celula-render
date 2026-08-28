@@ -280,6 +280,60 @@ def _dilatar(m):
     return d
 
 
+def _dilatar_n(m, n):
+    for _ in range(int(n)):
+        m = _dilatar(m)
+    return m
+
+
+def _cheia(c):
+    """Quanto da própria caixa a mancha ocupa.
+
+    Separa MANCHA de CASCA: o cabelo, a pele e a camisa enchem a caixa
+    delas; o traço preto que envolve a peça inteira ocupa menos de 15% da
+    sua, porque é uma casca oca. A mesma régua que `nomear_rosto` usa para
+    não batizar o contorno de cabelo."""
+    bx0, by0, bx1, by1 = c["bbox"]
+    return c["area"] / max((bx1 - bx0 + 1) * (by1 - by0 + 1), 1)
+
+
+def _grupos_de_cor(manchas, tol=20):
+    """Manchas da MESMA cor viram um grupo só, ainda que separadas.
+
+    POR QUE (27/08 à noite, o cabelo da Maya)
+        O cabelo dela não é uma mancha: é quatro. O topo da cabeça vem
+        partido em dois pelo risco do penteado, e cada mecha lateral que
+        desce até o ombro é uma ilha à parte. Todas com a mesma cor --
+        (216,174,61), (216,173,61), (216,174,61), (214,172,59) -- porque
+        são a mesma coisa desenhada.
+
+        Tratadas uma a uma, as mechas ficam à mercê da distância: elas
+        param a 3px do topo da camisa e a 40 do rosto, então a semente da
+        camisa as alcança primeiro e o cabelo vira tronco. Agrupadas pela
+        cor, o cabelo é decidido UMA vez, pelo lado com que ele tem mais
+        fronteira -- e a fronteira longa é a do rosto.
+
+    O agrupamento é ganancioso e por proximidade de canal: a maior mancha
+    abre o grupo e as seguintes entram na primeira cujo canal mais distante
+    esteja a `tol` dela. Serve igual para barba, gola, boné ou cachecol.
+    """
+    grupos = []
+    for c in sorted(manchas, key=lambda c: -c["area"]):
+        for g in grupos:
+            if max(abs(int(c["cor"][i]) - int(g["cor"][i])) for i in range(3)) <= tol:
+                g["mask"] = g["mask"] | c["mask"]
+                g["area"] += c["area"]
+                break
+        else:
+            grupos.append({"mask": c["mask"].copy(), "area": c["area"],
+                           "cor": c["cor"]})
+    for g in grupos:
+        ys, xs = np.nonzero(g["mask"])
+        g["bbox"] = (int(xs.min()), int(ys.min()), int(xs.max()), int(ys.max()))
+        g["cx"], g["cy"] = float(xs.mean()), float(ys.mean())
+    return grupos
+
+
 def _dividir_por_cor(img, comp, min_frac=0.10, iteracoes=200):
     """Uma peça grudada -> duas peças, cortadas onde a ARTE troca de cor.
 
@@ -303,30 +357,67 @@ def _dividir_por_cor(img, comp, min_frac=0.10, iteracoes=200):
         terminava numa RETA inventada por proporção; aqui ela termina na
         linha que o desenhista traçou. Nenhuma medida é chutada.
 
-    COMO
-        Duas sementes: a maior mancha de cor de cima (pele: cabeça e
-        pescoço, que são a mesma cor e estão ligadas pelo queixo) e a maior
-        de baixo (a camisa). As duas crescem ao mesmo tempo dentro da peça,
-        um pixel por rodada, até cobrir tudo. O traço preto que as separa
-        acaba dividido ao meio, que é o resultado certo: cada peça fica com
-        a metade do contorno que lhe pertence.
+    COMO (em três passos, desde 27/08 à noite)
+        1. As manchas de cor da peça são agrupadas POR COR: o cabelo em
+           quatro pedaços vira um cabelo só, a pele do rosto e a do pescoço
+           viram a mesma pele. Ver `_grupos_de_cor`.
+        2. Os dois maiores grupos EMPILHADOS abrem as sementes -- em cima a
+           cabeça, embaixo o tronco. Cada grupo que sobra é entregue
+           INTEIRO ao lado com que tem mais fronteira, e um grupo já
+           entregue serve de fronteira para o próximo (é assim que a pele
+           puxa o cabelo, ou o cabelo puxa a pele, sem que a ordem importe).
+        3. Só o que não é mancha -- o traço preto do contorno, que é casca e
+           não região -- é dividido pixel a pixel, com as duas sementes
+           crescendo ao mesmo tempo. O traço acaba partido ao meio, que é o
+           resultado certo: cada peça fica com a metade que lhe pertence.
+
+    O passo 1 e o 2 são a correção da noite de 27/08. Antes, TUDO era
+    decidido no passo 3, e distância era o único critério: as mechas da
+    Maya paravam a 3px do decote e a 40px do rosto, então a semente da
+    camisa as alcançava primeiro e o cabelo dela saía grudado no tronco --
+    girando com o peito e não com a cabeça.
 
     Devolve (peça_de_cima, peça_de_baixo) ou None se não houver duas
     manchas de cor grandes e empilhadas -- e aí a folha é grudada mesmo.
     """
     m = comp["mask"]
-    regioes = [c for c in _regioes_de_cor(img, comp, min_frac=min_frac)
-               if c["area"] >= comp["area"] * min_frac]
-    if len(regioes) < 2:
+    manchas = [c for c in _regioes_de_cor(img, comp, min_frac=0.004)
+               if _cheia(c) >= 0.25]
+    grupos = _grupos_de_cor(manchas)
+    grandes = [g for g in grupos if g["area"] >= comp["area"] * min_frac]
+    if len(grandes) < 2:
         return None
-    # as duas maiores manchas de cor; têm que estar EMPILHADAS (uma acima da
-    # outra), senão não são "cabeça e tronco" e sim duas metades laterais
-    regioes.sort(key=lambda c: -c["area"])
-    a, b = sorted(regioes[:2], key=lambda c: c["cy"])
+    # os dois maiores grupos de cor; têm que estar EMPILHADOS (um acima do
+    # outro), senão não são "cabeça e tronco" e sim duas metades laterais
+    grandes.sort(key=lambda g: -g["area"])
+    a, b = sorted(grandes[:2], key=lambda g: g["cy"])
     if a["bbox"][3] > b["bbox"][3] or abs(a["cy"] - b["cy"]) < comp["area"] ** 0.5 * 0.25:
         return None
 
     cima, baixo = a["mask"].copy(), b["mask"].copy()
+
+    # --- passo 2: cada grupo de cor restante vai INTEIRO para um lado.
+    # A fronteira é medida com folga de `esp`, a espessura do contorno: o
+    # pescoço não encosta na camisa nem no rosto, encosta no traço preto
+    # que separa os dois. Sem a folga ele não tocaria em nada.
+    esp = max(3, int(round(comp["area"] ** 0.5 * 0.02)))
+    pendentes = [g for g in grupos if g is not a and g is not b]
+    while pendentes:
+        alvo, destino, forca = None, None, 0
+        for g in pendentes:
+            viz = _dilatar_n(g["mask"], esp)
+            cc, cb = int((viz & cima).sum()), int((viz & baixo).sum())
+            if max(cc, cb) > forca:
+                alvo, destino, forca = g, (cc >= cb), max(cc, cb)
+        if alvo is None:
+            break                       # o que sobrou não toca em nada
+        if destino:
+            cima |= alvo["mask"]
+        else:
+            baixo |= alvo["mask"]
+        pendentes = [g for g in pendentes if g is not alvo]
+
+    # --- passo 3: o contorno, pixel a pixel
     livre = m & ~cima & ~baixo
     for _ in range(iteracoes):
         if not livre.any():
@@ -675,65 +766,81 @@ def _abrir_coluna_grudada(img, comps, figura):
 # onde a arte deixou o vão; estas giram onde o corpo tem eixo.
 NO_EIXO = ("pescoco", "cranio", "cabeca", "mandibula")
 
-# O braço PENDE do alto da cava. Ver `_ombro_no_alto_da_cava`.
-OMBROS = ("braco_sup_e", "braco_sup_d")
+# O braço em pose T está DEITADO: ombro e cotovelo na mesma linha.
+# Ver `_ombro_na_linha_do_cotovelo`.
+OMBROS = {"braco_sup_e": "braco_inf_e", "braco_sup_d": "braco_inf_d"}
 
 
-def _ombro_no_alto_da_cava(pivos, caixas, por_nome, esqueleto, manuais=()):
-    """O ombro fica no ALTO da faixa de contato, não no meio dela.
+def _ombro_na_linha_do_cotovelo(pivos, caixas, por_nome, esqueleto, vaos,
+                                manuais=()):
+    """O ombro fica na ALTURA DO COTOVELO, na quina interna da peça do braço.
 
-    POR QUE (27/08, visto no primeiro vídeo com dois personagens)
-        O pivô é o centro da faixa em que duas peças se encaram, e isso vale
-        para toda junta com vão curto: no cotovelo, no joelho e no punho a
-        faixa tem poucos pixels e o centro dela É a articulação.
+    POR QUE (27/08 à noite, medido nas três folhas de produção)
+        A faixa em que a manga encosta no tronco não diz onde o ombro está,
+        e as duas tentativas de tirá-lo dali erraram para lados opostos.
+        Pelo MEIO da faixa, o pivô caía na axila -- 20px baixo demais no
+        Pal, o braço nascendo do meio do peito. Pelo QUINTO SUPERIOR dela
+        (a correção da tarde), passou a cair alto demais: 13px acima do
+        cotovelo no Pal, 15 no Zeca e 28 na Maya, cuja manga curta encosta
+        no tronco só lá em cima e por isso nem entrava na regra.
 
-        O ombro é a exceção, e depende de como a roupa foi desenhada. Na
-        Maya a manga encosta no tronco por 6 px, lá em cima, e o centro cai
-        no lugar certo. No Pal a manga desce colada à lateral do peito e a
-        faixa tem 58 px -- o centro dela cai na altura da AXILA, quase 20 px
-        abaixo do ombro. Com o braço nascendo ali, ele lê como braço curto
-        preso ao meio do peito: foi a queixa de "ombros muito baixos".
+        Ombro acima do cotovelo faz o osso do braço nascer INCLINADO numa
+        folha desenhada em T. Como o motor trata "não girar" como "braço na
+        horizontal" (`CORRECAO_POSE_T` é contrato com a arte, não medição),
+        a diferença aparece na tela como articulação fora do lugar: o braço
+        sai da altura do pescoço.
 
-        A anatomia do rig resolve o empate: o braço pende do ALTO da cava.
-        Quando a faixa é comprida (mais de 6% da altura da figura), o pivô
-        vai para perto do topo dela em vez do meio. Faixa curta continua
-        como estava -- não há o que corrigir onde a arte já é clara.
+        A referência que não depende de como a manga foi desenhada é o
+        COTOVELO. A bíblia visual exige `arms stretched perfectly
+        horizontal`, então ombro e cotovelo estão, por contrato, na mesma
+        linha -- e o cotovelo tem vão curto e limpo, medido sem ambiguidade.
+        A altura do ombro deixa de ser medida: passa a ser a do cotovelo.
+
+        Sobra o X, e aí sim quem manda é a arte: o ombro é a parte
+        TANGENCIAL do braço, o ponto em que a peça chega mais perto do
+        tronco, recuado metade do vão -- para o pivô cair no meio da folga,
+        como em toda outra junta.
     """
-    alt = max(max(c["bbox"][3] for c in por_nome.values())
-              - min(c["bbox"][1] for c in por_nome.values()), 1)
-    for nome in OMBROS:
-        if nome not in por_nome or nome in manuais:
+    for nome, antebraco in OMBROS.items():
+        if nome not in por_nome or nome not in pivos or nome in manuais:
             continue
-        pai = _ancestral_presente(nome, esqueleto, por_nome)
-        if not pai or pai not in por_nome:
-            continue
-        hp = por_nome[pai].get("hospedeiro", por_nome[pai])
-        hf = por_nome[nome].get("hospedeiro", por_nome[nome])
-        try:
-            _, _, faixa = pivo_entre(hp, hf, devolver_faixa=True)
-        except Exception:
-            continue
-        if len(faixa) < 3:
-            continue
-        y0, y1 = float(faixa[:, 1].min()), float(faixa[:, 1].max())
-        if (y1 - y0) < alt * 0.06:
-            continue                    # faixa curta: o meio já é o ombro
-        alvo_y = y0 + (y1 - y0) * 0.20
-        # o x acompanha: fica o ponto da faixa mais próximo dessa altura,
-        # senão o pivô sai da junta e a peça descola do tronco
-        k = int(np.argmin(np.abs(faixa[:, 1] - alvo_y)))
-        alvo = (float(faixa[k][0]), float(faixa[k][1]))
+        lado = nome[-1]
         bx, by = caixas[nome]
-        antes_y = pivos[nome][1] + by
-        d = (alvo[0] - (pivos[nome][0] + bx), alvo[1] - antes_y)
+        ys, xs = np.nonzero(por_nome[nome].get("hospedeiro",
+                                               por_nome[nome])["mask"])
+        if not len(xs):
+            continue
+        # 1. A ALTURA: o cotovelo. Sem antebraço na folha, o meio da massa
+        #    do próprio braço -- que numa peça deitada é a mesma linha.
+        if antebraco in pivos and antebraco in caixas:
+            alvo_y = pivos[antebraco][1] + caixas[antebraco][1]
+        else:
+            alvo_y = float(np.median(ys))
+        alvo_y = float(np.clip(alvo_y, ys.min(), ys.max()))
+        # 2. O X: a quina interna, lida numa FAIXA de linhas em torno do
+        #    cotovelo. Numa linha só, o serrilhado do contorno decide.
+        janela = max(3.0, (ys.max() - ys.min() + 1) * 0.15)
+        perto = np.abs(ys - alvo_y) <= janela
+        if not perto.any():
+            continue
+        # o tronco está do lado do centro do corpo: a peça 'e' é a da
+        # esquerda da tela, e a borda interna dela é o maior x; em 'd', o
+        # menor. Recuar meio vão nessa direção põe o pivô no meio da folga.
+        dentro = 1.0 if lado == "e" else -1.0
+        borda_x = float(xs[perto].max() if lado == "e" else xs[perto].min())
+        alvo = (borda_x + dentro * max(float(vaos.get(nome, 0.0)), 0.0) / 2.0,
+                alvo_y)
+        d = (alvo[0] - (pivos[nome][0] + bx), alvo[1] - (pivos[nome][1] + by))
+        if abs(d[0]) < 0.5 and abs(d[1]) < 0.5:
+            continue
         pivos[nome] = [alvo[0] - bx, alvo[1] - by]
-        saidas = por_nome[pai].get("saidas") or {}
+        pai = _ancestral_presente(nome, esqueleto, por_nome)
+        saidas = (por_nome.get(pai) or {}).get("saidas") or {}
         if nome in saidas:
             sx, sy = saidas[nome]
             saidas[nome] = (sx + d[0], sy + d[1])
-        print(f"[segmentar] ombro '{nome}' subiu {-d[1]:.0f}px: a manga "
-              f"encosta no tronco por {y1 - y0:.0f}px e o meio da faixa "
-              f"caia na axila")
+        print(f"[segmentar] ombro '{nome}' foi para a linha do cotovelo "
+              f"({d[1]:+.0f}px em y, {d[0]:+.0f}px em x)")
 
 
 def _alinhar_ao_eixo(pivos, caixas, por_nome, esqueleto, manuais=()):
@@ -920,7 +1027,7 @@ def segmentar_corpo(img, esqueleto, min_frac_area=0.0012, pivos_manuais=None):
         por_nome[pai].setdefault("saidas", {})[nome] = (ponto[0] - pbx, ponto[1] - pby)
 
     _alinhar_ao_eixo(pivos, caixas, por_nome, esqueleto, manuais)
-    _ombro_no_alto_da_cava(pivos, caixas, por_nome, esqueleto, manuais)
+    _ombro_na_linha_do_cotovelo(pivos, caixas, por_nome, esqueleto, vaos, manuais)
 
     comprimentos = {}
     for nome, c in por_nome.items():
