@@ -456,10 +456,26 @@ def render_spec(spec, saida, modo="demo", tmpdir=None):
     print(f"[rig] {n} frames ({n/FPS:.1f}s)")
 
     # ---- 3.4 trilha + loudnorm ---------------------------------------
+    # A REDE DE SEGURANÇA TEM QUE SEGURAR (29/08). `musica` virou um DICT
+    # em 28/08 (`{genero, ganho_db}`, sintetizada no próprio render) e este
+    # caminho continuou esperando um CAMINHO DE ARQUIVO. Enquanto o cut-out
+    # funcionou ninguém passou por aqui; no dia em que ele falhou, o job caiu
+    # no rig vetorial e o vetorial quebrou com `TypeError: expected str...
+    # not dict` -- ou seja, a queda para a rede de segurança custou o vídeo,
+    # que é exatamente o que ela existe para evitar.
+    #
+    # Aqui o vetor não sintetiza trilha: ele toca uma se o spec der uma URL,
+    # e segue sem música se não der. Vídeo sem trilha é pior que vídeo com
+    # trilha; vídeo nenhum é pior que os dois.
+    mus = spec.get("musica")
+    if isinstance(mus, dict):
+        mus = mus.get("url") or mus.get("arquivo")
+        if not mus:
+            print("[musica] o rig vetorial nao sintetiza trilha; seguindo sem ela")
     mix = voz
-    if spec.get("musica"):
+    if mus and isinstance(mus, str):
         mix = os.path.join(tmp, "mix.wav")
-        subprocess.run(["ffmpeg", "-y", "-v", "error", "-i", voz, "-i", spec["musica"],
+        subprocess.run(["ffmpeg", "-y", "-v", "error", "-i", voz, "-i", mus,
                         "-filter_complex",
                         f"[1:a]volume={spec.get('musica_db',-24)}dB,aloop=loop=-1:size=2e9[m];"
                         "[0:a][m]amix=inputs=2:duration=first:dropout_transition=0[a]",
