@@ -81,6 +81,30 @@ def _fonte(tamanho):
     return ImageFont.load_default()
 
 
+# =====================================================================
+# CENSURA -- o "piiii" da TV (28/08)
+# =====================================================================
+# Ate 28/08 o palavrao era so cortado na primeira silaba ("Ca—"), e era
+# isso que o espectador ouvia e lia. O dono do projeto pediu o BIPE
+# classico, que e outra convencao: o audio some atras de um tom e a
+# legenda mostra os simbolos. Ela funciona melhor por dois motivos --
+# o bipe e um som que ninguem confunde com outra coisa (a silaba cortada
+# soava como o TTS engasgando), e ele marca a piada com uma batida.
+#
+# QUEM MARCA O QUE E PALAVRAO continua sendo o n8n ("Montar Spec do
+# Palito"), que troca a palavra pela primeira silaba mais o travessao
+# ANTES de o texto chegar aqui. Isso e de proposito: assim nenhum palavrao
+# inteiro existe no texto que vai para o TTS, e mesmo que o bipe caia um
+# decimo fora do lugar, o que se ouve por baixo dele e uma silaba.
+SUFIXO_CENSURA = "—"
+MASCARA = "#@%&!"
+
+
+def censurada(txt):
+    """A palavra foi cortada pela censura? (termina em travessao)"""
+    return str(txt or "").rstrip(".,!?;:").endswith(SUFIXO_CENSURA)
+
+
 def _reparto(texto, inicio, dur):
     """Sem WordBoundary: divide a janela entre as palavras na proporcao do
     numero de letras. Palavra longa demora mais que palavra curta, e isso
@@ -161,6 +185,28 @@ def _casar(texto, marcas, inicio, dur):
     return fora
 
 
+def janelas_censuradas(texto, marcas, inicio_s, dur_s, folga=0.07, minimo=0.30):
+    """[(inicio, fim)] de cada palavra censurada, em tempo GLOBAL.
+
+    É o que o render usa para pôr o bipe em cima e apagar a voz por baixo
+    (ver sfx.mixar). Usa o mesmo casamento texto x marcas da legenda, para
+    que o que se ouve e o que se lê estejam no mesmo instante -- se
+    fossem duas contas diferentes, elas divergiriam justamente na fala em
+    que o TTS perdeu uma palavra.
+
+    `folga` cobre a imprecisão do alinhamento nas duas pontas e `minimo`
+    garante um bipe audível: uma sílaba dura ~0,15s, e um bipe de 0,15s
+    lê como clique, não como censura."""
+    fora = []
+    for p in _casar(texto, marcas, inicio_s, dur_s):
+        if not censurada(p["txt"]):
+            continue
+        t0 = max(0.0, float(p["inicio"]) - folga)
+        t1 = max(float(p["fim"]) + folga, t0 + minimo)
+        fora.append((t0, t1))
+    return fora
+
+
 class Legenda:
     """Pre-monta os blocos e desenha o que estiver no ar em cada instante.
 
@@ -169,9 +215,9 @@ class Legenda:
 
     def __init__(self, largura, altura, tamanho=None, por_bloco=3, y_rel=None):
         self.W, self.H = largura, altura
-        # `y_rel` existe para o caso em que se decide encher a faixa de cima
-        # com a propria legenda (ver topo.py). Nao e o padrao: a fala em cima
-        # obriga o olho a largar a boca de quem esta falando embaixo.
+        # `y_rel` existe para o caso em que se queira subir a legenda. Nao e o
+        # padrao: a fala em cima obriga o olho a largar a boca de quem esta
+        # falando embaixo.
         self.y_rel = float(y_rel) if y_rel else Y_RELATIVO
         self.tam = tamanho or int(altura * 0.048)     # ~92px em 1920
         self.fonte = _fonte(self.tam)
@@ -211,7 +257,11 @@ class Legenda:
             return quadro
 
         d = ImageDraw.Draw(quadro)
-        textos = [p["txt"].upper() for p in bloco["palavras"]]
+        # palavra censurada vira os símbolos da história em quadrinhos: no
+        # áudio ela está atrás do bipe, e escrever "CA—" na tela entregaria
+        # de volta o que o bipe acabou de esconder
+        textos = [MASCARA if censurada(p["txt"]) else p["txt"].upper()
+                  for p in bloco["palavras"]]
         ativas = [p["inicio"] - 0.02 <= t <= p["fim"] + 0.12 for p in bloco["palavras"]]
 
         # A LARGURA E MEDIDA COM A FONTE QUE SERA USADA em cada palavra: a
