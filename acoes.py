@@ -494,7 +494,23 @@ def bracos_cruzados(u, rig, dur, a):
     O ombro abre para o lado antes de o antebraço cruzar: é isso que põe o
     cotovelo alto o bastante para os braços se cruzarem no PEITO. Com o
     ombro caído os dois antebraços se encontram na barriga e a pose lê como
-    mãos postas."""
+    mãos postas.
+
+    ELES NÃO CRUZAM DE VERDADE, E NÃO TEM COMO (medido em 29/08). Para os
+    antebraços se cruzarem, cada mão precisa passar do eixo do corpo para o
+    lado oposto -- e com o comprimento de braço destas folhas ela não
+    chega. Varridas nove combinações de ombro e antebraço nos três
+    personagens: no Pal a mão direita fica 137 a 321 px À DIREITA da
+    esquerda (deveria ficar à esquerda), no Zeca 90 a 260. Só na Maya, de
+    braço curto e tronco estreito, o dx chega a passar de zero -- e ali as
+    mãos se ENCOSTAM, que é o "nó" que a rodada 11 mostrou.
+
+    O que a pose entrega é o antebraço horizontal à frente do peito, e isso
+    lê como espera/defensiva -- um dos três sentidos da docstring, não os
+    três. Cruzar de verdade pede arte: um braço desenhado por cima do
+    outro, como peça. Fica anotado em vez de ajustado, porque ajustar
+    ângulo aqui só move o defeito de um personagem para outro.
+    """
     k = _suave(min(1.0, u * 2.5))
     _braco(rig, "e", 136.0, -14.0, 4.0, k)
     _braco(rig, "d", 44.0, 194.0, -4.0, k)
