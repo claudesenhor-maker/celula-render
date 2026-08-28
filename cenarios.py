@@ -49,14 +49,24 @@ O CATÁLOGO É FECHADO, DE PROPÓSITO
 # para sempre se anota, não se adivinha. A régua é
 # `ferramentas/regua_chao.py`, e ler o número leva trinta segundos.
 #
-# O valor fica um pouco ABAIXO do encontro entre parede e chão, de
-# propósito: o personagem está na frente dos móveis, mais perto da câmera,
-# e em perspectiva isso é mais para baixo no quadro.
+# O VALOR FICA ABAIXO DE TODO MÓVEL, não no encontro entre parede e chão.
+# Esta é a correção de 28/08 à noite, e ela veio de um erro: os primeiros
+# valores (0,80 a 0,90) miravam a linha parede-chão, e o personagem saiu de
+# pé EM CIMA da mesa de centro. O gerador de cenário oscila entre deixar o
+# primeiro plano limpo e mobiliá-lo -- foram três levas de arte e as três
+# vezes ele voltou a pôr sofá, balcão ou mesa na frente --, e o motor não
+# tem plano de profundidade para resolver isso: o personagem é sempre
+# desenhado por cima de uma imagem só.
+#
+# Então o chão é a faixa de piso LIVRE que sobra na frente de tudo, que
+# nestas artes fica entre 90% e 96%. O personagem passa a ficar claramente
+# na frente dos móveis, que é a leitura certa, e a cabeça ainda cai por
+# volta da metade do quadro -- sobra cenário em cima, que era o objetivo.
 #
 # Vale igual na arte e na tira: o motor cobre a arte para 1920 de altura e
 # todo cenário é mais largo que 9:16, então a altura entra inteira e não há
 # corte vertical para deslocar a conta.
-CHAO_PADRAO = 0.86
+CHAO_PADRAO = 0.93
 
 # chave -> (o que é, sinônimos que o roteirista pode escrever,
 #           cenários aceitáveis como substituto, em ordem de preferência,
@@ -64,7 +74,7 @@ CHAO_PADRAO = 0.86
 CATALOGO = {
     "rua": {
         "e": "rua de cidade, calçada, prédios baixos",
-        "chao": 0.84,
+        "chao": 0.90,
         "sinonimos": ("calcada", "esquina", "cidade", "fora", "bairro",
                       "ponto", "praca", "avenida"),
         "parecidos": ("comercio", "onibus"),
@@ -73,7 +83,7 @@ CATALOGO = {
     },
     "sala": {
         "e": "sala de estar com sofá",
-        "chao": 0.88,
+        "chao": 0.95,
         "sinonimos": ("casa", "estar", "sofa", "tv", "apartamento"),
         "parecidos": ("quarto", "cozinha"),
         "palavras": ("sofa", "televisao", "tv", "novela", "controle",
@@ -81,7 +91,7 @@ CATALOGO = {
     },
     "cozinha": {
         "e": "cozinha com fogão, pia e geladeira",
-        "chao": 0.87,
+        "chao": 0.92,
         "sinonimos": ("copa", "fogao", "geladeira", "pia"),
         "parecidos": ("sala", "comercio"),
         "palavras": ("cozinha", "geladeira", "fogao", "panela", "almoco",
@@ -90,7 +100,7 @@ CATALOGO = {
     },
     "escritorio": {
         "e": "escritório com mesas e computadores",
-        "chao": 0.80,
+        "chao": 0.95,
         "sinonimos": ("trabalho", "empresa", "servico", "reuniao", "coworking"),
         "parecidos": ("comercio", "sala"),
         "palavras": ("trabalho", "chefe", "reuniao", "email", "planilha",
@@ -99,7 +109,7 @@ CATALOGO = {
     },
     "comercio": {
         "e": "loja com balcão de atendimento e maquininha",
-        "chao": 0.88,
+        "chao": 0.95,
         "sinonimos": ("loja", "padaria", "mercado", "supermercado", "caixa",
                       "balcao", "farmacia", "banco", "fila", "atendimento"),
         "parecidos": ("escritorio", "cozinha"),
@@ -110,7 +120,7 @@ CATALOGO = {
     },
     "quarto": {
         "e": "quarto com cama e criado-mudo",
-        "chao": 0.82,
+        "chao": 0.93,
         "sinonimos": ("cama", "dormir", "sono", "despertador"),
         "parecidos": ("sala", "banheiro"),
         "palavras": ("cama", "dormir", "acordei", "sono", "despertador",
@@ -118,7 +128,7 @@ CATALOGO = {
     },
     "onibus": {
         "e": "dentro de um ônibus urbano",
-        "chao": 0.90,
+        "chao": 0.93,
         "sinonimos": ("busao", "coletivo", "transporte", "metro", "lotacao"),
         "parecidos": ("rua", "comercio"),
         "palavras": ("onibus", "busao", "passagem", "catraca", "motorista",
