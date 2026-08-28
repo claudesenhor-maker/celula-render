@@ -80,11 +80,25 @@ W, H, FPS = 1080, 1920, 24
 # altura de referencia do personagem no quadro; objetos sao medidos contra ela
 ALTURA_ALVO_PX = 1150
 
-# Quanto da faixa de arte que sobra dos lados a câmera percorre ao longo do
-# vídeo inteiro (ver Cenario e a rolagem em `render`). 0,7 deixa uma folga
-# nas duas pontas: chegar à borda e refletir no meio de uma fala seria um
-# movimento que muda de sentido sem motivo na cena.
-DERIVA_CENARIO = 0.70
+# A CÂMERA CORTA, NÃO DESLIZA (28/08, noite)
+# ---------------------------------------------------------------------
+# A primeira versão da arte panorâmica veio com uma deriva contínua: a
+# câmera percorria a faixa devagar ao longo do vídeo inteiro. O dono do
+# projeto recusou -- "o cenário está se movimentando andando para o lado
+# sem os personagens andarem". Ele está certo, e o motivo é de linguagem:
+# num plano fixo, fundo que anda só pode significar uma coisa, que é a
+# câmera acompanhando alguém que se move. Com todo mundo parado, o cérebro
+# não tem a quem atribuir o movimento e a cena inteira parece escorregar.
+#
+# A arte comprida continua servindo, por outro caminho: cada TRECHO começa
+# num ponto diferente dela, e dentro do trecho o fundo fica IMÓVEL. Isso
+# lê como troca de ângulo -- um corte --, que é exatamente o que o formato
+# não tinha, e o corte reseta a atenção de quem rola o feed.
+#
+# As posições não avançam em fila (0,2 → 0,4 → 0,6 seria um travelling
+# picotado, com o mesmo defeito de leitura): elas saltam de um lado ao
+# outro da faixa, como plano e contraplano.
+PONTOS_DE_CORTE = (0.50, 0.18, 0.74, 0.34, 0.90, 0.08, 0.62, 0.26)
 
 # quantos personagens cabem no quadro ao mesmo tempo. Dois é o teto do
 # formato: no 9:16 o terceiro só entra encolhendo todo mundo até a cara
@@ -1365,9 +1379,18 @@ def _pivo_de_pega(img):
     """Onde a mão segura o objeto.
 
     Se a arte trouxer uma marca MAGENTA (o gerador é instruído a pintar um
-    ponto magenta no cabo), o pivô é o centro dessa marca. Sem marca, cai no
-    centro da metade de baixo do objeto -- que é onde fica o cabo de quase
-    tudo que se segura (xícara, celular, martelo, placa).
+    ponto magenta no cabo), o pivô é o centro dessa marca.
+
+    SEM MARCA, É O CENTRO (28/08). Era 72% da altura, na ideia de que o
+    cabo fica embaixo -- e isso empurrava 72% do objeto para CIMA do ponto
+    de pega. Somado ao ponto da palma, que caía além da ponta da mão, o
+    celular saía encostado na coxa em vez de dentro da mão: foi a queixa
+    de 28/08 ("está muito deslocado para baixo").
+
+    O centro é o único palpite que não erra feio em objeto nenhum, e num
+    cut-out o que se lê é a sobreposição do objeto com a mão -- não a
+    anatomia da pega. Modelar "segura pelo cabo" exige saber onde está o
+    cabo, e a arte não diz: quem quiser precisão põe a marca magenta.
     """
     a = np.asarray(img.convert("RGBA"), dtype=np.int16)
     r, g, b, al = a[..., 0], a[..., 1], a[..., 2], a[..., 3]
@@ -1375,7 +1398,7 @@ def _pivo_de_pega(img):
     if marca.any():
         ys, xs = np.nonzero(marca)
         return (float(xs.mean()), float(ys.mean()))
-    return (img.width * 0.5, img.height * 0.72)
+    return (img.width * 0.5, img.height * 0.5)
 
 
 def desenhar_personagem(pers, rig, boca_nivel=0.0, piscando=False, objeto=None,
@@ -1550,12 +1573,17 @@ def desenhar_personagem(pers, rig, boca_nivel=0.0, piscando=False, objeto=None,
             # A MÃO SEGURA COM A PALMA, NÃO COM O PUNHO. `pos[nome]` é o
             # pivô da mão, que fica na junta com o antebraço -- colar o
             # objeto ali o joga para dentro do corpo, e num objeto grande
-            # ele aparece flutuando na frente da barriga. O ponto certo
-            # fica adiante, na direção em que a mão aponta.
+            # ele aparece flutuando na frente da barriga.
+            #
+            # 0,30 do comprimento da mão, não 0,55 (28/08). Com 0,55 o
+            # ponto caía ALÉM da ponta dos dedos: em repouso, com o braço
+            # baixo, isso põe o objeto abaixo da mão, encostado na coxa. O
+            # meio da peça é onde a palma está de verdade, e é ali que o
+            # objeto tem que se sobrepor à mão para ler como segurado.
             comp = pers.comp.get(nome, 0.0) * pers.escala
             rad = math.radians(ang[nome])
-            palma = (pos[nome][0] + math.cos(rad) * comp * 0.55,
-                     pos[nome][1] + math.sin(rad) * comp * 0.55)
+            palma = (pos[nome][0] + math.cos(rad) * comp * 0.30,
+                     pos[nome][1] + math.sin(rad) * comp * 0.30)
             colar(base, oi, opv, palma, ang[nome],
                   float(objeto.get("escala", 1.0)))
 
@@ -1604,9 +1632,15 @@ class Cenario:
         vez de dar a volta. Voltar repete um trajeto que a pessoa já viu;
         dar a volta é um salto no meio do movimento, que é justamente o
         que se está tirando daqui.
+
+    A LINHA DO CHÃO vem anotada (`cenarios.CATALOGO[...]["chao"]`), não
+    medida: ver o comentário longo em cenarios.py. É ela que diz onde os
+    pés do personagem pousam.
     """
 
-    def __init__(self, img):
+    def __init__(self, img, chao_rel=None):
+        self.chao_y = H * float(chao_rel if chao_rel is not None
+                                else CENARIOS.CHAO_PADRAO)
         base = img.convert("RGB")
         # COBRIR: a arte precisa preencher a altura do quadro e ter pelo
         # menos a largura dele. Esticar deformaria (prédio vira torre); o
@@ -1619,12 +1653,20 @@ class Cenario:
         self.tira = base.crop((0, na - H, nl, na))
         self.faixa = max(0, self.tira.width - W)      # o quanto dá para andar
 
+    def ponto_do_trecho(self, i):
+        """Onde a câmera fica DURANTE o trecho `i`, em pixels da tira.
+
+        É a base do enquadramento; a caminhada soma por cima dela, e é a
+        única coisa que move o fundo dentro de uma fala."""
+        if self.faixa <= 0:
+            return 0.0
+        return self.faixa * PONTOS_DE_CORTE[i % len(PONTOS_DE_CORTE)]
+
     def _posicao(self, dx):
         """Deslocamento pedido -> coluna da arte, refletindo nas bordas."""
         if self.faixa <= 0:
             return 0
-        v = self.faixa * 0.5 + float(dx)
-        m = v % (2 * self.faixa)
+        m = float(dx) % (2 * self.faixa)
         return int(m if m <= self.faixa else 2 * self.faixa - m)
 
     def quadro(self, dx):
@@ -2083,19 +2125,20 @@ def render(pasta_partes, spec, saida, tmpdir=None):
         print(f"[legenda] {len(leg.blocos)} blocos"
               + ("" if any(marcas_por_trecho) else " (sem WordBoundary: tempo repartido)"))
 
-    # LINHA DO CHÃO: onde os pés do personagem pousam em repouso. Sai de um
-    # frame de teste, uma vez por render -- é a única referência estável de
-    # chão que existe, já que o cenário é arte e não traz cota nenhuma.
-    chao_y = None
+    # ONDE OS PÉS ESTÃO, em repouso. Sai de um frame de teste, uma vez por
+    # render: a escala do elenco (0,74 com dois em cena) muda essa altura, e
+    # supô-la foi o que fez o personagem flutuar.
+    base_pes = None
     try:
         pers0, x0_, dy0 = elenco[padrao_ator]
         rig0 = merge(REST, {})
         rig0["quadril"] = [x0_, REST["quadril"][1] + dy0]
         bb0 = desenhar_personagem(pers0, rig0).getbbox()
-        chao_y = bb0[3] if bb0 else None
-        print(f"[chao] linha do chao em y={chao_y}")
+        base_pes = bb0[3] if bb0 else None
+        print(f"[chao] pes do elenco em y={base_pes}")
     except Exception as e:
-        print(f"[chao] nao consegui medir ({e}); seguindo sem sombra de contato")
+        print(f"[chao] nao consegui medir os pes ({e}); "
+              f"o personagem fica na altura do rig")
 
     pastas_cenario = _pastas(spec, pasta_partes, "pasta_cenarios", ("cenarios", "cenario"))
     # O QUE EXISTE DE VERDADE, medido uma vez. É contra esta lista que o
@@ -2114,9 +2157,8 @@ def render(pasta_partes, spec, saida, tmpdir=None):
     n = 0
     # o que cada ator tem na mão; sobrevive de um trecho para o outro
     na_mao = {c: None for c in chaves}
-    pan = 0.0            # o quanto o fundo já andou; NÃO zera entre trechos
     n_trechos = len(spec["trechos"])
-    planos = []
+    planos, cortes = [], []
     for i_tr, tr in enumerate(spec["trechos"]):
         pedido = tr.get("cenario") or CENARIOS.escolher(tr.get("fala", ""))
         cen, motivo = CENARIOS.resolver(pedido, inventario, tr.get("fala"))
@@ -2128,13 +2170,33 @@ def render(pasta_partes, spec, saida, tmpdir=None):
             if cen not in cenarios:
                 print(f"[cenario] SEM ARTE NENHUMA em "
                       f"{[os.path.normpath(p) for p in pastas_cenario]}; cor chapada")
-                cenarios[cen] = Cenario(Image.new("RGB", (W, H), "#A5A893"))
+                cenarios[cen] = Cenario(Image.new("RGB", (W, H), "#A5A893"),
+                                        chao_rel=CENARIOS.CHAO_PADRAO)
         elif cen not in cenarios:
             cam_path = _achar_arte(pastas_cenario, cen)
-            print(f"[cenario] {pedido} -> {cen} ({motivo}): {cam_path}")
-            cenarios[cen] = Cenario(Image.open(cam_path))
+            chao_rel = CENARIOS.chao_de(cen)
+            print(f"[cenario] {pedido} -> {cen} ({motivo}, chao a "
+                  f"{chao_rel * 100:.0f}%): {cam_path}")
+            cenarios[cen] = Cenario(Image.open(cam_path), chao_rel=chao_rel)
         elif motivo != "pedido":
             print(f"[cenario] {pedido} -> {cen} ({motivo})")
+
+        # OS PÉS NO CHÃO DESENHADO. Até 28/08 o personagem ficava na altura
+        # fixa do rig (78% do quadro com dois em cena) e a arte tinha o chão
+        # em qualquer lugar entre 80% e 90% -- na sala isso é 192px de
+        # diferença, e o resultado é o boneco pairando na frente da parede.
+        dy_chao = 0.0
+        if base_pes:
+            dy_chao = cenarios[cen].chao_y - base_pes
+            if i_tr == 0 or abs(dy_chao) > 1:
+                print(f"[chao] {cen}: chao em y={cenarios[cen].chao_y:.0f}, "
+                      f"pes em y={base_pes} -> {dy_chao:+.0f}px")
+
+        # O CORTE DESTE TRECHO: o fundo fica imóvel aqui dentro, e o próximo
+        # trecho pega outro pedaço da arte (ver PONTOS_DE_CORTE).
+        corte = cenarios[cen].ponto_do_trecho(i_tr)
+        cortes.append(f"{corte / max(cenarios[cen].faixa, 1):.2f}")
+
         falante = tr.get("ator") if tr.get("ator") in elenco else padrao_ator
         por_ator = _acoes_por_ator(tr, chaves, falante)
         nf = max(1, int(tr["dur"] * FPS))
@@ -2144,27 +2206,20 @@ def render(pasta_partes, spec, saida, tmpdir=None):
             t = fh / max(1, nf - 1)
             nivel = env[n] if n < len(env) else 0.0
 
-            # ROLAGEM PELO CENÁRIO (28/08). O fundo andava só quando alguém
-            # caminhava, ou seja quase nunca: numa esquete de dois parados
-            # conversando ele ficava imóvel do primeiro ao último frame, e a
-            # cena inteira lia como foto com áudio por cima. Agora a câmera
-            # percorre devagar a faixa de arte que sobra dos lados (ver
-            # `Cenario`) ao longo do vídeo inteiro, e a caminhada continua
-            # somando o deslocamento dela por cima. É movimento que existe
-            # sem custar frame nenhum -- só um recorte diferente da mesma
-            # tira.
-            deriva = (cenarios[cen].faixa * DERIVA_CENARIO
-                      * (n / float(max(total * FPS, 1)) - 0.5))
             camada = Image.new("RGBA", (W, H), (0, 0, 0, 0))
             cam_falante, x_falante = dict(ACOES.CAM_NEUTRA), W / 2
             for chave in chaves:
                 pers, x0, dy = elenco[chave]
-                rig, c = _rig_do_trecho(tr, t, pan + deriva, por_ator[chave], x0,
+                rig, c = _rig_do_trecho(tr, t, corte, por_ator[chave], x0,
                                         falando=(chave == falante))
-                # o deslocamento que põe este ator na linha do chão comum
-                # (ver _alinhar_pelos_pes) entra DEPOIS das ações: pular e
-                # cair mexem no quadril, e a correção acompanha o pulo
-                rig["quadril"] = [rig["quadril"][0], rig["quadril"][1] + dy]
+                # DOIS deslocamentos verticais, e a ordem importa:
+                #  `dy`      põe este ator na mesma linha dos outros
+                #            (_alinhar_pelos_pes, mede a folha de cada um);
+                #  `dy_chao` põe essa linha no CHÃO DESENHADO do cenário.
+                # Entram DEPOIS das ações porque pular e cair mexem no
+                # quadril, e as duas correções acompanham o pulo.
+                rig["quadril"] = [rig["quadril"][0],
+                                  rig["quadril"][1] + dy + dy_chao]
                 # a cara de QUEM FALA vem do trecho; quem ouve fica na cara
                 # de reação que o roteirista der a ele, ou neutro
                 cara = rosto.para(tr, t, tr["dur"], chave) if chave == falante \
@@ -2183,8 +2238,9 @@ def render(pasta_partes, spec, saida, tmpdir=None):
                 if chave == falante:
                     cam_falante, x_falante = c, rig["quadril"][0]
             cam = cam_falante
-            if chao_y:
-                cam["chao_y"] = chao_y
+            # a sombra de contato mira o chão DESENHADO, que agora é onde os
+            # pés estão de verdade
+            cam["chao_y"] = cenarios[cen].chao_y
             # ENQUADRAMENTO DO TRECHO, por cima do que a ação já pediu: a
             # ação usa zoom para pontuar um susto, e isso continua valendo
             # -- os dois se multiplicam em vez de um apagar o outro.
@@ -2208,13 +2264,14 @@ def render(pasta_partes, spec, saida, tmpdir=None):
                      + "".join("+" + EXPR.normalizar(j.get("nome") or j.get("valor"))
                                for j in (tr.get("expressoes") or [])))
         planos.append(f"{_enquadramento(i_tr, n_trechos, len(chaves), 0.0)[0]:.2f}")
-        # o pan de CAMINHADA continua de onde parou; a deriva da câmera sai
-        # da conta porque ela é função do tempo global e seria contada duas
-        # vezes no trecho seguinte
-        pan = cam.get("fundo_dx", pan) - deriva
+        # O PAN DA CAMINHADA NÃO ATRAVESSA O CORTE. Ele acumulava de trecho
+        # em trecho, de quando o fundo era um ladrilho infinito; agora cada
+        # trecho começa no ponto que `PONTOS_DE_CORTE` manda, e um resto de
+        # deslocamento vindo de trás só desalinharia esse ponto.
     print(f"[cutout] {n} frames ({n/FPS:.1f}s)")
     print(f"[cara] {' -> '.join(caras)}")
     print(f"[camera] plano por trecho: {' -> '.join(planos)}")
+    print(f"[camera] corte por trecho: {' -> '.join(cortes)} da faixa do cenario")
 
     subprocess.run(["ffmpeg", "-y", "-v", "error", "-framerate", str(FPS),
                     "-i", os.path.join(fd, "%05d.png"), "-i", audio,
