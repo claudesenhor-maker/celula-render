@@ -366,9 +366,25 @@ def cair(u, rig, dur, a):
 
 def virar(u, rig, dur, a):
     """Vira de costas para o outro lado. Achata na horizontal no meio da
-    virada -- o truque de cut-out para não precisar de arte de perfil."""
-    k = _suave(u)
-    return {"espelhar": k > 0.5, "achatar": abs(math.cos(math.pi * k))}
+    virada -- o truque de cut-out para não precisar de arte de perfil.
+
+    DUAS CORREÇÕES DE 29/08, as duas vistas na rodada 8 do ciclo, em que
+    esta ação entrou num vídeo pela primeira vez:
+
+    1. O ACHATAMENTO NÃO CHEGA A ZERO. `abs(cos(pi*k))` passa por zero no
+       meio da virada, e um cut-out achatado a zero não vira: ele SOME. Na
+       tela o Zeca virou um poste de uma coluna de largura. Com piso, o que
+       se vê é o corpo estreitando até uma faixa e voltando pelo outro
+       lado, que é o que uma figura de papel virando faz.
+
+    2. ELA É RÁPIDA, E DEPOIS FICA. Virar-se leva meio segundo; a janela do
+       roteiro pode ser de dois. Interpolando pela janela inteira, o
+       personagem passa metade da fala esmagado. Agora ele vira na primeira
+       METADE da janela e fica virado no resto.
+    """
+    k = _suave(min(1.0, u * 2.0))
+    return {"espelhar": k > 0.5,
+            "achatar": max(abs(math.cos(math.pi * k)), 0.34)}
 
 
 # =====================================================================
@@ -585,11 +601,23 @@ def mostrar_objeto(u, rig, dur, a):
 
 
 def usar_objeto(u, rig, dur, a):
-    """As duas mãos à frente, cabeça baixa: mexendo no celular, lendo,
-    contando dinheiro. O personagem some do mundo, que é a piada."""
+    """As duas mãos à frente do peito, cabeça baixa: mexendo no celular,
+    lendo, contando dinheiro. O personagem some do mundo, que é a piada.
+
+    OS COTOVELOS FICAM JUNTO AO CORPO (29/08). Os ângulos antigos (braço
+    superior a 34 graus) erguiam o braço para CIMA e para fora: na tela os
+    dois braços abriam num V e o personagem parecia estar se rendendo, não
+    olhando uma tela. Quem mexe no celular encolhe os cotovelos contra as
+    costelas e traz as mãos para a frente do esterno -- é uma pose fechada,
+    e é isso que lê como "sumiu do mundo". Visto na rodada 9 do ciclo.
+
+    74/130 saiu de uma VARREDURA, não do olho: fechar mais que isso põe a
+    mão atrás do tronco e o objeto some -- medido, 22% de visível com
+    80/152, contra 96% aqui. O cotovelo continua colado nas costelas.
+    """
     k = _suave(min(1.0, u * 2.2))
-    _braco(rig, "d", 34.0, -62.0, -6.0, k)
-    _braco(rig, "e", 146.0, 242.0, 6.0, k * 0.8)
+    _braco(rig, "d", 74.0, 130.0, -8.0, k)
+    _braco(rig, "e", 106.0, 50.0, 8.0, k * 0.85)
     rig["cabeca"] = rig.get("cabeca", 0.0) + 5.0 * k
     rig["tronco"] = -90.0 + 3.0 * k
     return {}
