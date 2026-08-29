@@ -3112,12 +3112,40 @@ def render(pasta_partes, spec, saida, tmpdir=None, amostra=0):
     if quero is not None:
         return _folha(colhidos, saida), round(total, 2)
 
-    subprocess.run(["ffmpeg", "-y", "-v", "error", "-framerate", str(FPS),
-                    "-i", os.path.join(fd, "%05d.png"), "-i", audio,
-                    "-af", spec.get("loudnorm", "loudnorm=I=-9:LRA=8:TP=-1.5"),
-                    "-c:v", "libx264", "-preset", "medium", "-crf", "21",
-                    "-pix_fmt", "yuv420p", "-c:a", "aac", "-b:a", "192k",
-                    "-shortest", "-movflags", "+faststart", saida], check=True)
+    # O TAMANHO DO ARQUIVO VIROU RESTRIÇÃO (30/08). O Storage do Supabase
+    # recusa objeto acima do teto do plano, e o primeiro vídeo de 88 s
+    # voltou `413 Payload too large` DEPOIS de 15 minutos de render: o job
+    # inteiro perdido no upload, com o MP4 pronto no runner.
+    #
+    # Enquanto a esquete tinha 17 s isso nunca aparecia. Com 40 a 80 s o
+    # arquivo quadruplica, e o CRF 21 -- escolhido sem pensar em tamanho --
+    # passa do teto. Arte chapada de traço comprime muito bem: 23 é
+    # visualmente indistinguível aqui e corta perto de um terço. O
+    # `maxrate`/`bufsize` cortam o PICO, que é o que estoura a média num
+    # vídeo com corte de plano a cada trecho.
+    def _encodar(crf, maxrate):
+        subprocess.run(["ffmpeg", "-y", "-v", "error", "-framerate", str(FPS),
+                        "-i", os.path.join(fd, "%05d.png"), "-i", audio,
+                        "-af", spec.get("loudnorm", "loudnorm=I=-9:LRA=8:TP=-1.5"),
+                        "-c:v", "libx264", "-preset", "medium", "-crf", str(crf),
+                        "-maxrate", maxrate, "-bufsize", "8M",
+                        "-pix_fmt", "yuv420p", "-c:a", "aac", "-b:a", "160k",
+                        "-shortest", "-movflags", "+faststart", saida], check=True)
+
+    _encodar(23, "4M")
+    # REDE DE SEGURANÇA: se ainda passar do teto, reencoda mais apertado em
+    # vez de deixar o upload falhar. Perder qualidade é ruim; perder o vídeo
+    # inteiro depois de 15 min de render é pior.
+    TETO_MB = 45
+    mb = os.path.getsize(saida) / (1024 * 1024)
+    for crf, mr in ((27, "2.5M"), (31, "1.6M")):
+        if mb <= TETO_MB:
+            break
+        print(f"[video] {mb:.1f} MB passa do teto de {TETO_MB} MB; "
+              f"reencodando com crf {crf}")
+        _encodar(crf, mr)
+        mb = os.path.getsize(saida) / (1024 * 1024)
+    print(f"[video] {mb:.1f} MB, {n / float(FPS):.1f}s")
     # Duração devolvida = a do VÍDEO que saiu, não a soma planejada. Com o
     # respiro no áudio as duas praticamente coincidem, mas `int(dur*FPS)`
     # arredonda para baixo em cada trecho, e é a guarda de duração do
