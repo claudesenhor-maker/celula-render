@@ -356,7 +356,23 @@ def conferir_pecas(pecas, ancoras):
     problemas = []
     alt = max(ancoras.get("altura_figura", 1), 1)
 
+    # TRONCO ÚNICO (30/08). Quando a arte cobre a cintura -- um colete de
+    # tricô que desce até o quadril, por exemplo -- peito e abdômen saem
+    # como uma peça só, e `segmentar.nomear_corpo` a chama de peito. Isso
+    # não é folha defeituosa: é folha com uma junta a menos, e o rig sabe
+    # lidar (`_ancestral_presente` liga a perna direto ao peito). O que se
+    # perde é a torção da cintura.
+    #
+    # As duas cobranças abaixo precisam saber disso, senão a folha boa é
+    # reprovada duas vezes pela mesma causa: o abdômen "faltando" e o peito
+    # "grande demais" -- ele agora mede o tronco inteiro.
+    tronco_unico = "abdomen" not in pecas and "peito" in pecas
+
     faltando = [p for p in PARTES_ESSENCIAIS if p not in pecas]
+    if tronco_unico:
+        faltando = [p for p in faltando if p != "abdomen"]
+        print("[folha] sem abdomen como peça: o tronco veio inteiro e vira o "
+              "peito; a cintura não torce, o resto do rig funciona")
     if faltando:
         problemas.append(f"faltam peças essenciais: {', '.join(faltando)}")
 
@@ -366,6 +382,9 @@ def conferir_pecas(pecas, ancoras):
             continue
         frac = p.size[1] / alt
         lo, hi = esp["frac_altura"]
+        if nome == "peito" and tronco_unico:
+            # o peito soma a faixa que seria do abdômen
+            hi = hi + ESPEC_PARTES.get("abdomen", {}).get("frac_altura", (0, 0))[1]
         if not (lo <= frac <= hi):
             problemas.append(
                 f"{nome} ficou com {frac:.0%} da altura da figura, esperado "
