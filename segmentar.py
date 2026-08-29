@@ -465,10 +465,26 @@ def nomear_corpo(comps, figura):
     # a coluna central: peças que cruzam o centro horizontal
     centrais = sorted([c for c in comps if c["bbox"][0] <= centro_x <= c["bbox"][2]],
                       key=lambda c: c["cy"])
-    if len(centrais) < 3:
+    # DUAS BASTAM (30/08). A guarda pedia três -- cabeça, peito e abdômen --
+    # e reprovava a folha da senhora, que tem os catorze componentes, braços
+    # e pernas separados e vão medido em joelho e tornozelo. O que falta
+    # nela é UMA divisão: o colete de tricô cobre a cintura e cola peito e
+    # abdômen num bloco só, e `_dividir_por_cor` não vence um padrão
+    # listrado de quatro cores (ele procura DUAS regiões dominantes).
+    #
+    # Trinta linhas abaixo o código já sabe o que fazer com isso: "se a
+    # folha vier com um tronco só, ele é o peito e o abdômen vira o mesmo
+    # componente -- o rig aguenta, perde a torção". A guarda de entrada é
+    # que não deixava chegar lá.
+    #
+    # Folha REALMENTE grudada continua reprovando, e antes daqui: quem tem o
+    # corpo num bloco só não chega a oito componentes, e `segmentar_corpo`
+    # levanta FolhaGrudada com a contagem. Aqui, menos de duas peças na
+    # coluna significa que nem a cabeça se separou.
+    if len(centrais) < 2:
         raise FolhaGrudada(
-            f"achei só {len(centrais)} peças na coluna central; a folha "
-            f"provavelmente veio com o corpo grudado")
+            f"achei só {len(centrais)} peça(s) na coluna central: nem a "
+            f"cabeça se separou do tronco. A folha veio com o corpo grudado")
 
     # cabeça é a mais alta da coluna. Mandíbula, se existir, é a peça
     # central logo abaixo dela e mais estreita.
@@ -499,20 +515,32 @@ def nomear_corpo(comps, figura):
     # abdômen vira o mesmo componente -- o rig aguenta, perde a torção.
     tronco = sorted(sorted(resto[i:], key=lambda c: -c["area"])[:2],
                     key=lambda c: c["cy"])
-    if len(tronco) == 1:
-        nomes[id(tronco[0])] = "peito"
-        nomes.setdefault(id(tronco[0]), "peito")
-        tronco = tronco * 2
+    # TRONCO ÚNICO (30/08): o código antigo duplicava o componente
+    # (`tronco = tronco * 2`) para dar os dois nomes ao mesmo objeto -- e o
+    # dicionário é indexado por `id`, então o segundo nome SOBRESCREVIA o
+    # primeiro. Sobrava um abdômen e nenhum peito, e a folha era reprovada
+    # duas linhas abaixo por "não achei peito e abdômen". O caminho nunca
+    # tinha rodado: a guarda de três peças na coluna barrava antes.
+    #
+    # Com um tronco só ele é o PEITO, e o abdômen não existe. O rig sabe
+    # lidar com peça ausente -- `_ancestral_presente` sobe a cadeia até
+    # quem existe, que é como toda peça que a arte não separou já é
+    # tratada. Perde-se a torção da cintura, não o personagem.
+    tronco_unico = len(tronco) == 1
     for nome, c in zip(("peito", "abdomen"), tronco):
         nomes[id(c)] = nome
 
     peito = next((c for c in comps if nomes.get(id(c)) == "peito"), None)
     abdomen = next((c for c in comps if nomes.get(id(c)) == "abdomen"), None)
-    if peito is None or abdomen is None:
+    if peito is None:
+        raise FolhaGrudada("não achei o peito como peça separada")
+    if abdomen is None and not tronco_unico:
         raise FolhaGrudada("não achei peito e abdômen como peças separadas")
 
     y_ombro = peito["bbox"][1]
-    y_quadril = abdomen["bbox"][3]
+    # sem abdômen, o quadril é a base do próprio tronco: é dali que as
+    # pernas descem, e é essa a linha que separa braço de perna abaixo
+    y_quadril = (abdomen or peito)["bbox"][3]
 
     # braços: fora da coluna do tronco, acima da virilha. Ordem dentro do
     # membro = distância crescente do centro do corpo.
@@ -904,6 +932,21 @@ def _ancestral_presente(nome, esqueleto, presentes):
     pai = esqueleto.get(nome)
     while pai is not None and pai not in presentes:
         pai = esqueleto.get(pai)
+    # A CADEIA PODE ACABAR SEM ACHAR NINGUÉM (30/08). Subir só resolve
+    # quando existe alguém acima; quem pendura na RAIZ não tem para onde
+    # subir. Numa folha sem abdômen -- o colete que cobre a cintura --, a
+    # perna subia para o abdômen ausente, dele para `None`, e era tratada
+    # como se fosse ela mesma uma raiz: ninguém gravava a saída do tronco
+    # para ela, e o personagem saía cortado na cintura.
+    #
+    # Nesse caso o pai certo é a RAIZ EFETIVA: descendo da raiz do
+    # esqueleto até a primeira peça que existe de fato.
+    if pai is None and esqueleto.get(nome) is not None:
+        raiz = next((n for n, p in esqueleto.items() if p is None), None)
+        while raiz is not None and raiz not in presentes:
+            raiz = next((n for n, p in esqueleto.items() if p == raiz), None)
+        if raiz is not None and raiz != nome:
+            return raiz
     return pai
 
 
