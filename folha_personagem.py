@@ -108,6 +108,19 @@ ESQUELETO = {
     "pe_d":           "perna_inf_d",
 }
 
+# PERSONAGENS SEM ROSTO (30/08). Quem tem a cara coberta -- o astronauta,
+# de viseira opaca -- não pode ter feições animadas nem boca desenhada: o
+# motor "acha olhos" no reflexo do vidro (dois brilhos que a validação por
+# simetria aceita) e animá-los faz os reflexos deslizarem pelo capacete.
+#
+# É LISTA, e não detecção, de propósito: a folha do astronauta passa em toda
+# régua geométrica -- 13 peças, pivôs certos --, e o que a reprova é uma
+# decisão de ARTE que nenhuma heurística deduz. Régua que mede o efeito:
+# `lab-celula/ferramentas/rosto_vivo.py`.
+#
+# A chave é a do personagem (a pasta em assets/parte_personagem/<chave>/).
+SEM_EXPRESSAO = ("astronauta",)
+
 # Sem estas o motor não monta um frame. O rosto inteiro é opcional: um
 # personagem sem olhos recortados ainda anda, ainda gesticula e ainda abre
 # a boca -- só perde expressão.
