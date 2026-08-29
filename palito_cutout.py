@@ -2096,7 +2096,14 @@ def _enquadramento(i, n_trechos, n_atores, t, centro_corpo=None):
     x=296 e x=784 num quadro de 1080) fechar demais corta um deles pela
     borda, então o teto cai para 1,12 -- com um ator sozinho, no meio do
     quadro, dá para ir a 1,30 sem perder braço nenhum."""
-    teto = 1.12 if n_atores > 1 else 1.30
+    # 1,25 COM DOIS (30/08). Eram 1,12, escolhidos no olho quando o teto do
+    # frame ainda não existia: fechar mais cortava um deles pela borda. Hoje
+    # `montar_frame` mede a silhueta REAL de cada frame e limita o zoom ao
+    # que ela comporta (29/08), então o número aqui deixou de ser a única
+    # proteção -- e 1,00 a 1,12 é uma variação que ninguém percebe num vídeo
+    # de 66 s com treze trechos. Os dois ficam em x=296 e 784 e ocupam ~740
+    # dos 1080 px: cabe fechar bem mais que 12%.
+    teto = 1.25 if n_atores > 1 else 1.30
     # O CICLO PRECISOU CRESCER COM A ESQUETE (30/08). Eram três posições
     # (aberto, médio, fechado), e num vídeo de 5 trechos elas davam uma
     # sequência que não se repetia. Com 13 trechos o ciclo roda QUATRO
