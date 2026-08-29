@@ -413,6 +413,42 @@ def _analisar_rosto(img):
     linha = (olhos["olho_e"]["cy"] + olhos["olho_d"]["cy"]) / 2.0
     d_olhos = olhos["olho_d"]["cx"] - olhos["olho_e"]["cx"]
 
+    # A COR DA PELE SAI DO ROSTO, NÃO DA PEÇA INTEIRA (30/08)
+    #
+    # `pele`, lá em cima, é a cor mais frequente do núcleo -- e o núcleo é a
+    # peça do crânio, que traz o que o desenhista pôs nela. Na enfermeira
+    # são touca, coque e cabelo dos dois lados: a cor dominante deu
+    # [108,84,60], que é o CABELO. Com a pele errada, `tinta` sai invertida
+    # -- a face clara inteira vira uma mancha de tinta e as sobrancelhas,
+    # castanhas e vizinhas do cabelo, ficam de fora. Resultado: 2/4 feições,
+    # olhos que se mexem e sobrancelhas paradas.
+    #
+    # É a lei 13 aplicada a mais um lugar: nada do rosto pode ser medido em
+    # fração da peça. Agora que os olhos existem, a pele se amostra ONDE ELA
+    # ESTÁ -- a faixa entre os olhos e logo abaixo deles, que é bochecha e
+    # nariz em qualquer cara. Se a cor mudar, `tinta` e os componentes são
+    # refeitos com ela.
+    fy0 = int(max(0, linha))
+    fy1 = int(min(nucleo.shape[0], linha + max(d_olhos * 0.9, 4)))
+    fx0 = int(max(0, eixo - d_olhos * 0.45))
+    fx1 = int(min(nucleo.shape[1], eixo + d_olhos * 0.45))
+    janela = np.zeros_like(nucleo)
+    janela[fy0:fy1, fx0:fx1] = True
+    janela &= nucleo
+    if janela.sum() >= 40:
+        qf = (rgb[janela] // 24)
+        cf, nf = np.unique(qf.reshape(-1, 3), axis=0, return_counts=True)
+        pele_rosto = cf[nf.argmax()].astype(np.int16) * 24 + 12
+        if np.abs(pele_rosto - pele).sum() > 60:
+            print(f"[rosto] a cor dominante da peça era {tuple(int(v) for v in pele)} "
+                  f"(cabelo ou touca); a pele medida no rosto e "
+                  f"{tuple(int(v) for v in pele_rosto)}")
+            pele = pele_rosto
+            tinta = nucleo & (np.abs(rgb - pele).sum(axis=2) > 90)
+            if tinta.sum() >= 40:
+                comps_tinta = _componentes(
+                    tinta, area_min=max(20, int(tinta.sum() * 0.005)))
+
     # --- até onde desce o rosto -------------------------------------------
     # O queixo é onde a mancha de pele ESTRANGULA: abaixo dele vem o pescoço,
     # que é mais estreito por definição de pescoço. Medir isso é o que impede
@@ -1121,6 +1157,13 @@ class Personagem:
         self.escala = cfg.get("escala", 1.0)
         self.comp = cfg.get("comprimentos", {})
         self.vaos = cfg.get("vaos", {})
+        # PERSONAGEM SEM EXPRESSÃO (30/08): quem tem o rosto coberto -- o
+        # astronauta de viseira escura -- não pode ter feições animadas nem
+        # boca desenhada. É DADO da arte, gravado em `partes.json`, e não
+        # detecção: o motor "acha olhos" no reflexo do vidro e a régua de
+        # simetria os aceita, então nenhuma heurística resolve isto sozinha.
+        # Ver `ferramentas/rosto_vivo.py`, que mede quantas feições saem.
+        self.sem_expressao = bool(cfg.get("sem_expressao", False))
         # CORREÇÃO DE FOLHA: a arte vem em pose T; em cena o braço cai.
         self.corr = dict(CORRECAO_POSE_T)
         for filho, dono in SEGUE.items():
@@ -1189,7 +1232,23 @@ class Personagem:
         self.boca = None            # (dx, dy, largura) relativos ao pivô do crânio
         # curva e espessura de REPOUSO, medidas da boca que a arte desenhou
         self.boca_estilo = {"curva": 0.0, "esp": 0.0}
-        if "mandibula" not in self.img or _e_fiapo(self.img["mandibula"]):
+        if self.sem_expressao:
+            # PERSONAGEM SEM EXPRESSÃO (30/08). O astronauta tem a viseira
+            # escura: não há rosto, e o motor ainda assim "achava olhos"
+            # ali -- dois reflexos no vidro que a validação por simetria
+            # aceita. Animá-los faria os reflexos deslizarem pelo capacete,
+            # e desenhar uma boca poria um traço vermelho no meio do vidro.
+            #
+            # Com a marca, a cabeça continua girando e inclinando (é ela que
+            # dá reação de corpo), e a cara fica como a arte a desenhou. O
+            # personagem serve para cena e para fala; o que ele não faz é
+            # atuar com o rosto -- e quem escreve o roteiro precisa saber
+            # disso, porque neste canal a piada costuma acontecer na cara.
+            self.rosto_articulado = False
+            self.img.pop("mandibula", None)
+            print("[rosto] personagem marcado SEM EXPRESSAO: nem feicoes nem "
+                  "boca desenhada; a cabeca ainda gira e inclina")
+        elif "mandibula" not in self.img or _e_fiapo(self.img["mandibula"]):
             self.rosto_articulado = False
             self.img.pop("mandibula", None)     # fiapo em cena é sujeira solta
             if "cranio" in self.img:
@@ -1245,7 +1304,9 @@ class Personagem:
         # fossem peças. Ver _extrair_feicoes.
         self.feicoes = None
         self._cache_cara = {}
-        if "cranio" in self.img and not (self.tem("olho_e") and self.tem("olho_d")):
+        if self.sem_expressao:
+            pass                    # nada a recortar: ver o comentário acima
+        elif "cranio" in self.img and not (self.tem("olho_e") and self.tem("olho_d")):
             limpo, feic = _extrair_feicoes(self.img["cranio"], self.piv["cranio"],
                                            rosto=self.rosto)
             if feic:
@@ -1573,6 +1634,23 @@ def desenhar_personagem(pers, rig, boca_nivel=0.0, piscando=False, objeto=None,
     # --- posição e ângulo de cada peça, do quadril para fora
     pos, ang = {}, {}
     raiz = next((n for n, p in ESQUELETO.items() if p is None), "abdomen")
+    # RAIZ EFETIVA (30/08). A raiz do esqueleto é o abdômen, e existe folha
+    # que não o separa: um colete de tricô que desce até o quadril faz peito
+    # e abdômen saírem numa peça só, que o segmentador nomeia PEITO. Com a
+    # raiz ausente a travessia começava num nó que não existe, ninguém era
+    # visitado, e o personagem saía INVISÍVEL -- `getbbox()` devolvia None e
+    # nenhuma linha de log dizia por quê.
+    #
+    # É a mesma lição da árvore efetiva, logo abaixo, aplicada ao começo da
+    # cadeia em vez do meio: peça que a arte não separou não pode quebrar o
+    # rig. Quem assume o quadril é o primeiro descendente que existe.
+    if not pers.tem(raiz):
+        descida = raiz
+        while descida is not None and not pers.tem(descida):
+            descida = next((n for n, p in ESQUELETO.items() if p == descida), None)
+        if descida:
+            print(f"[rig] sem '{raiz}': '{descida}' assume a raiz do esqueleto")
+            raiz = descida
     fila = [raiz]
     corr = getattr(pers, "corr", {})
     pos[raiz] = tuple(rig["quadril"])
@@ -1588,6 +1666,14 @@ def desenhar_personagem(pers, rig, boca_nivel=0.0, piscando=False, objeto=None,
         pai = ESQUELETO[n]
         while pai is not None and not pers.tem(pai):
             pai = ESQUELETO.get(pai)
+        # QUEM SOBE ATÉ O FIM DA CADEIA FICA COM A RAIZ EFETIVA (30/08).
+        # Sem isto, a perna de uma folha sem abdômen subia para o abdômen
+        # (ausente), dele para `None` -- e virava órfã: ninguém a visitava e
+        # a senhora saía do peito para cima, cortada na cintura. Subir a
+        # cadeia só resolve quando existe alguém acima; na raiz não existe,
+        # e é justamente ali que a folha de tronco único quebra.
+        if pai is None and n != raiz:
+            pai = raiz
         filhos.setdefault(pai, []).append(n)
 
     while fila:
