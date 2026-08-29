@@ -150,14 +150,46 @@ def baixar_elenco(spec, pecas_url):
             url = cfg.get("url") or (pecas_url if chave == list(elenco)[0] and pecas_url
                                      else f"{publico}/assets/parte_personagem/{chave}/personagem.zip")
             os.makedirs(pasta, exist_ok=True)
-            dados = requests.get(url, timeout=120).content
-            zipfile.ZipFile(io.BytesIO(dados)).extractall(pasta)
-            if not os.path.exists(os.path.join(pasta, "partes.json")):
-                raise RuntimeError(f"o zip de '{chave}' nao tem partes.json na raiz")
+            # UM PERSONAGEM SEM ZIP NAO DERRUBA O VIDEO (30/08). A senhora
+            # subiu com as 14 pecas certas e sem `partes.json` -- logo, sem
+            # `personagem.zip` --, e o download trouxe a pagina de erro do
+            # Storage: `BadZipFile: File is not a zip file` matou o job
+            # inteiro, com o outro ator pronto ao lado.
+            #
+            # Quem falta sai de cena e a esquete continua com quem existe.
+            # As falas dele passam para quem ficou (abaixo), que e a mesma
+            # regra ja aplicada a personagem citado e nao desenhado: fala na
+            # boca errada e melhor que video nenhum.
+            try:
+                dados = requests.get(url, timeout=120).content
+                zipfile.ZipFile(io.BytesIO(dados)).extractall(pasta)
+                if not os.path.exists(os.path.join(pasta, "partes.json")):
+                    raise RuntimeError("o zip nao tem partes.json na raiz")
+            except Exception as e:
+                print(f"[elenco] '{chave}' NAO carregou ({type(e).__name__}: {e}); "
+                      f"ele sai de cena e as falas dele passam para quem ficou")
+                elenco.pop(chave, None)
+                continue
             total += len(dados) / 1024.0
             cfg["pasta"] = pasta
         base = base or cfg["pasta"]
         print(f"[elenco] {chave}: {cfg['pasta']}")
+
+    if not elenco:
+        raise RuntimeError("nenhum personagem do elenco carregou: sem arte "
+                           "nao ha video")
+    # AS FALAS DE QUEM NAO CARREGOU precisam de uma boca. Sem isto o trecho
+    # sairia com `ator` apontando para alguem fora de cena, e o motor
+    # desenharia a cena sem ninguem mexendo a boca.
+    vivos = list(elenco)
+    trocados = 0
+    for tr in spec.get("trechos", []):
+        if tr.get("ator") and tr["ator"] not in elenco:
+            tr["ator"] = vivos[0]
+            tr["perfil_voz"] = vivos[0]
+            trocados += 1
+    if trocados:
+        print(f"[elenco] {trocados} fala(s) passaram para '{vivos[0]}'")
     return base, total
 
 
