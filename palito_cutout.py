@@ -125,7 +125,14 @@ TAMANHO_OBJETO_PADRAO = 0.13
 # As posições não avançam em fila (0,2 → 0,4 → 0,6 seria um travelling
 # picotado, com o mesmo defeito de leitura): elas saltam de um lado ao
 # outro da faixa, como plano e contraplano.
-PONTOS_DE_CORTE = (0.50, 0.18, 0.74, 0.34, 0.90, 0.08, 0.62, 0.26)
+# DEZESSEIS PONTOS (30/08). Eram oito, escolhidos quando a esquete tinha
+# cinco ou seis trechos. Com o formato de 40 a 80 s ela tem de 8 a 16, e a
+# partir do nono trecho a câmera voltava para o ponto do primeiro: num
+# vídeo de 13 trechos o fundo se repetia cinco vezes. A lista tem agora um
+# ponto por trecho possível, e continua saltando de um lado ao outro da
+# faixa -- avançar em fila é um travelling picotado (lei 26).
+PONTOS_DE_CORTE = (0.50, 0.18, 0.74, 0.34, 0.90, 0.08, 0.62, 0.26,
+                   0.82, 0.42, 0.14, 0.70, 0.30, 0.96, 0.56, 0.04)
 
 # quantos personagens cabem no quadro ao mesmo tempo. Dois é o teto do
 # formato: no 9:16 o terceiro só entra encolhendo todo mundo até a cara
@@ -2090,7 +2097,19 @@ def _enquadramento(i, n_trechos, n_atores, t, centro_corpo=None):
     borda, então o teto cai para 1,12 -- com um ator sozinho, no meio do
     quadro, dá para ir a 1,30 sem perder braço nenhum."""
     teto = 1.12 if n_atores > 1 else 1.30
-    ciclo = (1.0, 1.0 + (teto - 1.0) * 0.5, teto)
+    # O CICLO PRECISOU CRESCER COM A ESQUETE (30/08). Eram três posições
+    # (aberto, médio, fechado), e num vídeo de 5 trechos elas davam uma
+    # sequência que não se repetia. Com 13 trechos o ciclo roda QUATRO
+    # vezes, e a prévia do primeiro vídeo de 88 s mostra o resultado: doze
+    # quadros com o mesmo enquadramento, porque 1,00 → 1,12 é uma diferença
+    # que ninguém percebe quando volta a cada três trechos.
+    #
+    # Cinco degraus em ordem NÃO monotônica: o salto de fechado para aberto
+    # é o que se lê como corte. Em ordem crescente, o mesmo conjunto viraria
+    # um zoom-in lento de treze trechos, que é o contrário de cortar.
+    meio = 1.0 + (teto - 1.0) * 0.5
+    ciclo = (1.0, teto, 1.0 + (teto - 1.0) * 0.25, meio,
+             1.0 + (teto - 1.0) * 0.75)
     if i == n_trechos - 1:
         base = teto                     # a virada fecha no rosto
     elif i == n_trechos - 2:
