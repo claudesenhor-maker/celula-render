@@ -191,7 +191,18 @@ def gerar_partes_json(prefixo_personagem):
               f"pivo medido, ficam de fora: {', '.join(sobras)}")
         imagens = {n: im for n, im in imagens.items() if n in pivos}
 
+    # TRONCO ÚNICO (30/08): quando a arte cobre a cintura, peito e abdômen
+    # saem numa peça só, que o segmentador chama de PEITO. Não é folha
+    # defeituosa -- é uma junta a menos, e o rig sabe lidar (a raiz efetiva
+    # desce para o peito, ver palito_cutout). A senhora subiu com as 14
+    # peças certas e ficou SEM partes.json porque esta lista ainda cobrava
+    # o abdômen: as peças no bucket e nenhum personagem montável.
+    tronco_unico = "abdomen" not in imagens and "peito" in imagens
     faltando = [p for p in PARTES_MINIMAS if p not in imagens]
+    if tronco_unico and faltando == ["abdomen"]:
+        faltando = []
+        print(f"[partes.json] {prefixo_personagem}: sem abdomen -- o tronco "
+              f"veio inteiro e vira o peito; a cintura nao torce")
     if faltando:
         print(f"[partes.json] {prefixo_personagem}: ainda faltam {faltando}, nao gerei")
         return False
