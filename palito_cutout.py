@@ -151,6 +151,38 @@ _CACHE_ESCALA = {}
 _TETO_CACHE_ESCALA = 400
 
 
+def _reamostrar(img, tam):
+    """Redimensiona escolhendo o filtro pelo SENTIDO da conta (30/08).
+
+    A LINHA BRANCA EM VOLTA DO PERSONAGEM saía daqui. LANCZOS tem lóbulos
+    NEGATIVOS: onde um traço preto encosta num fundo claro, ele passa do
+    valor do vizinho claro e desenha uma linha mais clara que o próprio
+    fundo colada no contorno -- o overshoot clássico de filtro com janela.
+    Num quadro inteiro isso vira um fio esbranquiçado contornando cada
+    peça do boneco e cada móvel do cenário.
+
+    Por que só apareceu agora: enquanto o plano de câmera era 1,00 não
+    havia conta nenhuma -- `montar_frame` devolvia o quadro como ele foi
+    desenhado. Desde que `_enquadramento` (27/08) passou a dar um plano
+    diferente a cada trecho, quase todo frame do vídeo é uma AMPLIAÇÃO de
+    1,05 a 1,30, e o halo passou a existir do primeiro ao último quadro.
+
+    Medido num recorte do Pal ampliado 1,25x, contando pixels mais claros
+    que o fundo colados no traço preto: LANCZOS 204, BICUBIC 179,
+    BILINEAR 46. Bilinear não tem lóbulo negativo -- ele não consegue
+    inventar um valor fora do intervalo dos vizinhos, então o halo que
+    sobra é só a mistura honesta do traço com o fundo.
+
+    REDUZINDO, LANCZOS continua sendo o certo: é onde ele preserva o traço
+    em vez de serrilhá-lo (arte de contorno reduzida com filtro barato
+    pisca entre frames), e ali o overshoot cai dentro do próprio traço,
+    onde ninguém vê."""
+    if tuple(tam) == img.size:
+        return img
+    ampliando = tam[0] > img.width or tam[1] > img.height
+    return img.resize(tuple(tam), Image.BILINEAR if ampliando else Image.LANCZOS)
+
+
 def _na_escala(img, escala):
     if escala == 1.0:
         return img
@@ -160,8 +192,8 @@ def _na_escala(img, escala):
         return achado[1]
     if len(_CACHE_ESCALA) >= _TETO_CACHE_ESCALA:
         _CACHE_ESCALA.clear()
-    p = img.resize((max(int(img.width * escala), 1),
-                    max(int(img.height * escala), 1)), Image.LANCZOS)
+    p = _reamostrar(img, (max(int(img.width * escala), 1),
+                          max(int(img.height * escala), 1)))
     _CACHE_ESCALA[chave] = (img, p)
     return p
 
@@ -1326,8 +1358,8 @@ class Personagem:
                 else:
                     sx, sy = float(ex.get("olho_sx", 1.0)), float(ex.get("olho_sy", 1.0))
                     if abs(sx - 1) > 0.02 or abs(sy - 1) > 0.02:
-                        im = im.resize((max(2, int(im.width * sx)),
-                                        max(2, int(im.height * sy))), Image.LANCZOS)
+                        im = _reamostrar(im, (max(2, int(im.width * sx)),
+                                              max(2, int(im.height * sy))))
                     dy += float(ex.get("olho_dy", 0.0)) * hc
             else:
                 # sobe no máximo até onde há testa (ver `teto` em
@@ -1379,7 +1411,7 @@ class Personagem:
         if chave not in self._cache_var:
             img, piv = self.img[nome], self.piv[nome]
             nl, na = max(2, int(img.width * sx)), max(2, int(img.height * sy))
-            self._cache_var[chave] = (img.resize((nl, na), Image.LANCZOS),
+            self._cache_var[chave] = (_reamostrar(img, (nl, na)),
                                       (piv[0] * sx, piv[1] * sy))
         return self._cache_var[chave]
 
@@ -1761,7 +1793,7 @@ class Cenario:
         # excesso é o que vira faixa de passeio.
         k = max(W / base.width, H / base.height)
         nl, na = max(int(base.width * k), W), max(int(base.height * k), H)
-        base = base.resize((nl, na), Image.LANCZOS)
+        base = _reamostrar(base, (nl, na))
         # o chão fica embaixo: cortar pelo centro jogaria a linha do chão
         # para fora do quadro
         self.tira = base.crop((0, na - H, nl, na))
@@ -1859,7 +1891,7 @@ def deformar_ator(camada, cam, quadril_x=W / 2):
     achatar = float(cam.get("achatar", 1.0))
     if achatar < 0.995:
         larg = max(2, int(W * max(achatar, 0.04)))
-        red = camada.resize((larg, H), Image.LANCZOS)
+        red = _reamostrar(camada, (larg, H))
         nova = Image.new("RGBA", (W, H), (0, 0, 0, 0))
         nova.alpha_composite(red, (int(quadril_x - larg * quadril_x / W), 0))
         camada = nova
@@ -1873,7 +1905,7 @@ def deformar_ator(camada, cam, quadril_x=W / 2):
         if bb:
             chao = bb[3]
             alt = max(int(H * esc_y), 2)
-            red = camada.resize((W, alt), Image.LANCZOS)
+            red = _reamostrar(camada, (W, alt))
             nova = Image.new("RGBA", (W, H), (0, 0, 0, 0))
             nova.alpha_composite(red, (0, int(chao - chao * esc_y)))
             camada = nova
@@ -1939,8 +1971,10 @@ def montar_frame(camada, cenario, cam, quadril_x=W / 2, camadas=None,
         cy = H * float(cam.get("zoom_y", 0.5))
         x0 = min(max(cx - lw / 2, 0), W - lw)
         y0 = min(max(cy - lh / 2, 0), H - lh)
-        quadro = quadro.crop((int(x0), int(y0), int(x0 + lw), int(y0 + lh))
-                             ).resize((W, H), Image.LANCZOS)
+        # ampliação: BILINEAR, senão o zoom desenha um fio branco em volta
+        # de cada traço preto do quadro (ver _reamostrar)
+        quadro = _reamostrar(
+            quadro.crop((int(x0), int(y0), int(x0 + lw), int(y0 + lh))), (W, H))
     return quadro
 
 
@@ -2602,8 +2636,8 @@ def render(pasta_partes, spec, saida, tmpdir=None, amostra=0):
         # desenhados deitados, e medir a altura deles deixava o objeto do
         # tamanho de um cartão. O que se lê como tamanho é o lado maior.
         k = alvo / max(im.width, im.height, 1)
-        im = im.resize((max(int(im.width * k), 1), max(int(im.height * k), 1)),
-                       Image.LANCZOS)
+        im = _reamostrar(im, (max(int(im.width * k), 1),
+                              max(int(im.height * k), 1)))
         # CONTORNO, depois de redimensionar: a espessura é fração do
         # tamanho FINAL, senão ela encolhe junto com a arte e some
         # justamente no objeto pequeno, que é o que mais precisa dela.
