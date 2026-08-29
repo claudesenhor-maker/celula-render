@@ -63,7 +63,8 @@ import argparse, io, json, os, sys, zipfile
 import numpy as np
 import requests
 
-from folha_personagem import (ESPEC_ROSTO, PARTES_ESSENCIAIS, FolhaGrudada,
+from folha_personagem import (ESPEC_ROSTO, PARTES_ESSENCIAIS, SEM_EXPRESSAO,
+                              FolhaGrudada,
                               conferir_pecas, conferir_rosto, fatiar_rosto,
                               segmentar_folha)
 import segmentar as SEG
@@ -204,6 +205,12 @@ def gerar_partes_json(prefixo_personagem):
         "comprimentos": ancoras.get("comprimentos", {}),
         "vaos": ancoras.get("vaos", {}),
     }
+    # rosto coberto: ver folha_personagem.SEM_EXPRESSAO
+    chave_pers = prefixo_personagem.rstrip("/").rsplit("/", 1)[-1]
+    if chave_pers in SEM_EXPRESSAO:
+        cfg["sem_expressao"] = True
+        print(f"[partes.json] {chave_pers}: marcado SEM EXPRESSAO "
+              f"(rosto coberto; sem feicoes e sem boca desenhada)")
     partes_json_bytes = json.dumps(cfg, ensure_ascii=False, indent=2).encode("utf-8")
     subir(prefixo_personagem + "partes.json", partes_json_bytes, mime="application/json")
     print(f"[partes.json] {prefixo_personagem}: {len(imagens)} pecas, escala {cfg['escala']}")
