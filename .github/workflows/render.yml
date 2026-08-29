@@ -14,9 +14,18 @@ on:
 jobs:
   render:
     runs-on: ubuntu-latest
-    # MENOR que o timeout do Wait no n8n (20 min): assim o job morre e
-    # chama o callback de erro ANTES de o n8n desistir sozinho.
-    timeout-minutes: 18
+    # 90 MIN (30/08). Eram 18, escolhidos quando o Wait do n8n esperava 20 --
+    # e esse Wait nao existe mais: o Adapter de Montagem dispara e marca
+    # `aguardando_render`, e quem repesca e o Dispatcher, pelo banco. O teto
+    # que importa hoje e o da Manutencao Diaria, que reverte item preso ha
+    # mais de 2h.
+    #
+    # A esquete passou a ter 40 a 80 s (era 15 a 25). A 24 fps isso e de 960
+    # a 1920 frames, e o render gasta ~1,5 s por frame: um video no teto do
+    # formato leva perto de 45 min, contra os ~13 que um de 17 s levava.
+    # Deixar 18 aqui faria todo video longo morrer no meio -- e o job morre
+    # calado, com o item preso ate a Manutencao do dia seguinte.
+    timeout-minutes: 90
     steps:
       - uses: actions/checkout@v4
 
