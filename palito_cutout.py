@@ -2295,8 +2295,14 @@ def montar_frame(camada, cenario, cam, quadril_x=W / 2, camadas=None,
         # ABAIXO do topo da cabeça: o cabelo saía cortado rente ao crânio em
         # todos os closes do v011, e ninguém tinha olhado porque até esta
         # volta o close com um ator não estava acontecendo.
+        # E A GUARDA DA LATERAL TAMBÉM VALE PARA TODO PLANO FECHADO (31/08,
+        # volta 13). Ela só rodava no close em quem fala, e com UM ator
+        # sozinho o resultado apareceu na tira de rostos: braço erguido para
+        # o lado, mão FORA do quadro e o celular boiando ao lado da cabeça,
+        # sem ninguém segurando. Objeto sem mão é pior que objeto cortado --
+        # ele deixa de ser um objeto e vira um adesivo.
         bba = (camada_alvo if camada_alvo is not None else camada).getbbox()
-        if bba and camada_alvo is not None and (bba[2] - bba[0]) <= lw:
+        if bba and (bba[2] - bba[0]) <= lw:
             cx = min(max(cx, bba[2] - lw / 2), bba[0] + lw / 2)
         cy = H * float(cam.get("zoom_y", 0.5))
         # A CABEÇA NUNCA É CORTADA. O close mira a cabeça (`centro_rosto`),
