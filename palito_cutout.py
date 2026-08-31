@@ -2205,7 +2205,22 @@ def _enquadramento(i, n_trechos, n_atores, t, centro_corpo=None):
     # proteção -- e 1,00 a 1,12 é uma variação que ninguém percebe num vídeo
     # de 66 s com treze trechos. Os dois ficam em x=296 e 784 e ocupam ~740
     # dos 1080 px: cabe fechar bem mais que 12%.
-    teto = 1.25 if n_atores > 1 else 1.30
+    # 1,30 -> 1,60 COM UM SÓ (31/08, volta 5 do ciclo de vídeo). O v005 foi
+    # um monólogo e os dezesseis quadros saíram no MESMO plano inteiro: um
+    # boneco no meio de um 9:16, com um terço de quadro vazio de cada lado.
+    # O teto de 1,30 vinha de quando havia sempre dois em cena, onde ele é
+    # o certo -- fechar mais corta um pela borda. Sozinho, no meio, o corpo
+    # ocupa ~370 dos 1080 px: 1,30 nem chega a encher metade.
+    #
+    # O plano de melhorias pede close nas falas importantes (itens 4 e 5), e
+    # é aqui que ele cabe sem inventar camada nenhuma: o ciclo de planos já
+    # existe, só faltava alcance para o degrau fechado ser um CLOSE de
+    # verdade e não outro plano médio.
+    #
+    # 1,60 e não mais: acima disso o topo da cabeça encosta na borda quando
+    # a ação levanta o braço, e `montar_frame` passaria a cortar o gesto --
+    # que é justamente o que este vídeo tem de melhor.
+    teto = 1.25 if n_atores > 1 else 1.60
     # O CICLO PRECISOU CRESCER COM A ESQUETE (30/08). Eram três posições
     # (aberto, médio, fechado), e num vídeo de 5 trechos elas davam uma
     # sequência que não se repetia. Com 13 trechos o ciclo roda QUATRO
