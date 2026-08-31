@@ -2466,7 +2466,24 @@ def _enquadramento(i, n_trechos, n_atores, t, centro_corpo=None,
         if alvo is None:
             alvo = 0.5
         return z, max(meia, min(1.0 - meia, float(alvo)))
-    teto = 1.25 if n_atores > 1 else 1.60
+    # O PLANO DO PAR NÃO EXISTE, E PEDI-LO FAZ A CÂMERA PULSAR (31/08,
+    # volta 18). O log da guarda mostrou o que o teto de 1,25 vira na
+    # prática com dois em cena: `plano 1.15 nao cabe no corpo (933x867px);
+    # vai a 1.05`, dezesseis vezes no mesmo trecho, com valores diferentes
+    # a cada frame -- 1,05, 1,15, 1,12, 1,08, 1,06. O núcleo dos dois ocupa
+    # ~900 dos 1080 px, então nada acima de ~1,09 cabe; o ciclo pedia
+    # 1,06/1,12/1,19/1,25 e recebia ruído. Zoom que oscila 10% dentro de
+    # uma fala é a câmera pulsando junto com os braços -- o mesmo defeito
+    # que o núcleo tinha acabado de resolver com um ator.
+    #
+    # Com dois em cena a variação de plano é OUTRA: é o close em quem fala
+    # (1,90) alternando com o plano dos dois. Os degraus intermediários não
+    # existem, e pedir o que não cabe só produz tremor.
+    if n_atores > 1:
+        return 1.0 * (1.0 + 0.035 * max(0.0, min(1.0, t))), \
+            (0.5 if centro_corpo is None else
+             max(0.0, min(1.0, float(centro_corpo))))
+    teto = 1.60
     # O CICLO PRECISOU CRESCER COM A ESQUETE (30/08). Eram três posições
     # (aberto, médio, fechado), e num vídeo de 5 trechos elas davam uma
     # sequência que não se repetia. Com 13 trechos o ciclo roda QUATRO
