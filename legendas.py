@@ -46,7 +46,22 @@ from PIL import Image, ImageDraw, ImageFont
 # Fica ACIMA da faixa de baixo: no app do YouTube o titulo, o @canal e os
 # botoes comem os ultimos ~18% da tela, e legenda embaixo demais e legenda
 # tapada.
-Y_RELATIVO = 0.74
+#
+# DESCEU DE 0,74 PARA 0,80 EM 31/08 (volta 1 do ciclo de video). Em 0,74 ela
+# caia sobre o TRONCO dos personagens e, pior, na altura em que a MAO fica
+# quando o braco esta caido -- entao todo gesto de mao acontecia atras do
+# texto. O plano de melhorias pedia exatamente isso ("evitar cobrir maos,
+# celulares ou gestos; manter a regiao central mais livre").
+#
+# 0,80 e o maior valor que ainda sobra: os ultimos ~18% sao da interface do
+# YouTube, entao 0,82 ja e risco de legenda tapada. O que se ganha e a faixa
+# das maos; o que se perde e nada -- ali embaixo so ha perna.
+#
+# Este numero so faz sentido porque os pes pousam no chao DESENHADO (lei 27,
+# §4.42): com o personagem a 95% da altura, o corpo ocupa de ~45% a ~95% e a
+# legenda tem de escolher em que parte dele encostar. Antes de 28/08, com o
+# boneco flutuando a 78%, 0,74 caia abaixo dos pes.
+Y_RELATIVO = 0.80
 
 COR_TEXTO = (255, 255, 255, 255)
 COR_ATIVA = (255, 211, 77, 255)      # ambar: destaca sem competir com a pele
