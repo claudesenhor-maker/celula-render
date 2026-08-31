@@ -2387,7 +2387,23 @@ def _em_cena(tr, elenco, falante, anteriores):
             ordem.append(c)
     if not ordem:
         ordem = list(elenco)[:1]
-    return ordem[:MAX_EM_CENA]
+    escolhidos = ordem[:MAX_EM_CENA]
+    # A ORDEM DE SAÍDA É A DO ELENCO, NÃO A DE ENTRADA (31/08, volta 1).
+    #
+    # Quem entra na lista primeiro é o FALANTE -- e o falante alterna a cada
+    # trecho. Como `_posicionar` distribui o quadro pela ordem que recebe,
+    # os dois TROCAVAM DE LADO a cada fala: no vídeo 001 a Maya está à
+    # esquerda nos trechos 1 a 3, o João no 4, ela de novo no 5. Não é
+    # movimento, é pisca-pisca de posição -- e é pior que o defeito que
+    # `_separar` existe para evitar, porque a plateia perde a referência de
+    # quem é quem.
+    #
+    # A ordem do elenco no spec é estável durante o vídeo inteiro, e é ela
+    # que `_carregar_elenco` já usou para dar o x base. Ordenar por ela
+    # devolve a regra que existia antes do elenco solto: quem está à
+    # esquerda continua à esquerda.
+    pos = {c: i for i, c in enumerate(elenco)}
+    return sorted(escolhidos, key=lambda c: pos.get(c, 99))
 
 
 def _posicionar(elenco, chaves):
