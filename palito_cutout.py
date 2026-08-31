@@ -2107,6 +2107,9 @@ def deformar_ator(camada, cam, quadril_x=W / 2):
     return camada
 
 
+_ULTIMO_APERTO = {}
+
+
 def montar_frame(camada, cenario, cam, quadril_x=W / 2, camadas=None,
                  centro_x=None, camada_alvo=None):
     """Junta personagem + cenário aplicando o que a câmera pediu.
@@ -2151,13 +2154,46 @@ def montar_frame(camada, cenario, cam, quadril_x=W / 2, camadas=None,
     # o outro sair pela borda é o efeito pretendido (é o "corte para o
     # personagem" do plano de melhorias), então quem limita é a silhueta
     # de QUEM ESTÁ SENDO ENQUADRADO. Sem `camada_alvo`, nada muda.
+    bb = None
     if camadas and z > 1.002:
         bb = (camada_alvo if camada_alvo is not None else camada).getbbox()
         if bb:
             larg = max(bb[2] - bb[0], 1)
             alt = max(bb[3] - bb[1], 1)
-            cabe = min(W / (larg * 1.10), H / (alt * 1.04))
+            if camada_alvo is not None:
+                # NO CLOSE, CORTAR A PERNA É O PONTO (31/08, volta 7).
+                #
+                # A regra de cima -- "o corpo INTEIRO tem de caber" -- é a
+                # certa para o plano do par, e é o que desfazia o close: o
+                # v007 pediu 1,90 e saiu em ~1,45, porque a Maria é mais
+                # alta que a média do elenco e `H/(alt*1.04)` reduziu o
+                # zoom até o corpo dela caber de cabeça a pé. E o efeito
+                # não foi só um plano mais aberto: a janela cresceu de 568
+                # para 745 px e o parceiro voltou a aparecer pela borda,
+                # que é o defeito que o close existe para acabar.
+                #
+                # Um close é um enquadramento que CORTA -- ninguém filma
+                # close-up mostrando os sapatos. O que não pode ser cortado
+                # é a LARGURA (o gesto sai pela lateral, e gesto é o que
+                # este canal tem de melhor) e o ALTO (a cabeça, e a mão
+                # erguida acima dela). Do quadril para baixo, cortar é a
+                # linguagem. A altura entra abaixo, movendo a janela em vez
+                # de abrir o plano.
+                cabe = W / (larg * 1.06)
+            else:
+                cabe = min(W / (larg * 1.10), H / (alt * 1.04))
             if cabe < z:
+                # A GUARDA DIZ QUANDO APERTA (31/08). Ela desfazia o plano
+                # em silêncio: o log imprimia `1.90` e o quadro saía em
+                # 1,33, e a diferença entre "o close não foi feito" e "o
+                # close foi feito e desfeito" é onde se procura o defeito.
+                # Fail-open precisa de um lugar que conte que ele abriu
+                # (lei 65) -- vale também para uma guarda de composição.
+                marca = (round(z, 2), round(cabe, 2))
+                if marca != _ULTIMO_APERTO.get("v"):
+                    _ULTIMO_APERTO["v"] = marca
+                    print(f"[camera] plano {z:.2f} nao cabe no corpo "
+                          f"({larg}x{alt}px); vai a {max(1.0, cabe):.2f}")
                 z = max(1.0, cabe)
     if abs(z - 1.0) > 0.002:
         lw, lh = W / z, H / z
@@ -2187,11 +2223,16 @@ def montar_frame(camada, cenario, cam, quadril_x=W / 2, camadas=None,
         # não é seguir o bbox: é **empurrar a janela só o necessário** para
         # ele caber. Enquanto o gesto couber na janela a câmera não se mexe,
         # e quando não couber ela já estava cortando de qualquer jeito.
-        if camada_alvo is not None:
-            bba = camada_alvo.getbbox()
-            if bba and (bba[2] - bba[0]) <= lw:
-                cx = min(max(cx, bba[2] - lw / 2), bba[0] + lw / 2)
+        bba = camada_alvo.getbbox() if camada_alvo is not None else None
+        if bba and (bba[2] - bba[0]) <= lw:
+            cx = min(max(cx, bba[2] - lw / 2), bba[0] + lw / 2)
         cy = H * float(cam.get("zoom_y", 0.5))
+        # A CABEÇA NUNCA É CORTADA. O close mira a cabeça (`centro_rosto`),
+        # mas uma ação que ergue a mão sobe a silhueta acima dela -- e o
+        # certo então é DESCER a janela (cortando mais perna, que é o que
+        # um close corta), nunca abrir o plano.
+        if bba:
+            cy = min(cy, bba[1] - 0.03 * lh + lh / 2)
         x0 = min(max(cx - lw / 2, 0), W - lw)
         y0 = min(max(cy - lh / 2, 0), H - lh)
         # ampliação: BILINEAR, senão o zoom desenha um fio branco em volta
