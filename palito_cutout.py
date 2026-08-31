@@ -1993,6 +1993,7 @@ class Cenario:
         # para fora do quadro
         self.tira = base.crop((0, na - H, nl, na))
         self.faixa = max(0, self.tira.width - W)      # o quanto dá para andar
+        self._borrada = None            # a versão fora de foco, sob demanda
 
     def ponto_do_trecho(self, i):
         """Onde a câmera fica DURANTE o trecho `i`, em pixels da tira.
@@ -2010,9 +2011,42 @@ class Cenario:
         m = float(dx) % (2 * self.faixa)
         return int(m if m <= self.faixa else 2 * self.faixa - m)
 
-    def quadro(self, dx):
+    def quadro(self, dx, borrado=False):
         x = self._posicao(dx)
+        if borrado:
+            return self._tira_borrada().crop((x, 0, x + W, H))
         return self.tira.crop((x, 0, x + W, H))
+
+    def _tira_borrada(self):
+        """A mesma tira, fora de foco. Custa UM borrão por cenário.
+
+        POR QUE (31/08, volta 11 do ciclo de vídeo)
+            O v011 é um monólogo no `comercio`, e o cenário é uma parede de
+            prateleiras desenhadas em traço, de cima a baixo, sem cor e sem
+            área calma. No plano aberto ela passa; no CLOSE a 1,60 ela é
+            ampliada junto e vira um emaranhado de linhas pretas atrás da
+            cara -- a cara e o fundo têm o mesmo contraste, a mesma
+            espessura de traço, e o olho não sabe onde pousar. Num canal em
+            que a piada acontece no rosto, isso é o rosto perdendo.
+
+            Não é defeito de UM cenário: é o que acontece com qualquer arte
+            de fundo quando a câmera fecha. A resposta é a de sempre em
+            animação e em foto -- **profundidade de campo**: quem está longe
+            sai de foco, e a separação entre figura e fundo passa a ser
+            física, não sorte de composição.
+
+        POR QUE ISTO É BARATO
+            O fundo é IMÓVEL dentro do trecho (lei 26), e mesmo com a
+            caminhada o que muda é a coluna recortada, não a arte. Então o
+            borrão se faz UMA vez por cenário, na tira inteira, e todo
+            recorte sai dela. São ~2 borrões por vídeo, não 430.
+        """
+        if self._borrada is None:
+            # 9px numa tira de ~2300 de largura: o bastante para o traço
+            # perder a aresta e não tanto que o lugar deixe de ser
+            # reconhecível -- o cenário ainda tem de dizer onde a cena é.
+            self._borrada = self.tira.filter(ImageFilter.GaussianBlur(9))
+        return self._borrada
 
 
 def _sombra_de_contato(quadro, camada, chao_y):
@@ -2123,13 +2157,6 @@ def montar_frame(camada, cenario, cam, quadril_x=W / 2, camadas=None,
     if camadas is None:
         camada = deformar_ator(camada, cam, quadril_x)
 
-    quadro = cenario.quadro(cam.get("fundo_dx", 0.0)).convert("RGBA")
-    if cam.get("chao_y"):
-        for c in (camadas or [camada]):
-            _sombra_de_contato(quadro, c, float(cam["chao_y"]))
-    quadro.alpha_composite(camada)
-    quadro = quadro.convert("RGB")
-
     z = float(cam.get("zoom", 1.0))
     # O ZOOM NÃO FECHA MAIS DO QUE O CORPO PERMITE (29/08).
     #
@@ -2160,6 +2187,29 @@ def montar_frame(camada, cenario, cam, quadril_x=W / 2, camadas=None,
         if bb:
             larg = max(bb[2] - bb[0], 1)
             alt = max(bb[3] - bb[1], 1)
+            # O QUE NÃO PODE SER CORTADO É O CORPO, NÃO A PONTA DO DEDO
+            # (31/08, volta 11). A largura era a da SILHUETA, e um braço
+            # estendido a põe em 800 a 1080 px: `1080/(larg*1,10)` derrubava
+            # o plano de 1,60 para **1,23, e às vezes para 1,00**. O v005
+            # pediu close em quatro trechos e não teve nenhum -- e a prova
+            # daquela volta não pegou porque olhou o plano PEDIDO, que é o
+            # que o log imprimia.
+            #
+            # Pior que o plano perdido: a silhueta muda A CADA FRAME, então
+            # a guarda **fazia a câmera respirar junto com o braço** -- 1,30
+            # enquanto os braços estão baixos, 1,00 no frame em que a mão
+            # sobe, e de volta. Câmera que abre quando alguém gesticula é o
+            # contrário do que o gesto pede.
+            #
+            # Vale aqui a mesma distinção da lei 33: coluna atravessada só
+            # pelo braço não é corpo. O núcleo (tronco, cabeça, pernas) quase
+            # não muda de largura entre poses, então a guarda para de
+            # oscilar; e o gesto pode encostar na borda, que é o que um
+            # close faz.
+            xs = np.nonzero(colunas_de_corpo(
+                camada_alvo if camada_alvo is not None else camada))[0]
+            if len(xs):
+                larg = max(int(xs[-1] - xs[0]) + 1, 1)
             if camada_alvo is not None:
                 # NO CLOSE, CORTAR A PERNA É O PONTO (31/08, volta 7).
                 #
@@ -2195,6 +2245,22 @@ def montar_frame(camada, cenario, cam, quadril_x=W / 2, camadas=None,
                     print(f"[camera] plano {z:.2f} nao cabe no corpo "
                           f"({larg}x{alt}px); vai a {max(1.0, cabe):.2f}")
                 z = max(1.0, cabe)
+
+    # PROFUNDIDADE DE CAMPO: FECHOU, O FUNDO SAI DE FOCO (31/08, volta 11).
+    # Decidido pelo zoom EFETIVO -- depois da guarda --, e não pelo plano
+    # pedido: fundo nítido num quadro que na verdade não fechou seria borrar
+    # por engano. O limiar de 1,35 não é cruzado dentro de um trecho com os
+    # números de hoje (o degrau mais alto abaixo dele é 1,30, que com o
+    # push-in de 3,5% chega a 1,345), então o foco não pisca no meio de uma
+    # fala. Quem mexer no ciclo de planos precisa refazer esta conta.
+    borrar = z >= 1.35
+    quadro = cenario.quadro(cam.get("fundo_dx", 0.0), borrado=borrar).convert("RGBA")
+    if cam.get("chao_y"):
+        for c in (camadas or [camada]):
+            _sombra_de_contato(quadro, c, float(cam["chao_y"]))
+    quadro.alpha_composite(camada)
+    quadro = quadro.convert("RGB")
+
     if abs(z - 1.0) > 0.002:
         lw, lh = W / z, H / z
         # ONDE A CÂMERA CENTRA NA HORIZONTAL. Era o meio do quadro, sempre,
@@ -2223,8 +2289,14 @@ def montar_frame(camada, cenario, cam, quadril_x=W / 2, camadas=None,
         # não é seguir o bbox: é **empurrar a janela só o necessário** para
         # ele caber. Enquanto o gesto couber na janela a câmera não se mexe,
         # e quando não couber ela já estava cortando de qualquer jeito.
-        bba = camada_alvo.getbbox() if camada_alvo is not None else None
-        if bba and (bba[2] - bba[0]) <= lw:
+        # A GUARDA DO ALTO VALE PARA TODO PLANO FECHADO, não só para o close
+        # em quem fala (31/08, volta 11). Com um ator sozinho a mira vertical
+        # é o meio do corpo, e a 1,59 isso põe a linha de cima da janela 34px
+        # ABAIXO do topo da cabeça: o cabelo saía cortado rente ao crânio em
+        # todos os closes do v011, e ninguém tinha olhado porque até esta
+        # volta o close com um ator não estava acontecendo.
+        bba = (camada_alvo if camada_alvo is not None else camada).getbbox()
+        if bba and camada_alvo is not None and (bba[2] - bba[0]) <= lw:
             cx = min(max(cx, bba[2] - lw / 2), bba[0] + lw / 2)
         cy = H * float(cam.get("zoom_y", 0.5))
         # A CABEÇA NUNCA É CORTADA. O close mira a cabeça (`centro_rosto`),
