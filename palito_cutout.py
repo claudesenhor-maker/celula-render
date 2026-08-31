@@ -1245,6 +1245,7 @@ class Personagem:
         # entalhe dela precisa ser tapado (ver _tapar_entalhe). Decidir isto
         # UMA vez, no carregamento, evita testar peça a peça em 430 frames.
         self.rosto_articulado = True
+        self._off_cranio = (0.0, 0.0)
         for nome in cfg["partes"]:
             if nome not in self.pivos:
                 # Rede de seguranca contra partes.json desatualizado: sem pivo
@@ -1274,6 +1275,16 @@ class Personagem:
             # tudo em fração da altura do crânio e precisa da altura real.
             self.tam[nome] = im.size
             self.img[nome], self.piv[nome] = _centralizar(im, pivo)
+            if nome == "cranio":
+                # O DESLOCAMENTO QUE `_centralizar` APLICOU. Ele é
+                # `(R - int(px), R - int(py))`, e é o que separa uma
+                # coordenada lida no PNG da peça (que é o que uma pessoa vê
+                # e clica no painel) de uma coordenada na tela inflada (que
+                # é onde o motor trabalha). Guardado aqui porque é o único
+                # ponto em que os dois sistemas se encontram; recalculá-lo
+                # depois exigiria refazer `_fechar_vao` para achar o pivô.
+                self._off_cranio = (self.piv[nome][0] - pivo[0],
+                                    self.piv[nome][1] - pivo[1])
 
         # --- ONDE FICA O ROSTO DENTRO DA PEÇA DO CRÂNIO -----------------
         # Medido UMA vez, pelos olhos, e usado pelas três funções de rosto.
@@ -1281,6 +1292,43 @@ class Personagem:
         # peça -- e a peça do crânio traz cabelo e pescoço em quantidade que
         # é decisão do desenhista. Ver `_analisar_rosto`.
         self.rosto = _analisar_rosto(self.img["cranio"]) if "cranio" in self.img else None
+        # ROSTO MARCADO À MÃO (30/08, noite), pelo mesmo motivo que os pivôs
+        # já tinham `pivos.json`: nenhuma medida resolve arte ambígua. Óculos
+        # de aro grosso, franja sobre a sobrancelha, viseira meio
+        # transparente -- nesses casos só quem desenhou sabe onde está o
+        # olho. O painel escreve `rosto.json` ao lado da folha, o
+        # `preparar_assets.py` o copia para `partes.json` em `rosto_manual`,
+        # e ele entra AQUI, por cima do que foi medido.
+        #
+        # As coordenadas são da PEÇA `cranio.png` como ela está no bucket --
+        # que é a imagem que a pessoa vê e clica no painel. `_centralizar`
+        # depois infla a peça numa tela quadrada com o pivô no meio, e é
+        # esse deslocamento que se soma aqui. Pedir coordenadas da tela
+        # inflada seria pedir que alguém calculasse `R - int(px)` de cabeça.
+        manual = cfg.get("rosto_manual") or {}
+        if manual and self.rosto and "cranio" in self.img:
+            ox, oy = self._off_cranio
+            def _p(v):
+                return (float(v[0]) + ox, float(v[1]) + oy)
+            usados = []
+            if manual.get("olho_e") and manual.get("olho_d"):
+                pe, pd = _p(manual["olho_e"]), _p(manual["olho_d"])
+                # esquerda/direita são as do QUADRO, não as do personagem:
+                # é assim que o resto do motor as trata.
+                if pe[0] > pd[0]:
+                    pe, pd = pd, pe
+                self.rosto["olhos"]["olho_e"]["cx"], self.rosto["olhos"]["olho_e"]["cy"] = pe
+                self.rosto["olhos"]["olho_d"]["cx"], self.rosto["olhos"]["olho_d"]["cy"] = pd
+                self.rosto["d_olhos"] = abs(pd[0] - pe[0])
+                self.rosto["linha_olhos"] = (pe[1] + pd[1]) / 2.0
+                self.rosto["eixo"] = (pe[0] + pd[0]) / 2.0
+                usados.append("olhos")
+            if manual.get("queixo") is not None:
+                self.rosto["queixo"] = float(manual["queixo"]) + oy
+                usados.append("queixo")
+            if usados:
+                print(f"[rosto] rosto.json a mao: {', '.join(usados)} "
+                      f"(o resto continua medido)")
         if self.rosto:
             print(f"[rosto] olhos medidos: vao de {self.rosto['d_olhos']:.0f}px, "
                   f"linha em y={self.rosto['linha_olhos']:.0f}, "
