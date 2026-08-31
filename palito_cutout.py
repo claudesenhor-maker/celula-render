@@ -2145,7 +2145,7 @@ _ULTIMO_APERTO = {}
 
 
 def montar_frame(camada, cenario, cam, quadril_x=W / 2, camadas=None,
-                 centro_x=None, camada_alvo=None):
+                 centro_x=None, camada_alvo=None, terco=0):
     """Junta personagem + cenário aplicando o que a câmera pediu.
 
     `camadas` são os atores SEPARADOS, e existem por dois motivos. A
@@ -2282,6 +2282,22 @@ def montar_frame(camada, cenario, cam, quadril_x=W / 2, camadas=None,
         # outro fica de fora inteiro, continuando a sobrar cenário dos dois
         # lados do falante.
         cx = W * 0.5 + (cx - W * 0.5) * (0.92 if camada_alvo is not None else 0.75)
+        # COMPOSIÇÃO EM TERÇOS PARA QUEM ESTÁ SOZINHO (31/08, volta 15).
+        #
+        # O v015 é um monólogo de nove trechos e a personagem está no MEIO
+        # do quadro nos dezesseis quadros da folha. O ciclo de planos varia
+        # só a ESCALA, e os três degraus do meio (1,15 / 1,30 / 1,45) são
+        # quase indistinguíveis quando a composição é sempre a mesma: o
+        # resultado lê como um plano só, que é a queixa do v005 outra vez,
+        # agora por outro motivo.
+        #
+        # Deslocar a janela um sexto põe o corpo no terço da esquerda ou da
+        # direita, e o outro terço fica com o cenário -- que desde 28/08 é
+        # arte panorâmica com conteúdo até o teto, feita para aparecer. É a
+        # variação de enquadramento do plano de melhorias (item 4) sem
+        # inventar plano nenhum, e o clamp do bbox logo abaixo continua
+        # garantindo que o corpo inteiro caiba.
+        cx += float(terco) * lw / 6.0
         # O GESTO NÃO SAI PELA BORDA (31/08). A mira é o QUADRIL, de
         # propósito -- o bbox muda com cada gesto e a câmera tremeria junto
         # com os braços --, mas num close de 568 px de largura um braço
@@ -2329,6 +2345,23 @@ def montar_frame(camada, cenario, cam, quadril_x=W / 2, camadas=None,
 # arte começa a aparecer ampliada quatro vezes -- a folha do personagem é
 # desenhada uma vez só, e não há de onde tirar mais pixel.
 CLOSE_FALANTE = 1.90
+
+
+def _terco_do_trecho(i, n_atores):
+    """Em que terço do quadro o corpo fica neste trecho: -1, 0 ou +1.
+
+    SÓ COM UM ATOR. Com dois, a divisão do quadro já é a composição (um em
+    cada lado), e deslocar a janela tiraria um deles; no close em quem fala
+    o lado já é escolhido pelo quadril de quem fala.
+
+    Alterna centro → esquerda → centro → direita, período 4: com período 2
+    a composição voltaria a ser sempre a mesma alternância, e o centro no
+    meio dá o descanso que faz o deslocamento ser percebido como escolha e
+    não como tremor.
+    """
+    if n_atores != 1:
+        return 0
+    return (0, 1, 0, -1)[i % 4]
 
 
 def _close_no_falante(i, n_trechos, n_atores):
@@ -3600,7 +3633,8 @@ def render(pasta_partes, spec, saida, tmpdir=None, amostra=0):
                                             (sum(dentro) / len(dentro)
                                              if dentro else None)),
                                   camada_alvo=(so_dele.get(falante)
-                                               if fecha else None))
+                                               if fecha else None),
+                                  terco=_terco_do_trecho(i_tr, len(chaves)))
             if leg is not None:
                 # por cima de tudo, e no tempo GLOBAL: o índice do frame é
                 # contínuo entre trechos, então n/FPS é o relógio do vídeo
