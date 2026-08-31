@@ -132,12 +132,23 @@ def baixar_elenco(spec, pecas_url):
             raise RuntimeError("o zip nao tem partes.json na raiz")
         return pasta, len(dados) / 1024.0
 
+    # DOIS EM CENA NAO E DOIS NO VIDEO (30/08, noite).
+    #
+    # Este corte existia desde que o elenco existe, e ele estava no lugar
+    # errado: `MAX_EM_CENA` e o teto do QUADRO (lei 10 -- no 9:16 o terceiro
+    # boneco encolhe todo mundo ate a cara sumir), nao o teto do elenco de
+    # um episodio. Quem aplica o teto do quadro e o motor, trecho a trecho
+    # (`palito_cutout._em_cena`); aqui so se BAIXA arte.
+    #
+    # Enquanto os dois tetos eram a mesma linha, um spec com troca de
+    # personagem no meio perdia a arte do terceiro AQUI, em silencio -- e o
+    # video saia com duas pessoas e as falas do terceiro na boca de quem
+    # ficou. Foi exatamente o que aconteceu no primeiro render de teste:
+    # quatro no spec, dois na tela, e o log dizendo "Fora: zeca, maya".
     if len(elenco) > MAX_EM_CENA:
-        sobra = list(elenco)[MAX_EM_CENA:]
-        print(f"[elenco] {len(elenco)} personagens no spec; a cena aceita "
-              f"{MAX_EM_CENA}. Fora: {', '.join(sobra)}")
-        for c in sobra:
-            elenco.pop(c)
+        print(f"[elenco] {len(elenco)} personagens no video "
+              f"({', '.join(elenco)}); {MAX_EM_CENA} por vez em cena, "
+              f"decididos trecho a trecho pelo motor")
 
     publico = f"{SB}/storage/v1/object/public/{BUCKET}"
     total, base = 0.0, None
