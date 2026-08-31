@@ -2213,34 +2213,101 @@ def _carregar_elenco(spec, pasta_padrao):
         # na primeira tentativa. É a lei 34 pelo avesso -- o que a forma
         # não exercita não falha à vista.
         return _alinhar_pelos_pes({"_": (Personagem(pasta_padrao), W / 2)})
-    if len(elenco) > MAX_EM_CENA:
-        # DOIS, NO MAXIMO. Num quadro 9:16 o terceiro boneco ou sai do
-        # enquadramento ou obriga um recuo em que ninguem mais tem cara --
-        # e cara é onde a piada acontece. A regra vem do roteiro; aqui ela
-        # é aplicada de novo porque spec errado não pode virar vídeo
-        # ilegível.
-        print(f"[elenco] {len(elenco)} personagens no spec; a cena aceita "
-              f"{MAX_EM_CENA}: fico com "
-              f"{', '.join(list(elenco)[:MAX_EM_CENA])}")
-        elenco = {k: elenco[k] for k in list(elenco)[:MAX_EM_CENA]}
+    # DOIS EM CENA, MAS NÃO DOIS NO VÍDEO (30/08, noite).
+    #
+    # Até aqui este trecho TRUNCAVA o elenco em dois na carga, e o loop de
+    # render desenhava o elenco inteiro em todo trecho -- então "dois por
+    # vez" e "dois no vídeo" eram a mesma coisa, e um elenco de dez servia
+    # para escolher a dupla do dia, nunca para trocar de gente no meio.
+    #
+    # O dono do projeto pediu o contrário: *"pode ter apenas dois
+    # personagens por vez no vídeo, mas não precisa ter apenas dois no
+    # vídeo; ele pode andar e aparecer outro personagem, e assim por
+    # diante"*. Isso não afrouxa a lei 10 -- o teto de DOIS no quadro
+    # continua, porque a razão dele é o 9:16 e a cara. O que muda é onde ele
+    # é aplicado: por TRECHO (`_em_cena`), não por vídeo.
+    #
+    # Aqui, então, carrega-se todo mundo. Quem entra em cena em cada trecho
+    # é decidido depois, e é `_posicionar` que dá o x de cada um dentro do
+    # trecho -- porque o lugar de alguém no quadro depende de com QUEM ele
+    # está dividindo a cena naquele momento, não do tamanho do elenco.
+    n_cena = min(len(elenco), MAX_EM_CENA)
     fora, pedidos = {}, {}
-    n = len(elenco)
     for i, (chave, cfg) in enumerate(elenco.items()):
         cfg = cfg if isinstance(cfg, dict) else {"pasta": cfg}
         pasta = cfg.get("pasta") or os.path.join(pasta_padrao, "..", chave)
         # posições padrão bem separadas: duas pessoas no mesmo x viram uma
         # pessoa só com quatro braços
-        padrao = W * (0.5 if n == 1 else 0.27 + 0.46 * i / max(n - 1, 1))
+        padrao = W * (0.5 if n_cena == 1 else 0.27 + 0.46 * (i % n_cena)
+                      / max(n_cena - 1, 1))
         p = Personagem(pasta)
-        # Com mais de um personagem em cena, cada um encolhe: dois bonecos
-        # na altura de protagonista não cabem lado a lado num quadro 9:16
-        # sem se atravessarem. O recuo também dá a leitura de "plano
-        # aberto, dois na cena" em vez de "close que deu errado".
-        p.escala *= float(cfg.get("escala", 1.0 if n == 1 else 0.74))
+        # A ESCALA VEM DE QUANTOS CABEM EM CENA, não de quantos existem no
+        # vídeo. Com o elenco solto, `len(elenco)` pode ser seis, e usá-lo
+        # aqui encolheria todo mundo a um sexto do quadro para uma cena que
+        # nunca tem mais de dois.
+        p.escala *= float(cfg.get("escala", 1.0 if n_cena == 1 else 0.74))
         fora[chave] = (p, float(cfg.get("x", padrao)))
         pedidos[chave] = "x" in cfg
     fora = _alinhar_pelos_pes(fora)
-    return _afastar_o_bastante(fora, pedidos)
+    fora = _afastar_o_bastante(fora, pedidos)
+    if len(elenco) > MAX_EM_CENA:
+        print(f"[elenco] {len(elenco)} personagens no video; "
+              f"{MAX_EM_CENA} por vez em cena, decididos trecho a trecho")
+    return fora
+
+
+def _em_cena(tr, elenco, falante, anteriores):
+    """Quem aparece NESTE trecho, no máximo `MAX_EM_CENA`.
+
+    A regra, em ordem, e cada passo existe por um motivo:
+
+      1. quem FALA entra sempre -- uma fala sem dono na tela é a lei 15
+         (não existe narrador) voltando pela porta dos fundos;
+      2. depois quem o roteirista pediu em `personagens_em_cena`, na ordem
+         em que ele escreveu;
+      3. se ainda sobra vaga, quem estava em cena no trecho ANTERIOR. É o
+         que dá continuidade: sem isso, um trecho que só nomeia o falante
+         esvaziaria a cena e o outro sumiria sem sair andando -- corte de
+         gente, que é o defeito que a lei 36 descreve.
+
+    Nome que não está no elenco é descartado em silêncio de propósito: ele
+    não tem arte, e `job.py` já avisou disso ao montar o spec.
+    """
+    ordem = []
+    if falante in elenco:
+        ordem.append(falante)
+    for c in (tr.get("personagens_em_cena") or []):
+        c = str(c)
+        if c in elenco and c not in ordem:
+            ordem.append(c)
+    for c in (anteriores or []):
+        if c in elenco and c not in ordem:
+            ordem.append(c)
+    if not ordem:
+        ordem = list(elenco)[:1]
+    return ordem[:MAX_EM_CENA]
+
+
+def _posicionar(elenco, chaves):
+    """As posições de quem está em cena NESTE trecho.
+
+    Existe porque o x de um personagem não é uma propriedade dele: é a
+    divisão do quadro entre quem está lá agora. Com o elenco solto, o mesmo
+    personagem fica à direita quando divide a cena com um e sozinho no
+    centro quando o outro sai -- e o `_afastar_o_bastante` só sabe separar
+    quem está em cena junto.
+    """
+    if not chaves:
+        return {}
+    sub = {c: elenco[c] for c in chaves}
+    n = len(sub)
+    posto, pedidos = {}, {}
+    for i, c in enumerate(chaves):
+        pers, _x, dy = sub[c]
+        x = W * (0.5 if n == 1 else 0.27 + 0.46 * i / max(n - 1, 1))
+        posto[c] = (pers, x, dy)
+        pedidos[c] = False
+    return _afastar_o_bastante(posto, pedidos)
 
 
 def _alinhar_pelos_pes(elenco):
@@ -2669,13 +2736,14 @@ def render(pasta_partes, spec, saida, tmpdir=None, amostra=0):
     fd = os.path.join(tmp, "frames"); os.makedirs(fd, exist_ok=True)
 
     elenco = _carregar_elenco(spec, pasta_partes)
-    chaves = list(elenco)
-    padrao_ator = chaves[0]
-    # A ORDEM ESQUERDA→DIREITA, decidida uma vez pela posição base. É por
-    # ela que `_separar` sabe quem empurrar para que lado, e ela não muda
-    # durante o vídeo: quem está à esquerda continua à esquerda mesmo que
-    # uma ação o jogue para o lado.
-    ordem_x = sorted(chaves, key=lambda c: elenco[c][1])
+    padrao_ator = list(elenco)[0]
+    # `chaves` e `ordem_x` passaram a ser DO TRECHO (30/08, noite): com o
+    # elenco solto, quem está em cena muda ao longo do vídeo. Estes são só
+    # os valores de partida, para o primeiro trecho ter um "anterior".
+    chaves = list(elenco)[:MAX_EM_CENA]
+    chaves_ant = list(chaves)
+    posto = _posicionar(elenco, chaves)
+    ordem_x = sorted(chaves, key=lambda c: posto[c][1])
 
     # A ALTURA DE VERDADE DO ATOR, medida num frame de repouso. Ela decide
     # dois números: onde os pés pousam (o chão desenhado, §4.42) e o
@@ -2935,8 +3003,29 @@ def render(pasta_partes, spec, saida, tmpdir=None, amostra=0):
             centro_corpo = (cenarios[cen].chao_y - alt_corpo * 0.45) / H
 
         falante = tr.get("ator") if tr.get("ator") in elenco else padrao_ator
+        # QUEM ESTÁ EM CENA MUDA DE TRECHO PARA TRECHO (30/08, noite). Dois
+        # por vez continua sendo o teto (lei 10); o elenco do VÍDEO não tem
+        # teto. `posto` dá o lugar de cada um dentro DESTE trecho, porque o
+        # x de alguém é a divisão do quadro com quem está lá agora.
+        chaves = _em_cena(tr, elenco, falante, chaves_ant)
+        posto = _posicionar(elenco, chaves)
+        entraram = [c for c in chaves if c not in chaves_ant]
+        sairam = [c for c in chaves_ant if c not in chaves]
+        if entraram or sairam:
+            print(f"[elenco] trecho {i_tr}: "
+                  + (f"entra {', '.join(entraram)}  " if entraram else "")
+                  + (f"sai {', '.join(sairam)}  " if sairam else "")
+                  + f"em cena: {', '.join(chaves)}")
+        chaves_ant = list(chaves)
+        # A ORDEM ESQUERDA→DIREITA é do TRECHO: é por ela que `_separar`
+        # sabe para que lado empurrar quem invadiu, e ela só faz sentido
+        # entre quem está dividindo o quadro agora.
+        ordem_x = sorted(chaves, key=lambda c: posto[c][1])
+        # quem entrou agora não tem estado de objeto: a mão começa vazia
+        for c in chaves:
+            na_mao.setdefault(c, None)
         por_ator = _acoes_por_ator(tr, chaves, falante)
-        _fazer_voltar(por_ator, fora_de_cena)
+        _fazer_voltar(por_ator, [c for c in fora_de_cena if c in chaves])
         fora_de_cena = _quem_saiu(por_ator)
         nf = max(1, int(tr["dur"] * FPS))
         cam = dict(ACOES.CAM_NEUTRA)
@@ -2988,7 +3077,7 @@ def render(pasta_partes, spec, saida, tmpdir=None, amostra=0):
             # depois de desenhar seria desenhar duas vezes.
             rigs, cams = {}, {}
             for chave in chaves:
-                pers, x0, dy = elenco[chave]
+                pers, x0, dy = posto[chave]
                 rig, c = _rig_do_trecho(tr, t, corte, por_ator[chave], x0,
                                         falando=(chave == falante))
                 # DOIS deslocamentos verticais, e a ordem importa:
@@ -3008,7 +3097,7 @@ def render(pasta_partes, spec, saida, tmpdir=None, amostra=0):
                               [c for c in chaves if c == falante]
             so_dele = {}
             for chave in atras_na_frente:
-                pers, x0, dy = elenco[chave]
+                pers, x0, dy = posto[chave]
                 rig = rigs[chave]
                 # a cara de QUEM FALA vem do trecho; quem ouve fica na cara
                 # de reação que o roteirista der a ele, ou neutro
@@ -3030,6 +3119,42 @@ def render(pasta_partes, spec, saida, tmpdir=None, amostra=0):
             for chave in chaves:
                 so_dele[chave] = deformar_ator(so_dele[chave], cams[chave],
                                                rigs[chave]["quadril"][0])
+            # A CÂMERA SEGUE QUEM ANDA, E QUEM FICA PARADO FICA PARA TRÁS
+            # (30/08, noite).
+            #
+            # O defeito, descrito pelo dono do projeto ao ver o vídeo: *"um
+            # personagem andou e o cenário se mexeu, o outro flutuou com o
+            # cenário mudando e ele ficando no mesmo enquadramento"*. Ele
+            # está certo, e eram DOIS erros somados:
+            #
+            #  1. `cam = cam_falante` -- a câmera seguia o `fundo_dx` de
+            #     quem FALA, não de quem ANDA. Se quem andava estava calado,
+            #     o fundo nem se mexia; e o pé andava no lugar, que é o
+            #     patinar clássico que `andar` existe para evitar;
+            #  2. o deslocamento ia só para o CENÁRIO. Quem está parado no
+            #     mundo é estático em relação ao chão, então numa câmera que
+            #     acompanha ele tem de correr na tela junto com o fundo. Sem
+            #     isso, os dois ficam colados na mesma posição de tela e a
+            #     cena inteira escorrega -- a mesma leitura errada da lei 26,
+            #     agora com o personagem no lugar do fundo.
+            #
+            # A conta é uma linha: cada ator anda na TELA o que a CÂMERA
+            # andou menos o que ELE andou. Quem anda dá zero (a câmera o
+            # segue, ele fica no lugar). Quem está parado dá o pan inteiro, e
+            # sai do quadro se o passeio for longo o bastante -- que é
+            # exatamente "ficar para trás e sumir do enquadramento".
+            #
+            # Vem DEPOIS de `deformar_ator` e ANTES de `_separar`: a colisão
+            # tem de medir onde os corpos ficaram de verdade, senão ela
+            # separa duas silhuetas que já não estão mais ali.
+            pans = {c: float(cams[c].get("pan_camera", 0.0)) for c in chaves}
+            dx_camera = max(pans.values(), key=abs) if pans else 0.0
+            if dx_camera:
+                for chave in chaves:
+                    dx_tela = dx_camera - pans[chave]
+                    if abs(dx_tela) >= 1.0:
+                        so_dele[chave] = _transladar(so_dele[chave], dx_tela)
+                        rigs[chave]["quadril"][0] += dx_tela
             # NINGUÉM ATRAVESSA NINGUÉM: medido no frame pronto, corrigido
             # transladando a camada (ver `_separar`)
             ceder = _separar(so_dele, ordem_x)
@@ -3045,6 +3170,13 @@ def render(pasta_partes, spec, saida, tmpdir=None, amostra=0):
                     cam_falante = cams[chave]
                     x_falante = rigs[chave]["quadril"][0]
             cam = cam_falante
+            # O FUNDO SEGUE A CÂMERA, NÃO O FALANTE. `cam_falante` traz o
+            # `pan_base` do trecho (o ponto de corte do cenário) somado ao
+            # deslocamento de quem fala; o passeio tem de vir de quem ANDA.
+            # As duas partes se somam aqui, e uma só vez.
+            cam["fundo_dx"] = (float(cam.get("fundo_dx", 0.0))
+                               - float(cam_falante.get("pan_camera", 0.0))
+                               + dx_camera)
             # a sombra de contato mira o chão DESENHADO, que agora é onde os
             # pés estão de verdade
             cam["chao_y"] = cenarios[cen].chao_y
