@@ -63,7 +63,53 @@ from PIL import Image, ImageDraw, ImageFont
 # boneco flutuando a 78%, 0,74 caia abaixo dos pes.
 Y_RELATIVO = 0.80
 
+# PALAVRA QUE NAO FECHA BLOCO (31/08, volta 3 do ciclo de video).
+#
+# A legenda quebrava a cada 3 palavras contadas, e o video 003 mostrou o
+# resultado na tela: "MEU PIX PRA" / "FALHOU, O APP", "AINDA SALVAR O" /
+# "O PRAZO ACABE?". O bloco terminava em preposicao, artigo ou conjuncao --
+# palavras que so fazem sentido colada na seguinte --, e quem le tem de
+# segurar meia expressao ate o proximo bloco aparecer.
+#
+# Num Short cada bloco fica ~0,8 s no ar. Terminar em "pra" custa a leitura
+# inteira daquele bloco, e o plano de melhorias pedia exatamente isto:
+# "quebrar frases em blocos menores" que se leiam sozinhos.
+#
+# A regra e so uma: se a ULTIMA palavra do bloco e uma destas, ela desce
+# junto com a proxima. Nao e analise sintatica -- e a lista fechada das
+# palavras que, em portugues, nunca terminam uma unidade de leitura.
+PRESAS = frozenset("""
+a o as os um uma uns umas de do da dos das em no na nos nas por pra pro
+para com sem sob sobre entre ate ate' e ou mas que se ao aos a` as` num numa
+meu minha meus minhas teu tua seu sua nosso nossa este esta esse essa aquele
+aquela isso isto seu ja nao muito mais tao
+""".split())
+
 COR_TEXTO = (255, 255, 255, 255)
+
+
+def _agrupar(palavras, por_bloco):
+    """Blocos de `por_bloco` palavras que NAO terminam em palavra presa.
+
+    O bloco pode crescer ate `por_bloco + 2`: parar de crescer em algum
+    ponto importa mais que a regra, senao uma sequencia de preposicoes
+    ("de um dos das") juntaria a fala inteira num bloco so e a legenda
+    deixaria de acompanhar a voz.
+    """
+    saida, i, n = [], 0, len(palavras)
+    while i < n:
+        fim = min(i + por_bloco, n)
+        # cresce enquanto a ultima for presa e ainda houver folga
+        while (fim < n and fim - i < por_bloco + 2
+               and str(palavras[fim - 1].get("txt", "")).strip(",.!?;:—-").lower()
+               in PRESAS):
+            fim += 1
+        # a sobra de UMA palavra nao vira bloco proprio: ela entra neste
+        if n - fim == 1:
+            fim = n
+        saida.append(palavras[i:fim])
+        i = fim
+    return saida
 COR_ATIVA = (255, 211, 77, 255)      # ambar: destaca sem competir com a pele
 COR_BORDA = (16, 14, 12, 255)
 COR_SOMBRA = (0, 0, 0, 150)
@@ -250,8 +296,7 @@ class Legenda:
         palavras = _casar(texto, marcas, inicio_s, dur_s)
         if not palavras:
             return
-        for i in range(0, len(palavras), self.por_bloco):
-            grupo = palavras[i:i + self.por_bloco]
+        for grupo in _agrupar(palavras, self.por_bloco):
             self.blocos.append({"inicio": grupo[0]["inicio"],
                                 "fim": grupo[-1]["fim"],
                                 "palavras": grupo})
