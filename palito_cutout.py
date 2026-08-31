@@ -2108,7 +2108,7 @@ def deformar_ator(camada, cam, quadril_x=W / 2):
 
 
 def montar_frame(camada, cenario, cam, quadril_x=W / 2, camadas=None,
-                 centro_x=None):
+                 centro_x=None, camada_alvo=None):
     """Junta personagem + cenário aplicando o que a câmera pediu.
 
     `camadas` são os atores SEPARADOS, e existem por dois motivos. A
@@ -2142,8 +2142,17 @@ def montar_frame(camada, cenario, cam, quadril_x=W / 2, camadas=None,
     # existe neste frame e limita-se o zoom ao que a comporta, com uma
     # margem de respiro. Só limita, nunca aumenta -- o plano continua
     # sendo o que `_enquadramento` pediu quando ele cabe.
+    #
+    # DE QUAL CORPO (31/08, volta 6 do ciclo de vídeo). `camada` é a soma
+    # dos atores, e com dois em cena ela vai do braço de um ao braço do
+    # outro: 740 dos 1080 px, o que trava qualquer zoom acima de 1,33. Era
+    # essa medida -- e não o teto da tabela -- que fazia os dezesseis
+    # quadros do v006 saírem no MESMO plano aberto. Num CLOSE em quem fala,
+    # o outro sair pela borda é o efeito pretendido (é o "corte para o
+    # personagem" do plano de melhorias), então quem limita é a silhueta
+    # de QUEM ESTÁ SENDO ENQUADRADO. Sem `camada_alvo`, nada muda.
     if camadas and z > 1.002:
-        bb = camada.getbbox()
+        bb = (camada_alvo if camada_alvo is not None else camada).getbbox()
         if bb:
             larg = max(bb[2] - bb[0], 1)
             alt = max(bb[3] - bb[1], 1)
@@ -2161,8 +2170,27 @@ def montar_frame(camada, cenario, cam, quadril_x=W / 2, camadas=None,
         # muda com cada gesto e faria a câmera tremer junto com os braços.
         cx = W * 0.5 if centro_x is None else float(centro_x)
         # nunca até o fim: enquadrar exatamente no boneco tira o cenário do
-        # quadro e o corte deixa de ter lugar nenhum
-        cx = W * 0.5 + (cx - W * 0.5) * 0.75
+        # quadro e o corte deixa de ter lugar nenhum.
+        #
+        # NO CLOSE A MIRA É QUASE INTEIRA (31/08). Com 0,75, fechar em quem
+        # está a x=296 deixa a janela em 73..641 e a BORDA do outro (que
+        # começa em 634) entra por sete pixels: um pedaço de ombro colado na
+        # lateral, que lê como enquadramento errado e não como corte. Com
+        # `camada_alvo` -- que só existe no close -- a mira vai a 0,92 e o
+        # outro fica de fora inteiro, continuando a sobrar cenário dos dois
+        # lados do falante.
+        cx = W * 0.5 + (cx - W * 0.5) * (0.92 if camada_alvo is not None else 0.75)
+        # O GESTO NÃO SAI PELA BORDA (31/08). A mira é o QUADRIL, de
+        # propósito -- o bbox muda com cada gesto e a câmera tremeria junto
+        # com os braços --, mas num close de 568 px de largura um braço
+        # estendido chega a 300 px do quadril e some pela lateral. A saída
+        # não é seguir o bbox: é **empurrar a janela só o necessário** para
+        # ele caber. Enquanto o gesto couber na janela a câmera não se mexe,
+        # e quando não couber ela já estava cortando de qualquer jeito.
+        if camada_alvo is not None:
+            bba = camada_alvo.getbbox()
+            if bba and (bba[2] - bba[0]) <= lw:
+                cx = min(max(cx, bba[2] - lw / 2), bba[0] + lw / 2)
         cy = H * float(cam.get("zoom_y", 0.5))
         x0 = min(max(cx - lw / 2, 0), W - lw)
         y0 = min(max(cy - lh / 2, 0), H - lh)
@@ -2173,7 +2201,63 @@ def montar_frame(camada, cenario, cam, quadril_x=W / 2, camadas=None,
     return quadro
 
 
-def _enquadramento(i, n_trechos, n_atores, t, centro_corpo=None):
+# O CLOSE EM QUEM FALA (31/08, volta 6 do ciclo de vídeo).
+#
+# 1,90 é o plano em que UM dos dois enche o quadro: com dois em cena a
+# escala cai para 0,74 e o corpo mede ~852 px de altura por ~300 de largura,
+# então a janela de 568x1010 que 1,90 recorta o comporta inteiro, com folga
+# para o braço erguido, e a CARA passa de ~85 para ~160 px. Acima disso a
+# arte começa a aparecer ampliada quatro vezes -- a folha do personagem é
+# desenhada uma vez só, e não há de onde tirar mais pixel.
+CLOSE_FALANTE = 1.90
+
+
+def _close_no_falante(i, n_trechos, n_atores):
+    """Este trecho fecha em QUEM FALA, deixando o outro sair do quadro?
+
+    POR QUE ISTO EXISTE
+        O v006 saiu com dezesseis quadros no MESMO plano aberto, os dois de
+        corpo inteiro, do primeiro ao último segundo -- apesar de o ciclo de
+        planos existir desde 27/08. A causa não era o ciclo: com dois atores
+        o teto é 1,25, e 1,00 → 1,25 é uma variação que ninguém percebe.
+        Subir o teto não resolvia, porque `montar_frame` limita o zoom à
+        silhueta dos DOIS somados (740 px) e trava tudo em 1,33.
+
+        O plano de melhorias pede outra coisa, e é ela que falta: *"close no
+        personagem que está falando; depois, cortar para o outro durante a
+        resposta"*. Isso não é fechar mais no par -- é enquadrar UM e deixar
+        o outro fora. Como o falante alterna a cada trecho, alternar o close
+        produz de graça o corte de conversa que o formato pede.
+
+    A REGRA, E POR QUE ELA NÃO É "UM SIM, UM NÃO"
+        A primeira versão fechava nos ímpares, e a prévia mostrou o defeito
+        na hora: **os seis closes saíram todos na Maya**. O falante alterna
+        a cada trecho, então fechar com período 2 fecha sempre na mesma
+        pessoa -- o João atravessou o vídeo inteiro sem um close, que é
+        metade do problema que isto veio resolver.
+
+        O período tem de ser ÍMPAR para cair nas duas paridades. São dois
+        closes a cada cinco trechos (`i % 5 in (1, 4)`): eles caem em 1, 4,
+        6, 9, 11 -- ímpar, par, par, ímpar, ímpar --, e os dois lados da
+        conversa ganham cara grande. Dois em cinco também é o espaçamento
+        que o plano de melhorias pede (mudança visual a cada 2 a 5 s) sem
+        que o close vire o plano padrão.
+
+        A virada (último trecho) fecha sempre, porque a piada acontece na
+        cara; e o trecho ANTES dela abre sempre -- sem o contraste, a virada
+        chegaria no mesmo tamanho do que veio antes e o fechamento não seria
+        lido como troca de plano. Com menos de três trechos não há
+        alternância que valha: o vídeo inteiro viraria um close só.
+    """
+    if n_atores < 2 or n_trechos < 3:
+        return False
+    if i == n_trechos - 2:
+        return False
+    return i % 5 in (1, 4) or i == n_trechos - 1
+
+
+def _enquadramento(i, n_trechos, n_atores, t, centro_corpo=None,
+                   close=False, centro_rosto=None):
     """Plano do trecho `i`: quanto a câmera fecha, e onde ela centra.
 
     POR QUE ISTO EXISTE
@@ -2220,6 +2304,16 @@ def _enquadramento(i, n_trechos, n_atores, t, centro_corpo=None):
     # 1,60 e não mais: acima disso o topo da cabeça encosta na borda quando
     # a ação levanta o braço, e `montar_frame` passaria a cortar o gesto --
     # que é justamente o que este vídeo tem de melhor.
+    # O CLOSE NÃO PASSA PELO CICLO. Ele é um plano à parte -- enquadra UM
+    # ator, não o par --, então nem o teto nem os cinco degraus valem para
+    # ele. O push-in de 3,5% continua, que é o que separa vídeo de foto.
+    if close:
+        z = CLOSE_FALANTE * (1.0 + 0.035 * max(0.0, min(1.0, t)))
+        meia = 0.5 / z
+        alvo = centro_rosto if centro_rosto is not None else centro_corpo
+        if alvo is None:
+            alvo = 0.5
+        return z, max(meia, min(1.0 - meia, float(alvo)))
     teto = 1.25 if n_atores > 1 else 1.60
     # O CICLO PRECISOU CRESCER COM A ESQUETE (30/08). Eram três posições
     # (aberto, médio, fechado), e num vídeo de 5 trechos elas davam uma
@@ -3154,6 +3248,10 @@ def render(pasta_partes, spec, saida, tmpdir=None, amostra=0):
         # sabe para que lado empurrar quem invadiu, e ela só faz sentido
         # entre quem está dividindo o quadro agora.
         ordem_x = sorted(chaves, key=lambda c: posto[c][1])
+        # O PLANO DESTE TRECHO: close em quem fala, ou o par no ciclo de
+        # sempre. Decidido aqui porque depende de quantos estão em cena
+        # AGORA, e isso muda de trecho para trecho (lei 10).
+        fecha = _close_no_falante(i_tr, n_trechos, len(chaves))
         # quem entrou agora não tem estado de objeto: a mão começa vazia
         for c in chaves:
             na_mao.setdefault(c, None)
@@ -3204,6 +3302,10 @@ def render(pasta_partes, spec, saida, tmpdir=None, amostra=0):
 
             camada = Image.new("RGBA", (W, H), (0, 0, 0, 0))
             por_ator_camada = []
+            # ONDE FICOU CADA PEÇA DE QUEM FALA, para o close mirar no
+            # ROSTO e não no meio do corpo. Só no close, e só do falante:
+            # é um `dict.update` por frame desenhado.
+            pecas_falante = {} if fecha else None
             cam_falante, x_falante = dict(ACOES.CAM_NEUTRA), W / 2
             # PRIMEIRO O RIG DE TODO MUNDO, DEPOIS O DESENHO. A colisão só
             # dá para resolver com as duas posições na mão, e resolver
@@ -3243,7 +3345,8 @@ def render(pasta_partes, spec, saida, tmpdir=None, amostra=0):
                 # maxilar na mesma envoltória e ninguém sabe quem falou.
                 so_dele[chave] = desenhar_personagem(
                     pers, rig, nivel if chave == falante else 0.0,
-                    pisca, na_mao[chave], cara)
+                    pisca, na_mao[chave], cara,
+                    saida_pos=pecas_falante if chave == falante else None)
             # CADA UM SE DEFORMA SOZINHO. Espelhar, achatar e o squash da
             # passada são do corpo de quem fez a ação, não do quadro (ver
             # `deformar_ator`). Vem ANTES da guarda de colisão porque
@@ -3316,8 +3419,23 @@ def render(pasta_partes, spec, saida, tmpdir=None, amostra=0):
             # ENQUADRAMENTO DO TRECHO, por cima do que a ação já pediu: a
             # ação usa zoom para pontuar um susto, e isso continua valendo
             # -- os dois se multiplicam em vez de um apagar o outro.
+            # A MIRA DO CLOSE É A CABEÇA DE QUEM FALA, não o meio do corpo.
+            # O pivô do crânio é a base dele (é por onde ele se prende ao
+            # pescoço), então o alto da cabeça está uma altura de crânio
+            # acima; a janela põe esse alto a 12% do topo, e o resto dela
+            # desce pelo tronco. Sem o crânio -- folha sem cabeça separada
+            # -- cai no centro do corpo, que é o comportamento de antes.
+            centro_rosto = None
+            if fecha and pecas_falante and "cranio" in pecas_falante:
+                pers_f = posto[falante][0]
+                z_prev = CLOSE_FALANTE * (1.0 + 0.035 * max(0.0, min(1.0, t)))
+                topo = (pecas_falante["cranio"][1]
+                        - pers_f.altura_cranio() * pers_f.escala)
+                hjan = H / z_prev
+                centro_rosto = (topo + (0.5 - 0.12) * hjan) / H
             z_tr, zy = _enquadramento(i_tr, n_trechos, len(chaves), t,
-                                      centro_corpo)
+                                      centro_corpo, close=fecha,
+                                      centro_rosto=centro_rosto)
             cam["zoom"] = float(cam.get("zoom", 1.0)) * z_tr
             # A MIRA DA AÇÃO É RELATIVA AO CORPO, NÃO À TELA (29/08).
             #
@@ -3342,10 +3460,16 @@ def render(pasta_partes, spec, saida, tmpdir=None, amostra=0):
             # ou saindo puxaria o enquadramento para fora junto com ele.
             dentro = [rigs[c]["quadril"][0] for c in chaves
                       if 0 < rigs[c]["quadril"][0] < W]
+            # NO CLOSE A CÂMERA MIRA UM SÓ, e é a silhueta DELE que limita
+            # o quanto ela fecha (ver `montar_frame`): a do par somado
+            # travaria o plano em 1,33 e o close não aconteceria.
             quadro = montar_frame(camada, cenarios[cen], cam, x_falante,
                                   camadas=por_ator_camada,
-                                  centro_x=(sum(dentro) / len(dentro)
-                                            if dentro else None))
+                                  centro_x=(x_falante if fecha else
+                                            (sum(dentro) / len(dentro)
+                                             if dentro else None)),
+                                  camada_alvo=(so_dele.get(falante)
+                                               if fecha else None))
             if leg is not None:
                 # por cima de tudo, e no tempo GLOBAL: o índice do frame é
                 # contínuo entre trechos, então n/FPS é o relógio do vídeo
@@ -3367,7 +3491,12 @@ def render(pasta_partes, spec, saida, tmpdir=None, amostra=0):
         caras.append(EXPR.normalizar(tr.get("expressao", "neutro"))
                      + "".join("+" + EXPR.normalizar(j.get("nome") or j.get("valor"))
                                for j in (tr.get("expressoes") or [])))
-        planos.append(f"{_enquadramento(i_tr, n_trechos, len(chaves), 0.0)[0]:.2f}")
+        # O LOG DIZ QUAL PLANO FOI, não só o número: "1.90*" é o close em
+        # quem fala, e é o único jeito de ler no log que a alternância
+        # aconteceu sem abrir o MP4.
+        planos.append(
+            f"{_enquadramento(i_tr, n_trechos, len(chaves), 0.0, close=fecha)[0]:.2f}"
+            + ("*" if fecha else ""))
         # O PAN DA CAMINHADA NÃO ATRAVESSA O CORTE. Ele acumulava de trecho
         # em trecho, de quando o fundo era um ladrilho infinito; agora cada
         # trecho começa no ponto que `PONTOS_DE_CORTE` manda, e um resto de
