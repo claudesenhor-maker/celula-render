@@ -980,9 +980,30 @@ def _tapar_boca_desenhada(img, rosto=None):
         return img, None, None
 
     rgb = a[..., :3].astype(np.int16)
-    q = (rgb[nucleo] // 24)
-    chaves, contas = np.unique(q.reshape(-1, 3), axis=0, return_counts=True)
-    pele = chaves[contas.argmax()].astype(np.int16) * 24 + 12
+    # A PELE VEM DO ROSTO JÁ MEDIDO, e não da moda da peça (30/08, noite).
+    #
+    # Esta função media a cor mais comum do núcleo do crânio e chamava
+    # aquilo de pele. Na senhora, a cor mais comum do crânio é o CABELO
+    # GRISALHO (180,180,180) -- ele ocupa mais pixels que o rosto. Com o
+    # cinza no lugar da pele, `tinta` passou a marcar a pele inteira
+    # (|252,204,156 - 180,180,180| = 120 > 90): o rosto todo virou uma
+    # mancha só de 11 mil px, a boca foi absorvida por ela, e nenhum
+    # candidato sobrou. Resultado na tela: a senhora fala 5 falas de boca
+    # parada, e a folha ainda assim passa em `conferir_folha`.
+    #
+    # `_analisar_rosto` JÁ RESOLVE ISSO -- ele avisa no log ("a cor
+    # dominante da peça era (180,180,180) (cabelo ou touca); a pele medida
+    # no rosto e (252,204,156)") e guarda a cor certa em `rosto["pele"]`. A
+    # medida existia, no lugar certo, e esta função não a lia: refazia a
+    # conta ingênua ao lado. É a armadilha 16 na mesma casa -- medir no
+    # lugar errado (a peça inteira) o que só faz sentido medido no rosto.
+    pele = None
+    if rosto is not None and rosto.get("pele") is not None:
+        pele = np.asarray(rosto["pele"]).astype(np.int16)
+    if pele is None:
+        q = (rgb[nucleo] // 24)
+        chaves, contas = np.unique(q.reshape(-1, 3), axis=0, return_counts=True)
+        pele = chaves[contas.argmax()].astype(np.int16) * 24 + 12
     tinta = nucleo & (np.abs(rgb - pele).sum(axis=2) > 90)
     if tinta.sum() < 20:
         return img, None, None
@@ -1001,8 +1022,41 @@ def _tapar_boca_desenhada(img, rosto=None):
         eixo, tol_x = cx_rosto, larg_r * 0.22
         larg_ref = larg_r
 
+    # A FAIXA É RECORTADA ANTES DE ROTULAR, e essa ordem é a correção
+    # inteira (30/08, noite).
+    #
+    # `_componentes` rotula tinta CONECTADA, e num rosto desenhado quase
+    # todo o traço escuro se toca: na senhora, o cabelo grisalho emoldura o
+    # rosto, encosta no aro dos óculos, o aro encosta nos olhos, e a linha
+    # do queixo fecha o caminho até a boca. Medido: UMA componente de
+    # 16.758 px, de y=43 a y=229, com a boca dentro dela. Nenhum filtro
+    # adiante salva -- eles julgam a caixa da mancha, e a caixa é a cabeça
+    # inteira. A boca da senhora existe na arte (51x11 px, exatamente no
+    # eixo) e nunca chegou a ser candidata.
+    #
+    # O Pal escapava por sorte: o cabelo dele não faz ponte com o queixo, e
+    # a boca saía como componente própria. Ou seja, o detector dependia de
+    # um detalhe do penteado -- e foi por isso que dois personagens de nove
+    # entraram em cena sem boca sem ninguém notar.
+    #
+    # Recortando a faixa primeiro, a ponte é cortada junto: dentro de
+    # y ∈ [ymin, ymax] o cabelo vira duas manchas laterais (que o filtro de
+    # eixo descarta) e a boca fica sozinha no meio. Medido depois: a boca
+    # aparece nos quatro conferidos (senhora 51x11, enfermeira 55x12,
+    # pal 38x11, maya 26x6).
+    faixa = np.zeros_like(tinta)
+    faixa[max(0, int(ymin)):int(ymax) + 1, :] = True
+    tinta_faixa = tinta & faixa
+    if tinta_faixa.sum() < 20:
+        return img, None, None
+
     cands = []
-    for c in _componentes(tinta, area_min=max(20, int(tinta.sum() * 0.01))):
+    # O LIMIAR DE ÁREA TAMBÉM MUDA DE BASE: 1% da tinta da FAIXA, não da
+    # peça inteira. Sobre a peça, uma mancha dominante (o cabelo) levava o
+    # 1% para acima da área da boca -- limiar proporcional à coisa errada,
+    # a mesma família da armadilha 16.
+    for c in _componentes(tinta_faixa,
+                          area_min=max(20, int(tinta_faixa.sum() * 0.01))):
         bx0, by0, bx1, by1 = c["bbox"]
         w, h = bx1 - bx0 + 1, by1 - by0 + 1
         cy = (by0 + by1) / 2.0
