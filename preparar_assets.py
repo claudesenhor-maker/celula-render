@@ -216,6 +216,11 @@ def gerar_partes_json(prefixo_personagem):
         "comprimentos": ancoras.get("comprimentos", {}),
         "vaos": ancoras.get("vaos", {}),
     }
+    # o rosto.json da folha viaja para o partes.json, que e o que o motor
+    # le (o zip nao carrega o assets_bruto)
+    rosto_manual = globals().get("_ROSTO_MANUAL")
+    if rosto_manual:
+        cfg["rosto_manual"] = rosto_manual
     # rosto coberto: ver folha_personagem.SEM_EXPRESSAO
     chave_pers = prefixo_personagem.rstrip("/").rsplit("/", 1)[-1]
     if chave_pers in SEM_EXPRESSAO:
@@ -324,6 +329,23 @@ def fatiar_folha(chave):
             print(f"[folha] {chave}: pivos.json com {len(pivos_manuais)} peca(s) a mao")
         except Exception as e:
             print(f"[folha] {chave}: pivos.json ilegivel, ignorado ({e})")
+
+    # ROSTO MARCADO A MAO, pelo mesmo motivo dos pivos: nenhuma medida
+    # resolve arte ambigua. Oculos de aro grosso, franja sobre a
+    # sobrancelha, viseira meio transparente. As coordenadas sao da PECA
+    # `cranio.png` -- a imagem que a pessoa ve e clica no painel --, e quem
+    # as converte para a tela inflada e o motor (`Personagem._off_cranio`).
+    # Aqui elas so viajam: este arquivo nao sabe nada de rosto, e nao devia
+    # mesmo saber.
+    rosto_manual = None
+    if existe(origem + "rosto.json"):
+        try:
+            rosto_manual = json.loads(baixar(origem + "rosto.json"))
+            print(f"[folha] {chave}: rosto.json a mao "
+                  f"({', '.join(sorted(rosto_manual))})")
+        except Exception as e:
+            print(f"[folha] {chave}: rosto.json ilegivel, ignorado ({e})")
+    globals()["_ROSTO_MANUAL"] = rosto_manual
 
     try:
         pecas, ancoras = segmentar_folha(folha, pivos_manuais)
