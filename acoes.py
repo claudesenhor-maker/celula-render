@@ -210,8 +210,24 @@ def andar(u, rig, dur, a):
                                  sentido=sentido)
     # o fundo anda o mesmo tanto que o pé andaria: sem isto o personagem
     # patina, que é o erro clássico de walk cycle
-    return {"fundo_dx": -sentido * passada * passos * u * dur,
-            "escala_y": esc_y}
+    dx = -sentido * passada * passos * u * dur
+    # `pan_camera` DIZ QUE A CÂMERA ACOMPANHA ESTE ATOR (30/08, noite), e é
+    # uma informação diferente de `fundo_dx`.
+    #
+    # O defeito que ele conserta: até aqui só o CENÁRIO recebia o
+    # deslocamento, então quem andava ficava parado na tela (certo, a câmera
+    # o segue) e quem estava PARADO também ficava parado na tela (errado --
+    # ele deveria ficar para trás e sair do quadro). O dono do projeto viu e
+    # descreveu exatamente assim: *"o outro flutuou com o cenário mudando e
+    # ele ficando no mesmo enquadramento"*.
+    #
+    # Com a câmera declarada, `desenhar_cena` translada cada ator por
+    # `dx_camera - dx_dele`: quem anda dá zero, quem está parado anda junto
+    # com o fundo. Um travelling de verdade, em vez de um fundo que desliza.
+    #
+    # Fica FORA de `entrar_andando`/`sair_andando` de propósito: ali a
+    # câmera NÃO segue, senão quem sai de cena nunca sai do quadro.
+    return {"fundo_dx": dx, "pan_camera": dx, "escala_y": esc_y}
 
 
 def entrar_andando(u, rig, dur, a):
@@ -233,6 +249,10 @@ def entrar_andando(u, rig, dur, a):
     borda = -FORA_DO_QUADRO if sentido > 0 else LARG_QUADRO + FORA_DO_QUADRO
     rig["quadril"] = [borda + (alvo - borda) * _suave(u), rig["quadril"][1]]
     cam["fundo_dx"] *= 0.25          # entrando, quase todo o avanço é do corpo
+    # A CÂMERA NÃO SEGUE QUEM ENTRA: ela está na cena que já existe, e quem
+    # chega atravessa o quadro até o lugar dele. Seguir seria manter o
+    # recém-chegado imóvel no centro e empurrar a cena inteira para o lado.
+    cam.pop("pan_camera", None)
     return cam
 
 
@@ -255,6 +275,9 @@ def sair_andando(u, rig, dur, a):
     borda = LARG_QUADRO + FORA_DO_QUADRO if sentido > 0 else -FORA_DO_QUADRO
     rig["quadril"] = [origem + (borda - origem) * _suave(u), rig["quadril"][1]]
     cam["fundo_dx"] *= 0.25
+    # A CÂMERA FICA. Se ela seguisse quem sai, o personagem nunca sairia do
+    # quadro -- é a definição de "sair de cena" que se perderia.
+    cam.pop("pan_camera", None)
     return cam
 
 
@@ -862,8 +885,13 @@ def aplicar(acoes, t_rel, rig, dur_trecho):
             # trecho seria a câmera parada em cima do nada.
             continue
         for k, v in d.items():
-            # deslocamento de fundo é cumulativo; o resto, o último manda
-            cam[k] = cam.get(k, 0.0) + v if k == "fundo_dx" else v
+            # deslocamento de fundo é cumulativo; o resto, o último manda.
+            # `pan_camera` acompanha `fundo_dx` porque é a mesma grandeza
+            # vista de outro lugar -- somar um e sobrescrever o outro faria
+            # a câmera discordar do chão em qualquer trecho com duas ações
+            # de locomoção.
+            cam[k] = (cam.get(k, 0.0) + v
+                      if k in ("fundo_dx", "pan_camera") else v)
     return cam
 
 
