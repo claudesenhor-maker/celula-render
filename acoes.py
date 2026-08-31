@@ -697,6 +697,33 @@ def largar_objeto(u, rig, dur, a):
 ACOES_PEGAM_OBJETO = ("pegar_objeto", "mostrar_objeto", "usar_objeto",
                       "entregar_objeto")
 ACOES_LARGAM_OBJETO = ("largar_objeto",)
+# QUEM SEGURA, SEGURA COM A MÃO DE FORA. `entregar_objeto` fica de fora
+# desta lista de propósito: ela existe para esticar o braço ATÉ o outro.
+ACOES_OBJETO_MAO_DE_FORA = ("pegar_objeto", "mostrar_objeto", "usar_objeto")
+
+
+def mao_de_fora(x):
+    """A mão que ergue o objeto, para quem está no x `x` do quadro.
+
+    POR QUE (31/08, volta 9 do ciclo de vídeo)
+        No v009 o Pal está à ESQUERDA e segura a caixa de papelão com a mão
+        `d`, que é a que `mostrar_objeto` ergue para cima e para a DIREITA
+        (0 é direita, -90 é cima). O braço dele atravessou o meio do quadro
+        e a caixa foi parar **em cima da cara da Vovó**, no último plano do
+        vídeo -- que é o close da tirada, onde a piada acontece.
+
+        O roteirista escreve `mao` sem saber quem está de que lado: no mesmo
+        spec ele pediu `d`, depois `e`, depois `d`, e nada disso é escolha
+        de encenação. Quem sabe o lado é o motor, e é ele quem decide --
+        prompt é pedido, código é garantia (lei 16).
+
+        É a mesma regra de `_lado_de_entrada`, na mão em vez do pé: quem
+        está à esquerda usa a mão de fora, porque pelo lado de dentro o
+        gesto atravessa quem divide a cena. E ela vale para o vídeo inteiro,
+        não só durante o gesto: a mão que pega é a mão que continua
+        segurando, então o objeto passa a viver do lado de fora.
+    """
+    return "e" if float(x) <= LARG_QUADRO / 2 else "d"
 # ENTREGAR É PASSAR, NÃO COPIAR (29/08). `entregar_objeto` estica o braço
 # oferecendo a coisa, e por isso ela precisa estar na mão DURANTE a ação --
 # mas ao fim dela a mão fica vazia, senão o objeto se duplica. Foi o que a
