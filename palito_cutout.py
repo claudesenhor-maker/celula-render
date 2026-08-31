@@ -3297,6 +3297,18 @@ def render(pasta_partes, spec, saida, tmpdir=None, amostra=0):
         for c in chaves:
             na_mao.setdefault(c, None)
         por_ator = _acoes_por_ator(tr, chaves, falante)
+        # A MÃO QUE SEGURA É A DE FORA, e quem decide é o motor: o
+        # roteirista escreve `mao` sem saber quem está de que lado (ver
+        # `acoes.mao_de_fora`). Feito UMA vez por trecho, sobre as ações
+        # deste trecho, para que o estado do objeto e a pose do braço leiam
+        # o MESMO valor -- se divergirem, o braço sobe vazio e o objeto
+        # fica na mão caída.
+        if len(chaves) > 1:
+            for chave in chaves:
+                fora = ACOES.mao_de_fora(posto[chave][1])
+                for a in por_ator.get(chave) or []:
+                    if a.get("nome") in ACOES.ACOES_OBJETO_MAO_DE_FORA:
+                        a["mao"] = fora
         _fazer_voltar(por_ator, [c for c in fora_de_cena if c in chaves])
         fora_de_cena = _quem_saiu(por_ator)
         nf = max(1, int(tr["dur"] * FPS))
