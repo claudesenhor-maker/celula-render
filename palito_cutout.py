@@ -710,6 +710,18 @@ def _boca_desenhada(larg, alt_max, nivel, curva, cor_traco, cor_dentro=None,
     # espessura: a medida da linha que a arte tinha, quando existe. A
     # fração da largura é o palpite de quando não há arte de boca nenhuma.
     esp = max(2, int(espessura if espessura else larg * 0.065))
+    # O TRAÇO É FINO, E FINO É UM TETO (31/08, pedido do dono do projeto ao
+    # ver os vídeos: *"boca com traço preto em volta; retorne a boca de
+    # antes, só um traço fino"*).
+    #
+    # A espessura medida é a altura MÉDIA da mancha que o desenhista fez, e
+    # num traço encorpado ela dá 9px numa boca de 79 -- 11% da largura. Numa
+    # LINHA isso ainda passa; desenhada como contorno de elipse, vira um
+    # anel preto que ocupa a boca inteira e o rosto fica com um buraco
+    # emoldurado no meio. A medida continua mandando enquanto for fina; o
+    # teto é 5,5% da largura da boca (4px numa boca de 79), que é a
+    # espessura de traço do resto do desenho.
+    esp = max(2, min(esp, int(round(larg * 0.055))))
     # SINAL: y cresce para baixo, então sorriso (curva > 0) tem que empurrar
     # o MEIO da linha para baixo. A primeira versão fazia o contrário e
     # `sorrindo` saía com cara de choro.
@@ -721,7 +733,13 @@ def _boca_desenhada(larg, alt_max, nivel, curva, cor_traco, cor_dentro=None,
     cy = tela.height / 2.0
     x0, x1 = pad, pad + larg
 
-    if alt <= esp * 1.2:
+    # QUANDO ELA AINDA É UMA LINHA. Era `alt <= esp*1.2`, isto é, o limiar
+    # descia junto com a espessura -- e com o traço fino do teto acima a
+    # boca passaria a ABRIR com qualquer sopro de som, o que troca o defeito
+    # do anel grosso pelo de uma cara de espanto permanente. O limiar passa
+    # a ser também uma fração da abertura MÁXIMA: abaixo de um quarto dela,
+    # o que existe é um traço.
+    if alt <= max(esp * 1.2, alt_max * 0.25):
         # BOCA FECHADA: um arco fino. Três pontos e uma curva quadrática
         # aproximada por segmentos -- ImageDraw não tem Bézier, e uma
         # parábola de 24 segmentos é indistinguível numa boca de 60px.
@@ -736,7 +754,13 @@ def _boca_desenhada(larg, alt_max, nivel, curva, cor_traco, cor_dentro=None,
         # O centro desce um pouco com a abertura, como um queixo desceria.
         cyy = cy + alt * 0.18 - arco * 0.5
         caixa = [x0, cyy - alt / 2.0, x1, cyy + alt / 2.0]
-        d.ellipse(caixa, fill=cor_dentro, outline=cor_traco + (255,), width=esp)
+        # O CONTORNO DA BOCA ABERTA É MAIS FINO QUE O DA FECHADA. Na fechada
+        # o traço É a boca; na aberta ele é só a borda do buraco, e o
+        # `width` do PIL cresce para DENTRO -- num vão de 24px de altura, um
+        # contorno de 4px come um terço dele de cada lado. Metade da
+        # espessura desenha a borda sem apagar o buraco.
+        d.ellipse(caixa, fill=cor_dentro, outline=cor_traco + (255,),
+                  width=max(1, int(round(esp * 0.5))))
     return tela, (tela.width / 2.0, cy)
 
 
@@ -1927,6 +1951,17 @@ def desenhar_personagem(pers, rig, boca_nivel=0.0, piscando=False, objeto=None,
                      pos[nome][1] + math.sin(rad) * comp * 0.30)
             colar(base, oi, opv, palma, ang[nome],
                   float(objeto.get("escala", 1.0)))
+            if saida_pos is not None:
+                # ONDE O OBJETO FICOU, para a câmera não cortá-lo (31/08).
+                # A guarda de enquadramento passou a mirar o NÚCLEO do corpo
+                # -- o braço deixou de contar, senão a janela balança junto
+                # com o gesto --, e sem esta caixa o que está NA MÃO ERGUIDA
+                # sairia do quadro junto com ela: era o defeito do v013, o
+                # celular boiando fora da tela. Um raio em volta da palma
+                # basta; o objeto é colado centrado nela.
+                r = max(oi.size) * float(objeto.get("escala", 1.0)) / 2.0
+                saida_pos["_objeto"] = (palma[0] - r, palma[1] - r,
+                                        palma[0] + r, palma[1] + r)
 
     return base
 
@@ -2145,7 +2180,7 @@ _ULTIMO_APERTO = {}
 
 
 def montar_frame(camada, cenario, cam, quadril_x=W / 2, camadas=None,
-                 centro_x=None, camada_alvo=None, terco=0):
+                 centro_x=None, camada_alvo=None, terco=0, caixa_extra=None):
     """Junta personagem + cenário aplicando o que a câmera pediu.
 
     `camadas` são os atores SEPARADOS, e existem por dois motivos. A
@@ -2181,9 +2216,15 @@ def montar_frame(camada, cenario, cam, quadril_x=W / 2, camadas=None,
     # o outro sair pela borda é o efeito pretendido (é o "corte para o
     # personagem" do plano de melhorias), então quem limita é a silhueta
     # de QUEM ESTÁ SENDO ENQUADRADO. Sem `camada_alvo`, nada muda.
+    enquadrada = camada_alvo if camada_alvo is not None else camada
+    # A CAIXA QUE A CÂMERA OBEDECE: o núcleo de quem está sendo enquadrado,
+    # mais o que ele estiver segurando. Medida UMA vez por frame e usada
+    # pelas três guardas -- zoom, lateral e alto --, que antes cada uma
+    # media a sua (ver `caixa_do_nucleo`).
+    nucleo = _unir(caixa_do_nucleo(enquadrada), caixa_extra)
     bb = None
     if camadas and z > 1.002:
-        bb = (camada_alvo if camada_alvo is not None else camada).getbbox()
+        bb = nucleo
         if bb:
             larg = max(bb[2] - bb[0], 1)
             alt = max(bb[3] - bb[1], 1)
@@ -2206,10 +2247,6 @@ def montar_frame(camada, cenario, cam, quadril_x=W / 2, camadas=None,
             # não muda de largura entre poses, então a guarda para de
             # oscilar; e o gesto pode encostar na borda, que é o que um
             # close faz.
-            xs = np.nonzero(colunas_de_corpo(
-                camada_alvo if camada_alvo is not None else camada))[0]
-            if len(xs):
-                larg = max(int(xs[-1] - xs[0]) + 1, 1)
             if camada_alvo is not None:
                 # NO CLOSE, CORTAR A PERNA É O PONTO (31/08, volta 7).
                 #
@@ -2317,7 +2354,14 @@ def montar_frame(camada, cenario, cam, quadril_x=W / 2, camadas=None,
         # o lado, mão FORA do quadro e o celular boiando ao lado da cabeça,
         # sem ninguém segurando. Objeto sem mão é pior que objeto cortado --
         # ele deixa de ser um objeto e vira um adesivo.
-        bba = (camada_alvo if camada_alvo is not None else camada).getbbox()
+        #
+        # E AS DUAS MIRAM O NÚCLEO, NÃO A SILHUETA (31/08, defeito 4). Com a
+        # silhueta, um aceno subia a borda de cima 200px e a trazia de volta
+        # duas vezes por segundo -- a janela ia junto, e o enquadramento
+        # "quebrava" a cada gesto. O que elas protegem passa a ser o corpo e
+        # o que a mão SEGURA (`caixa_extra`); a mão vazia pode encostar na
+        # borda, que é o que um close faz. Ver `caixa_do_nucleo`.
+        bba = nucleo
         if bba and (bba[2] - bba[0]) <= lw:
             cx = min(max(cx, bba[2] - lw / 2), bba[0] + lw / 2)
         cy = H * float(cam.get("zoom_y", 0.5))
@@ -2663,6 +2707,24 @@ def _em_cena(tr, elenco, falante, anteriores):
     for c in (anteriores or []):
         if c in elenco and c not in ordem:
             ordem.append(c)
+    # NO PRIMEIRO TRECHO NÃO HÁ ANTERIOR (31/08, defeito 5 dos vídeos).
+    #
+    # `anteriores` começava valendo o elenco inteiro, "para o primeiro
+    # trecho ter um anterior" -- e com isso a regra 3 punha em cena, já no
+    # primeiro segundo do vídeo, alguém que o roteirista tinha deixado de
+    # fora de propósito porque ele ENTRA depois. O resultado na tela é o
+    # teleporte da queixa: a personagem aparece parada no lugar dela, o
+    # trecho seguinte começa e ela salta para a borda para entrar andando.
+    #
+    # `anteriores` vazio é a verdade do primeiro trecho, e a continuidade
+    # não perde nada: ela existe para não esvaziar uma cena que já existia.
+    # O que fica de fora é o spec ANTIGO, que não escreve
+    # `personagens_em_cena` -- para ele o elenco carregado continua sendo a
+    # cena, como era antes de o campo existir.
+    if not tr.get("personagens_em_cena") and not anteriores:
+        for c in list(elenco)[:MAX_EM_CENA]:
+            if c not in ordem:
+                ordem.append(c)
     if not ordem:
         ordem = list(elenco)[:1]
     escolhidos = ordem[:MAX_EM_CENA]
@@ -2828,6 +2890,54 @@ def colunas_de_corpo(img, bb=None):
     return (np.asarray(img)[..., 3] > 32).sum(axis=0) >= alt * LIMIAR_CORPO
 
 
+def caixa_do_nucleo(img, bb=None):
+    """A caixa do NÚCLEO da figura: tronco, cabeça e pernas, sem os braços.
+
+    POR QUE (31/08, defeito 4 dos vídeos: *"quando enquadra um único
+    personagem e ele acena, quebra completamente o enquadramento, e fica
+    dando alguns tilts conforme o personagem se mexe"*)
+        As duas guardas de janela de `montar_frame` -- a que não deixa o
+        gesto sair pela lateral e a que não deixa a cabeça ser cortada em
+        cima -- miravam o `getbbox()` da camada, isto é, a SILHUETA. Num
+        aceno a silhueta muda a cada frame: a mão sobe 200px acima da
+        cabeça e volta duas vezes por segundo, e a janela subia e descia
+        junto. Na tela é o quadro inteiro balançando enquanto a personagem
+        acena -- e, no frame em que a mão está no alto, a cara vai parar no
+        meio da tela.
+
+        A guarda de ZOOM já tinha aprendido isto na volta 11 (lei 33: uma
+        coluna atravessada só pelo braço não é corpo). O que faltava era
+        levar a mesma distinção às guardas de POSIÇÃO da janela. Com o
+        núcleo, a referência é a cabeça e o tronco -- que oscilam menos de
+        um grau -- e a câmera para de respirar junto com o braço.
+
+    O que se perde é a garantia de que a mão erguida cabe no quadro. É de
+    propósito: close é enquadramento que corta, e o que não pode ser
+    cortado é a cara. O que a mão está SEGURANDO continua protegido, por
+    fora desta função (`caixa_extra` em `montar_frame`).
+    """
+    bb = bb or img.getbbox()
+    if not bb:
+        return None
+    cols = colunas_de_corpo(img, bb)
+    xs = np.nonzero(cols)[0]
+    if not len(xs):
+        return bb
+    linhas = np.nonzero((np.asarray(img)[..., 3] > 32)[:, cols].any(axis=1))[0]
+    if not len(linhas):
+        return bb
+    return (int(xs[0]), int(linhas[0]), int(xs[-1]) + 1, int(linhas[-1]) + 1)
+
+
+def _unir(a, b):
+    """A caixa que contém as duas. `None` de um lado devolve o outro."""
+    if a is None:
+        return b
+    if b is None:
+        return a
+    return (min(a[0], b[0]), min(a[1], b[1]), max(a[2], b[2]), max(a[3], b[3]))
+
+
 def _transladar(img, dx):
     """Move a camada em x. Um deslocamento do quadril translada o desenho
     inteiro rigidamente -- toda peça sai da posição do quadril por somas --,
@@ -2976,11 +3086,14 @@ def _objeto_na_mao(acoes_do_ator, t, objetos, atual):
 def _quem_saiu(por_ator):
     """Quem terminou este trecho FORA do quadro.
 
-    É `sair_andando` chegando ao fim da fala: quem sai no meio dela volta
-    andando pela lógica normal das ações."""
+    QUALQUER `sair_andando` CONTA, e não só a que vai até o fim da fala
+    (31/08). A regra antiga exigia `ate >= 0,95` porque quem saía no meio do
+    trecho voltava sozinho -- a ação deixava de ser aplicada e o corpo
+    reaparecia no lugar dele no frame seguinte, que é o teletransporte do
+    defeito 5. Agora a saída FICA (ver `acoes.aplicar`): quem saiu está fora
+    até o trecho acabar, e portanto tem de voltar entrando no seguinte."""
     return {c for c, acoes in por_ator.items()
-            if any(a.get("nome") in ACOES.ACOES_DE_SAIDA
-                   and float(a.get("ate", 1.0)) >= 0.95 for a in acoes)}
+            if any(a.get("nome") in ACOES.ACOES_DE_SAIDA for a in acoes)}
 
 
 def _fazer_voltar(por_ator, fora_de_cena):
@@ -3137,7 +3250,10 @@ def render(pasta_partes, spec, saida, tmpdir=None, amostra=0):
     # elenco solto, quem está em cena muda ao longo do vídeo. Estes são só
     # os valores de partida, para o primeiro trecho ter um "anterior".
     chaves = list(elenco)[:MAX_EM_CENA]
-    chaves_ant = list(chaves)
+    # VAZIO, E NÃO O ELENCO (31/08): antes do primeiro trecho ninguém esteve
+    # em cena, e dizer o contrário põe no quadro quem ainda vai entrar. Ver
+    # `_em_cena`.
+    chaves_ant = []
     posto = _posicionar(elenco, chaves)
     ordem_x = sorted(chaves, key=lambda c: posto[c][1])
 
@@ -3484,9 +3600,14 @@ def render(pasta_partes, spec, saida, tmpdir=None, amostra=0):
             camada = Image.new("RGBA", (W, H), (0, 0, 0, 0))
             por_ator_camada = []
             # ONDE FICOU CADA PEÇA DE QUEM FALA, para o close mirar no
-            # ROSTO e não no meio do corpo. Só no close, e só do falante:
-            # é um `dict.update` por frame desenhado.
-            pecas_falante = {} if fecha else None
+            # ROSTO e não no meio do corpo, e para a guarda de
+            # enquadramento saber onde está o OBJETO na mão dele. Só do
+            # falante, e é um `dict.update` por frame desenhado.
+            #
+            # Era `{} if fecha else None`: o objeto precisa da caixa em todo
+            # plano fechado, não só no close em quem fala -- foi com UM ator
+            # sozinho que o celular saiu do quadro no v013.
+            pecas_falante = {}
             cam_falante, x_falante = dict(ACOES.CAM_NEUTRA), W / 2
             # PRIMEIRO O RIG DE TODO MUNDO, DEPOIS O DESENHO. A colisão só
             # dá para resolver com as duas posições na mão, e resolver
@@ -3580,12 +3701,34 @@ def render(pasta_partes, spec, saida, tmpdir=None, amostra=0):
                     so_dele[chave] = _transladar(so_dele[chave], dx)
                     rigs[chave]["quadril"][0] += dx
                     n_empurrados[chave] = n_empurrados.get(chave, 0) + 1
+            # NO CLOSE, QUEM NÃO ESTÁ SENDO ENQUADRADO NÃO ENTRA NO QUADRO
+            # (31/08, defeito 3 dos vídeos: *"quando tem dois personagens na
+            # cena e dá zoom em um único personagem andando, o outro buga e
+            # aparece vindo no fundo"*).
+            #
+            # O close já mira só o falante e a janela já é estreita o
+            # bastante para deixar o outro de fora -- PARADO. Quando alguém
+            # ANDA, a câmera acompanha quem anda e quem está parado corre na
+            # tela junto com o fundo (é o travelling de 30/08, e está
+            # certo): o parceiro atravessa a janela do close deslizando, do
+            # lado a lado, no meio da fala do outro. Na folha do teste ele
+            # aparece inteiro ao lado do falante, depois metade, depois
+            # nada.
+            #
+            # Cortar a câmera não resolve -- ele está mesmo passando por
+            # ali. O que resolve é o que o close SIGNIFICA: este plano
+            # enquadra UM ator. Quem não é o enquadrado fica fora do
+            # composto, e volta no plano seguinte, no lugar dele.
+            no_quadro = [falante] if (fecha and falante in so_dele) \
+                else atras_na_frente
             for chave in atras_na_frente:
-                por_ator_camada.append(so_dele[chave])
-                camada.alpha_composite(so_dele[chave])
                 if chave == falante:
                     cam_falante = cams[chave]
                     x_falante = rigs[chave]["quadril"][0]
+                if chave not in no_quadro:
+                    continue
+                por_ator_camada.append(so_dele[chave])
+                camada.alpha_composite(so_dele[chave])
             cam = cam_falante
             # O FUNDO SEGUE A CÂMERA, NÃO O FALANTE. `cam_falante` traz o
             # `pan_base` do trecho (o ponto de corte do cenário) somado ao
@@ -3651,7 +3794,8 @@ def render(pasta_partes, spec, saida, tmpdir=None, amostra=0):
                                              if dentro else None)),
                                   camada_alvo=(so_dele.get(falante)
                                                if fecha else None),
-                                  terco=_terco_do_trecho(i_tr, len(chaves)))
+                                  terco=_terco_do_trecho(i_tr, len(chaves)),
+                                  caixa_extra=pecas_falante.get("_objeto"))
             if leg is not None:
                 # por cima de tudo, e no tempo GLOBAL: o índice do frame é
                 # contínuo entre trechos, então n/FPS é o relógio do vídeo
