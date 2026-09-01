@@ -74,6 +74,64 @@ ACOES_DE_ENTRADA = ("entrar_andando", "entrar_correndo")
 ACOES_DE_SAIDA = ("sair_andando",)
 
 
+# O GESTO NÃO TELEPORTA (31/08, defeitos vistos nos vídeos do ciclo)
+#
+# A queixa do dono do projeto, olhando os vídeos: *"do nada eles acenam e
+# depois o braço teletransporta para baixo"*. As duas metades são o mesmo
+# defeito, e ele mora em `aplicar`, não nas ações:
+#
+#   * o gesto ENTRA de uma vez. `acenar` põe `braco_d` em [-30, ...] já no
+#     primeiro frame da janela: de braço caído a braço no alto em 1/24 de
+#     segundo, sem nada no meio;
+#   * o gesto SAI de uma vez. Passada a janela, a ação deixa de ser
+#     aplicada e o corpo volta ao repouso no frame seguinte -- que é
+#     exatamente o "teletransporta para baixo".
+#
+# Nenhum ajuste de ângulo conserta isso: o que falta é TEMPO. Todo gesto
+# passa a ter ataque e soltura, misturados com a pose que havia ANTES dele
+# (`_pesar`).
+#
+# O TEMPO NÃO É CONSTANTE: ELE SAI DO PERCURSO. As poses são escritas em
+# ângulo ABSOLUTO, então uma que começa depois de `apontar` para cima leva o
+# braço de -90 a +80 -- 170 graus --, enquanto `encolher_ombros` anda 20.
+# Dar o mesmo tempo aos dois é dar ao primeiro a velocidade de um estalo e
+# ao segundo a de um bocejo. O que é constante é a VELOCIDADE: 480 graus por
+# segundo é o braço rápido de desenho animado -- 20 graus por frame de
+# média, ~40 no pico do ease, que é o teto de `ferramentas/gesto.py`.
+#
+# Os limites existem para os extremos: gesto de dois graus não pode durar
+# zero (viraria um piscar), e troca de pose inteira não pode passar de meio
+# segundo (viraria câmera lenta).
+VEL_MAX_GS = 480.0
+ATAQUE_MIN, ATAQUE_MAX = 0.12, 0.45
+SOLTURA_MIN, SOLTURA_MAX = 0.20, 0.55
+
+# QUEM NÃO GANHA ENVELOPE. Locomoção é POSIÇÃO NO MUNDO, não pose: misturar
+# `entrar_andando` com o repouso faria o corpo aparecer no meio do caminho,
+# e a soltura o levaria de volta à borda depois de ele já ter chegado.
+# `parado` e `gesticular` são a base da pilha e valem o trecho inteiro.
+# `virar` não volta -- estar virado é estado, e ela só mexe na câmera.
+#
+# `cair` NÃO está aqui, apesar de também não voltar: quem a segura depois
+# da janela é `ACOES_QUE_FICAM`, e o que ela ganha do envelope é o ATAQUE
+# -- sem ele, cair depois de `apontar` para cima jogava o braço 126 graus
+# num frame, porque a pose de queda é escrita em ângulo absoluto e começa
+# do repouso, não de onde o braço está.
+#
+# `andar` FICA DE FORA DA LISTA de propósito: ela não mexe no quadril (quem
+# anda fica no lugar e o fundo é que corre), então misturá-la é misturar só
+# a passada -- e uma passada que começa de uma vez é o mesmo salto de braço
+# por outro nome.
+SEM_ENVELOPE = frozenset(("parado", "gesticular", "virar"))
+
+# ENTRAR E SAIR MISTURAM OS MEMBROS, NUNCA O LUGAR. A posição no mundo tem
+# de ser exata -- misturá-la faria o corpo aparecer no meio do caminho --,
+# mas os BRAÇOS de quem começa a andar vinham de uma vez: no v019 um trecho
+# aponta para cima e meio segundo depois entra andando, e o braço ia de -8
+# para +80 num frame. Quadril de fora, membros dentro.
+SO_MEMBROS = frozenset(ACOES_DE_ENTRADA + ACOES_DE_SAIDA)
+
+
 def _suave(u):
     """Ease in-out. Movimento que começa e termina bruscamente parece
     interpolação de computador; com isto parece intenção."""
@@ -303,7 +361,34 @@ def apontar(u, rig, dur, a):
 
 
 def acenar(u, rig, dur, a):
-    rig["braco_d"] = [-30.0, -18.0 + 26.0 * math.sin(2 * math.pi * 2.2 * u * dur)]
+    """A mão que acena, COM O COTOVELO DOBRADO e perto do corpo.
+
+    POR QUE MUDOU (31/08, defeitos 2 e 4 dos vídeos)
+        A versão anterior era `[-30, -18 + 26 sen]`: os dois ossos apontando
+        para cima e para a direita, ou seja, o braço ESTICADO na diagonal.
+        Duas coisas erradas saíam disso, e as duas apareceram na prévia:
+
+          * a mão ia parar a 360px do núcleo do corpo, e num plano fechado
+            (janela de 683px sobre um corpo de 332) ela não cabe. Antes, a
+            guarda de enquadramento corria atrás dela e o quadro inteiro
+            balançava; com a guarda mirando o núcleo (ver
+            `palito_cutout.caixa_do_nucleo`), o que balançava agora corta.
+            Medido: com o cotovelo dobrado a mão passa 129px do núcleo, e
+            cabe nos 175px de folga do plano fechado;
+          * braço esticado na diagonal, parado, não lê como aceno -- lê
+            como saudação militar. O aceno acontece no ANTEBRAÇO.
+
+        A frequência caiu de 2,2 para 1,8 Hz pelo mesmo motivo que o
+        envelope existe: a 2,2 Hz o antebraço andava 15 graus por frame só
+        na oscilação, e somado ao ataque estourava o teto da régua.
+    """
+    # O BALANÇO É DO PULSO TANTO QUANTO DO ANTEBRAÇO: com a oscilação toda
+    # no antebraço, o extremo de dentro levava a mão para a frente da CARA
+    # -- visto na prévia, e cara tapada é pior que gesto pequeno. Medido no
+    # Pal: a mão passa 133px do núcleo do corpo no extremo de fora, contra
+    # os 175px de folga que o plano fechado tem.
+    bal = 12.0 * math.sin(2 * math.pi * 1.8 * u * dur)
+    _braco(rig, "d", 64.0, -98.0 + bal * 0.6, bal * 2.2)
     return {}
 
 
@@ -568,7 +653,15 @@ def apontar_para_si(u, rig, dur, a):
 
 def comemorar(u, rig, dur, a):
     """Os dois braços para cima, com um quique. Fim feliz, ou ironia."""
-    k = _pulso(min(1.0, u * 1.3)) if u > 0.6 else _suave(min(1.0, u * 2.2))
+    # O QUIQUE NÃO PODE SER UM CORTE (31/08). Os dois ramos não se
+    # encontravam em u=0,6: o de baixo chega a 1,00 e o de cima começava em
+    # 0,64, e o braço andava 46 graus num único frame -- o "teletransporta"
+    # da queixa do dono do projeto, aqui dentro da própria ação e não em
+    # `aplicar`. Achado pela régua nova (`ferramentas/gesto.py`), que mede
+    # justamente isto. Agora o quique é uma cedida A PARTIR DO ALTO, e quem
+    # desce o braço no fim é a soltura.
+    k = _suave(min(1.0, u * 2.2)) if u <= 0.6 else \
+        1.0 - 0.30 * _pulso((u - 0.6) / 0.4)
     rig["braco_e"] = [90.0 + 128.0 * k, 20.0 * k]
     rig["braco_d"] = [90.0 - 128.0 * k, -20.0 * k]
     rig["quadril"] = [rig["quadril"][0], rig["quadril"][1] - 26.0 * k]
@@ -879,33 +972,157 @@ ACOES_QUE_FICAM = frozenset((
 ))
 
 
+def _percurso(antes, rig):
+    """Quantos graus o osso que mais andou andou, entre dois rigs.
+
+    O quadril fica de fora: ele é medido em pixels e quem o move é
+    locomoção, que não passa pelo envelope."""
+    pior = 0.0
+    for osso, v in rig.items():
+        if osso == "quadril":
+            continue
+        v0 = antes.get(osso)
+        if v0 is None:
+            continue
+        if isinstance(v, list) and isinstance(v0, list):
+            n = min(len(v), len(v0))
+            pior = max([pior] + [abs(v[i] - v0[i]) for i in range(n)])
+        elif isinstance(v, (int, float)) and isinstance(v0, (int, float)):
+            pior = max(pior, abs(v - v0))
+    return pior
+
+
+def _pesar(rig, antes, k, exceto=None):
+    """Mistura o rig com o de ANTES da ação: k=1 é a ação inteira, k=0 é
+    como se ela não tivesse acontecido.
+
+    É o que dá ao gesto um começo e um fim em vez de dois saltos. Mistura
+    osso a osso e só o que existe nos dois lados -- ação que criou um osso
+    novo (o `sobrancelha` do susto) entra inteira, porque não há de onde
+    interpolar.
+
+    OS BRAÇOS TÊM DOIS OU TRÊS NÚMEROS, e a primeira versão desta função
+    exigia o mesmo comprimento nos dois lados: o repouso traz
+    `[ombro, cotovelo]` e toda pose escrita com `_braco` traz
+    `[ombro, cotovelo, pulso]`. Com a igualdade exigida, NENHUM braço era
+    misturado -- a soltura existia e não fazia nada, e o salto continuava
+    inteiro. Falta de pulso é pulso zero, que é a mesma convenção de
+    `_braco`; os dois lados são completados com zero antes da conta."""
+    if k >= 0.999:
+        return
+    k = max(0.0, k)
+    for osso, v in list(rig.items()):
+        v0 = antes.get(osso)
+        if v0 is None or osso in (exceto or ()):
+            continue
+        if isinstance(v, list) and isinstance(v0, list):
+            n = max(len(v), len(v0))
+            a = (list(v0) + [0.0] * n)[:n]
+            b = (list(v) + [0.0] * n)[:n]
+            rig[osso] = [x + (y - x) * k for x, y in zip(a, b)]
+        elif isinstance(v, (int, float)) and isinstance(v0, (int, float)):
+            rig[osso] = v0 + (v - v0) * k
+
+
 def aplicar(acoes, t_rel, rig, dur_trecho):
     """Aplica, em ordem, todas as ações cuja janela contém t_rel (0..1) --
     e mantém a pose final das que são POSTURA e já terminaram.
 
-    Ordem = precedência: a última ação da lista escreve por cima. É como
-    "andar apontando" funciona -- `andar` mexe nos dois braços, `apontar`
-    vem depois e sobrescreve um deles. É também o que faz uma postura que
-    ficou ceder para a ação seguinte, sem regra nenhuma a mais.
+    Ordem = precedência: quem vem depois escreve por cima. É como "andar
+    apontando" funciona -- `andar` mexe nos dois braços, `apontar` vem
+    depois e sobrescreve um deles. É também o que faz uma postura que ficou
+    ceder para a ação seguinte, sem regra nenhuma a mais.
+
+    A PRECEDÊNCIA É CRONOLÓGICA, NÃO A DA LISTA (31/08). Quem COMEÇOU
+    depois escreve por cima, e a ordem da lista só desempata quem começa no
+    mesmo instante. Três razões, e a terceira é um defeito de verdade:
+
+      * a lista do roteirista não vem em ordem cronológica -- no v023 um
+        trecho traz `maos_na_cabeca` 0,6-1 antes de `maos_na_cintura`
+        0,05-0,32 --, e com a ordem da lista a pose velha ganhava da nova;
+      * `parado` e `gesticular` são injetados pelo motor com `de: 0`, então
+        eles continuam sendo a base da pilha de graça;
+      * com a ordem da lista, o VENCEDOR TROCAVA no instante em que uma
+        ação terminava: enquanto as duas estavam ativas mandava a de baixo
+        da lista, e quando ela virava "postura que ficou" a de cima
+        reassumia o braço -- um salto de 55 graus num frame, no meio da
+        fala. Ordenado pelo começo, nada troca de dono com o tempo.
     """
     cam = dict(CAM_NEUTRA)
-    for a in acoes or []:
-        f = CATALOGO.get(a.get("nome"))
+    pilha = []                              # (ordem, aplicação)
+    # SOLTURA E ATAQUE CORREM JUNTOS quando um gesto emenda no outro, e as
+    # duas rampas se somam -- o braço volta ao repouso em três frames em vez
+    # de sete. Tentei cortar a soltura de quem já tem sucessor e o resultado
+    # foi pior: o ataque do sucessor mistura A PARTIR do rig de agora, e sem
+    # a pose do antecessor nele o primeiro frame do sucessor vira o salto
+    # inteiro de volta. As duas rampas ficam; três frames de emenda é
+    # movimento desenhado, não corte (ver o teto de `ferramentas/gesto.py`).
+    for i_a, a in enumerate(acoes or []):
+        nome = a.get("nome")
+        f = CATALOGO.get(nome)
         if f is None:
             continue
         de = float(a.get("de", 0.0))
         ate = float(a.get("ate", 1.0))
-        if ate <= de or t_rel < de:
+        if ate <= de:
+            continue
+        env = nome not in SEM_ENVELOPE
+        so_membros = nome in SO_MEMBROS
+        if t_rel < de:
+            # A ENTRADA COMEÇA FORA DO QUADRO (31/08, defeito 5 dos vídeos).
+            #
+            # Enquanto a janela não chega, a ação não é aplicada e o ator
+            # fica no `x` de destino -- ou seja, DENTRO da cena, no lugar
+            # exato onde ele vai parar. Aí a janela abre, ele salta para a
+            # borda e entra andando: *"ele dá um teleporte para o local que
+            # ele vai estar quando terminar de entrar"*, com o salto visto
+            # do outro lado. Quem ainda vai entrar tem de estar FORA, e é o
+            # que o próprio u=0 da ação faz.
+            if nome in ACOES_DE_ENTRADA:
+                f(0.0, rig, dur_trecho * (ate - de), a)
             continue
         if t_rel > ate:
-            # já passou: só as posturas permanecem, e na pose final
-            if a.get("nome") not in ACOES_QUE_FICAM:
+            # QUEM SAIU CONTINUA FORA. `sair_andando` termina com o corpo
+            # na borda de fora, e largá-la ao fim da janela devolvia o ator
+            # ao lugar dele no frame seguinte -- 880px num frame, o
+            # teletransporte do defeito 5 pelo avesso. Ela fica pelo mesmo
+            # motivo que uma postura fica: onde o corpo ESTÁ é estado.
+            fica = nome in ACOES_QUE_FICAM or nome in ACOES_DE_SAIDA
+            sobra = (t_rel - ate) * dur_trecho
+            if not fica and (not env or sobra >= SOLTURA_MAX):
                 continue
-            u = 1.0
+            u, decorrido, passou = 1.0, sobra, True
+            env = env and not fica
         else:
             u = (t_rel - de) / (ate - de)
+            decorrido, passou = (t_rel - de) * dur_trecho, False
+        pilha.append(((de, i_a),
+                      (f, u, env, so_membros, decorrido, de, ate, a, passou)))
+
+    for _o, (f, u, env, so_membros, decorrido, de, ate, a, passou) in sorted(
+            pilha, key=lambda p: p[0]):
+        antes = None
+        if env:
+            antes = {o: (list(v) if isinstance(v, list) else v)
+                     for o, v in rig.items()}
         d = f(u, rig, dur_trecho * (ate - de), a) or {}
-        if t_rel > ate:
+        if antes is not None:
+            # A JANELA DO ENVELOPE SAI DO PERCURSO, não de uma constante:
+            # o braço tem uma velocidade máxima, e o tempo que ele leva
+            # depende de quanto ele tem de andar. Fixo em 0,28 s, uma troca
+            # de pose de 173 graus (largar o objeto e cruzar os braços, no
+            # v020) ainda dava 52 graus por frame; medido em velocidade, ela
+            # leva 0,36 s e nada mais estoura o teto da régua.
+            janela = _percurso(antes, rig) / VEL_MAX_GS
+            if passou:
+                janela = min(SOLTURA_MAX, max(SOLTURA_MIN, janela * 1.2))
+                peso = 1.0 - _suave(min(1.0, decorrido / janela))
+            else:
+                janela = min(ATAQUE_MAX, max(ATAQUE_MIN, janela))
+                peso = _suave(min(1.0, decorrido / janela))
+            _pesar(rig, antes, peso,
+                   exceto=("quadril",) if so_membros else None)
+        if passou:
             # a POSE fica; o que a ação pediu de CÂMERA, não. Zoom e
             # deslocamento de fundo são do instante em que a coisa
             # aconteceu -- congelar o zoom de um susto pelo resto do
