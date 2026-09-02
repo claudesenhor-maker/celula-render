@@ -655,17 +655,34 @@ def gesticular(u, rig, dur, a):
     f = max(0.0, min(1.6, float(a.get("forca", 1.0))))
     if f < 0.01:
         return {}
-    w = 2 * math.pi * 0.62 * u * dur          # ~0,6 gesto por segundo
+    # CADA UM GESTICULA NO SEU RITMO (02/09, item 1 do dono do projeto:
+    # *"personagens sempre acenam"*).
+    #
+    # Este gesto é injetado em QUEM FALA, em TODO trecho, e era idêntico
+    # para todo mundo: mesma frequência, mesma fase, mesma amplitude. Com
+    # dois em cena e o falante alternando, o espectador vê sempre o mesmo
+    # balanço de antebraço -- e é ele, muito mais que `acenar` (4,9% das
+    # ações), que lê como "eles estão sempre acenando".
+    #
+    # A semente vem do motor (o índice do ator em cena). Um desvio de ±18%
+    # na frequência e meia volta de fase bastam: duas pessoas nunca
+    # gesticulam em sincronia, e a mesma pessoa não repete o compasso do
+    # trecho anterior. A amplitude do antebraço caiu de 13 para 9 graus --
+    # gesto de quem conversa, não de quem sinaliza.
+    sem = float(a.get("semente", 0.0))
+    hz = 0.62 * (1.0 + 0.18 * math.sin(sem * 2.399))
+    fase = sem * 1.7
+    w = 2 * math.pi * hz * u * dur + fase     # ~0,6 gesto por segundo
     # Antebraços LEVEMENTE para dentro, subindo e descendo em contratempo.
     # A primeira versão dobrava 26 graus para dentro e as duas mãos se
     # encontravam na frente da barriga -- lido como mãos postas, ou pior,
     # como algemado. O limite é a mão não cruzar o eixo do corpo: o gesto
     # de quem conta um caso acontece na frente do PRÓPRIO ombro.
     _braco(rig, "e", 102.0 + 5.0 * f * math.sin(w),
-           92.0 - 13.0 * f * (0.5 + 0.5 * math.sin(w + 0.9)),
+           92.0 - 9.0 * f * (0.5 + 0.5 * math.sin(w + 0.9)),
            5.0 * f * math.sin(w + 1.6))
     _braco(rig, "d", 78.0 - 5.0 * f * math.sin(w + 2.3),
-           88.0 + 13.0 * f * (0.5 + 0.5 * math.sin(w + 3.1)),
+           88.0 + 9.0 * f * (0.5 + 0.5 * math.sin(w + 3.1)),
            -5.0 * f * math.sin(w + 3.9))
     return {}
 
