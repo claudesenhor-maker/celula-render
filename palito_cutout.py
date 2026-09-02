@@ -1291,8 +1291,30 @@ class Personagem:
                 vao = tipico
                 print(f"[personagem] '{nome}' sem vao medido; usando o tipico "
                       f"({tipico:.1f}px) para fechar a junta")
+            # O VÃO SE FECHA COM SOBRA, NÃO NA CONTA EXATA (01/09, volta 57).
+            #
+            # Era `vao/2 + 1` de cada lado: as duas vizinhas crescem metade
+            # do vão e se ENCOSTAM. Encostar basta enquanto a junta não
+            # gira. Ao girar, o que estava encostado passa a se tocar num
+            # ponto só, e num ângulo grande deixa de se tocar -- o antebraço
+            # da Vovó descola do braço em `maos_na_cabeca` e `comemorar`
+            # (`junta.py`, e visível no v057, num close, com a manga de
+            # tricô boiando ao lado do corpo).
+            #
+            # A própria docstring de `_fechar_vao` já dizia como cut-out de
+            # verdade resolve: *"as peças se sobrepõem, não se tangenciam"*.
+            # O código fazia o contrário. Fechar o vão INTEIRO de cada lado
+            # dá uma sobreposição de um vão, que é o que sobrevive à
+            # rotação -- e o anel cresce com a COR DO CONTORNO da própria
+            # peça, então a emenda continua lendo como linha, não como
+            # remendo.
+            #
+            # É proporcional ao vão MEDIDO, então continua sendo um número
+            # que vem do desenho: no Pal (vão de 5 a 6px) a diferença é de
+            # 3px para 6; na Vovó (8,6) é de 5 para 9; na enfermeira (13,6)
+            # de 8 para 14. Nada calibrado à mão, e vale para folha nova.
             im, pivo = _fechar_vao(im, self.pivos[nome],
-                                   int(round(vao / 2.0)) + 1 if vao > 0.5 else 0)
+                                   int(round(vao)) + 1 if vao > 0.5 else 0)
             # o tamanho ANTES de centralizar: _centralizar infla a peça até
             # um quadrado grande o bastante para qualquer rotação, então
             # `self.img[x].size` não serve de régua. A expressão facial mede
@@ -1929,8 +1951,9 @@ def desenhar_personagem(pers, rig, boca_nivel=0.0, piscando=False, objeto=None,
             colar(base, bimg, bpiv,
                   (pos[nome][0] + d[0], pos[nome][1] + d[1]), ang[nome])
 
-        # objeto: entra logo depois da mão que o segura, para ficar na
-        # frente dela. É o osso da mão que tornou isto possível.
+        # objeto: a POSIÇÃO sai da mão que o segura -- é o osso da mão que
+        # tornou isto possível --, mas o desenho vai por último (ver
+        # `_colar_objeto` no fim desta função).
         if objeto and objeto.get("img") is not None and nome == "mao_" + objeto.get("mao", "e"):
             oi = objeto["img"]
             opv = objeto.get("pivo") or _pivo_de_pega(oi)
@@ -1949,8 +1972,24 @@ def desenhar_personagem(pers, rig, boca_nivel=0.0, piscando=False, objeto=None,
             rad = math.radians(ang[nome])
             palma = (pos[nome][0] + math.cos(rad) * comp * 0.30,
                      pos[nome][1] + math.sin(rad) * comp * 0.30)
-            colar(base, oi, opv, palma, ang[nome],
-                  float(objeto.get("escala", 1.0)))
+            # GUARDADO PARA COLAR NO FIM, e não aqui.
+            #
+            # POR QUE (01/09, volta 36 do ciclo). `ORDEM_Z` desenha o braço
+            # DIREITO antes do esquerdo, e o objeto ia junto do direito --
+            # então o braço esquerdo passava por cima dele. No Pal isso
+            # nunca apareceu: os braços dele terminam afastados. Na Maya,
+            # `usar_objeto` junta as duas mãos à frente do peito e o
+            # esquerdo TAPA o objeto -- medido em `ferramentas/objeto.py`
+            # com a folha dela: celular 21% de visível, xícara 24%, chave
+            # 15%, contra 96% no Pal. Seis dos dez objetos reprovam.
+            #
+            # A correção não é reajustar a pose (ela foi calibrada por
+            # varredura, e uma varredura por personagem é a mesma armadilha
+            # de novo -- medir num e aplicar em todos). O que é geral: o que
+            # se SEGURA fica na frente. Ninguém segura uma xícara atrás do
+            # próprio braço.
+            objeto_colar = (oi, opv, palma, ang[nome],
+                            float(objeto.get("escala", 1.0)))
             if saida_pos is not None:
                 # ONDE O OBJETO FICOU, para a câmera não cortá-lo (31/08).
                 # A guarda de enquadramento passou a mirar o NÚCLEO do corpo
@@ -2220,8 +2259,11 @@ def montar_frame(camada, cenario, cam, quadril_x=W / 2, camadas=None,
     # A CAIXA QUE A CÂMERA OBEDECE: o núcleo de quem está sendo enquadrado,
     # mais o que ele estiver segurando. Medida UMA vez por frame e usada
     # pelas três guardas -- zoom, lateral e alto --, que antes cada uma
-    # media a sua (ver `caixa_do_nucleo`).
-    nucleo = _unir(caixa_do_nucleo(enquadrada), caixa_extra)
+    # media a sua (ver `caixa_do_nucleo`). Só quando há recorte: sem zoom
+    # nenhuma guarda tem o que fazer, e a conta custa uma varredura do alfa
+    # da tela inteira.
+    nucleo = _unir(caixa_do_nucleo(enquadrada), caixa_extra) \
+        if abs(z - 1.0) > 0.002 else None
     bb = None
     if camadas and z > 1.002:
         bb = nucleo
@@ -2447,13 +2489,29 @@ def _close_no_falante(i, n_trechos, n_atores):
     """
     if n_atores < 2 or n_trechos < 3:
         return False
-    if i == n_trechos - 2:
+    # O GANCHO FECHA (01/09, R1 do DIAGNOSTICO.md). Todo vídeo do canal
+    # abria em plano ABERTO -- dois bonecos em pé, de corpo inteiro, e a
+    # cara a ~7% da altura do quadro. Nos três primeiros segundos é onde a
+    # plataforma decide se distribui o vídeo, e é exatamente onde este
+    # formato mostrava menos. Fechar no trecho 0 não custa nada: o plano
+    # já existe, e o que muda é onde ele cai.
+    #
+    # Vem ANTES da regra do penúltimo porque num vídeo de 2 ou 3 trechos
+    # o trecho 0 seria `n_trechos - 2` e o gancho voltaria a abrir.
+    if i == 0:
+        return True
+    # e o trecho 1 ABRE, sempre. `i % 5 in (1, 4)` fechava justamente ele,
+    # e dois closes seguidos no começo apagam o corte que o gancho acabou
+    # de ganhar -- é a mesma razão pela qual o penúltimo abre antes da
+    # virada. Os closes restantes caem em 4, 6, 9, 11, que continuam
+    # pegando as duas paridades do falante (a regra do período ímpar).
+    if i == 1 or i == n_trechos - 2:
         return False
     return i % 5 in (1, 4) or i == n_trechos - 1
 
 
 def _enquadramento(i, n_trechos, n_atores, t, centro_corpo=None,
-                   close=False, centro_rosto=None):
+                   close=False, centro_rosto=None, teto_par=1.0):
     """Plano do trecho `i`: quanto a câmera fecha, e onde ela centra.
 
     POR QUE ISTO EXISTE
@@ -2523,8 +2581,37 @@ def _enquadramento(i, n_trechos, n_atores, t, centro_corpo=None,
     # Com dois em cena a variação de plano é OUTRA: é o close em quem fala
     # (1,90) alternando com o plano dos dois. Os degraus intermediários não
     # existem, e pedir o que não cabe só produz tremor.
+    #
+    # O QUE MUDOU EM 01/09 (volta 57): o plano do par deixou de ser a
+    # CONSTANTE 1,00 e passou a ser o que a largura MEDIDA dos dois
+    # comporta (`teto_par`, calculado uma vez por trecho a partir de
+    # `meia_esq`/`meia_dir`). A razão de 1,00 nunca foi estética -- era
+    # que nada acima de ~1,09 cabia com os dois a 496px um do outro. Com
+    # eles a ~346px (ABERTURA_DO_PAR) cabe bem mais, e a diferença é entre
+    # dois bonecos no rodapé e dois rostos legíveis.
+    #
+    # O NÚMERO VEM DE FORA E É FIXO DENTRO DO TRECHO -- é isso que separa
+    # esta correção do tremor do v018. Lá o valor era recalculado a cada
+    # frame pela guarda e oscilava 1,05/1,15/1,12; aqui ele é medido no
+    # repouso, uma vez, e a guarda por frame só age se alguma pose
+    # inesperada estourar.
+    #
+    # E O CICLO DE PLANOS DO PAR VOLTOU A EXISTIR, com DOIS degraus. Ele
+    # tinha sido desligado no v018 porque nada acima de ~1,09 cabia, e
+    # pedir o que não cabe produz tremor, não plano. Com o par a 622px em
+    # vez de 900, cabe -- e a alternância entre trechos é o CORTE que este
+    # formato não tem. Dois degraus e não cinco: a lição do v018 continua
+    # valendo, degrau intermediário com dois em cena é imperceptível.
     if n_atores > 1:
-        return 1.0 * (1.0 + 0.035 * max(0.0, min(1.0, t))), \
+        z = max(1.0, min(TETO_PAR, float(teto_par)))
+        # período 2 nos trechos do par. Ele não briga com o período 5 do
+        # close: o close tira o trecho do par, então a alternância aqui é
+        # sobre os que sobraram, e cair na mesma paridade duas vezes
+        # seguidas é o que dá o descanso (a lição do período ímpar do
+        # `_close_no_falante` é sobre quem FALA, e aqui não há falante).
+        if i % 2:
+            z = 1.0
+        return z * (1.0 + 0.035 * max(0.0, min(1.0, t))), \
             (0.5 if centro_corpo is None else
              max(0.0, min(1.0, float(centro_corpo))))
     teto = 1.60
@@ -2541,7 +2628,9 @@ def _enquadramento(i, n_trechos, n_atores, t, centro_corpo=None,
     meio = 1.0 + (teto - 1.0) * 0.5
     ciclo = (1.0, teto, 1.0 + (teto - 1.0) * 0.25, meio,
              1.0 + (teto - 1.0) * 0.75)
-    if i == n_trechos - 1:
+    if i == 0:
+        base = teto                     # o GANCHO fecha (ver _close_no_falante)
+    elif i == n_trechos - 1:
         base = teto                     # a virada fecha no rosto
     elif i == n_trechos - 2:
         base = ciclo[0]                 # e o trecho antes dela ABRE: sem o
@@ -2599,6 +2688,16 @@ def _rig_do_trecho(tr, t, pan_base, acoes_do_ator, x_base, falando=True):
             lista.append({"nome": "gesticular", "de": 0.0, "ate": 1.0,
                           "forca": ACOES.energia_gesto(tr.get("expressao"),
                                                        tr.get("intensidade", 1.0))})
+        else:
+            # QUEM ESCUTA TAMBÉM ESTÁ EM CENA (01/09, volta 57). Sem isto,
+            # em todo trecho um dos dois passa a fala inteira com os braços
+            # mortos ao lado do corpo -- e como o falante alterna, cada
+            # personagem fica assim metade do vídeo. `escutar` é de
+            # propósito muito menor que `gesticular`: quem escuta não pode
+            # disputar a atenção com quem fala.
+            lista.append({"nome": "escutar", "de": 0.0, "ate": 1.0,
+                          "forca": 0.7 + 0.3 * ACOES.energia_gesto(
+                              tr.get("expressao"), tr.get("intensidade", 1.0))})
         cam = ACOES.aplicar(lista + list(acoes_do_ator or []), t, rig, tr["dur"])
     else:
         p1 = merge(REST, POSES.get(tr.get("pose", "parado_falando"), {}),
@@ -2662,8 +2761,9 @@ def _carregar_elenco(spec, pasta_padrao):
         pasta = cfg.get("pasta") or os.path.join(pasta_padrao, "..", chave)
         # posições padrão bem separadas: duas pessoas no mesmo x viram uma
         # pessoa só com quatro braços
-        padrao = W * (0.5 if n_cena == 1 else 0.27 + 0.46 * (i % n_cena)
-                      / max(n_cena - 1, 1))
+        padrao = W * (0.5 if n_cena == 1 else
+                      (0.5 - ABERTURA_DO_PAR / 2.0)
+                      + ABERTURA_DO_PAR * (i % n_cena) / max(n_cena - 1, 1))
         p = Personagem(pasta)
         # A ESCALA VEM DE QUANTOS CABEM EM CENA, não de quantos existem no
         # vídeo. Com o elenco solto, `len(elenco)` pode ser seis, e usá-lo
@@ -2762,7 +2862,8 @@ def _posicionar(elenco, chaves):
     posto, pedidos = {}, {}
     for i, c in enumerate(chaves):
         pers, _x, dy = sub[c]
-        x = W * (0.5 if n == 1 else 0.27 + 0.46 * i / max(n - 1, 1))
+        x = W * (0.5 if n == 1 else (0.5 - ABERTURA_DO_PAR / 2.0)
+                 + ABERTURA_DO_PAR * i / max(n - 1, 1))
         posto[c] = (pers, x, dy)
         pedidos[c] = False
     return _afastar_o_bastante(posto, pedidos)
@@ -2815,6 +2916,35 @@ LIMIAR_CORPO = 0.45
 # O vão que fica entre dois corpos. Não é estética: encostado, o contorno
 # preto de um vira contorno do outro e os dois lêem como uma figura só.
 FOLGA_ENTRE_ATORES = 40.0
+# ONDE OS DOIS FICAM NO QUADRO -- e por que isto encolheu (01/09, volta 57).
+#
+# Eram 0,27 e 0,73, ou seja 496px entre os quadris num quadro de 1080. O
+# número foi escolhido no olho em 28/08, ANTES de existir `_separar` (a
+# guarda que mede colisão frame a frame) e antes de `_afastar_o_bastante`
+# (que abre as posições até os CORPOS MEDIDOS caberem). Escolhido no olho,
+# ele errou para o lado caro: com os dois tão longe um do outro, o núcleo
+# do par ocupa ~900 dos 1080px e NENHUM plano acima de ~1,09 cabe -- é a
+# aritmética do v018, e é ela que faz o plano aberto ser sempre o mesmo
+# plano aberto.
+#
+# O preço aparece na tira de rostos da volta 57: em oito dos doze quadros
+# os dois estão no rodapé, com a CARA a ~7% da altura do quadro e dois
+# terços de armário de cozinha em cima. Num telefone não se lê expressão
+# nenhuma ali -- e a cara é onde a piada acontece desde a volta 6.
+#
+# 0,34/0,66 dá ~346px entre os quadris. Isto NÃO é uma aposta: quem
+# garante que cabe é `_afastar_o_bastante`, que mede meia_esq e meia_dir
+# na arte de cada um e reabre para o mínimo se 346 for pouco. O número
+# aqui virou o PEDIDO; a medida continua sendo a garantia.
+ABERTURA_DO_PAR = 0.32
+# a margem que sobra de cada lado do par quando a câmera fecha nele. O
+# gesto pode encostar na borda (é o que um plano fechado faz), o TRONCO
+# não pode.
+MARGEM_LATERAL_PAR = 60.0
+# teto do plano do par. Acima disso a folha -- desenhada uma vez só --
+# começa a aparecer ampliada demais, e é o mesmo limite que segura
+# CLOSE_FALANTE em 1,90 com um corpo de 852px.
+TETO_PAR = 1.45
 
 
 def _medir_corpo(pers, img, bb):
@@ -3537,6 +3667,21 @@ def render(pasta_partes, spec, saida, tmpdir=None, amostra=0):
         # sempre. Decidido aqui porque depende de quantos estão em cena
         # AGORA, e isso muda de trecho para trecho (lei 10).
         fecha = _close_no_falante(i_tr, n_trechos, len(chaves))
+        # O PLANO DO PAR SAI DA LARGURA MEDIDA, e sai UMA VEZ por trecho.
+        # `meia_esq`/`meia_dir` são o núcleo de cada um, medidos na arte no
+        # frame de repouso (lei 33), então isto é a mesma disciplina da
+        # altura do ator (lei 38): o número vem do desenho, não de uma
+        # constante escolhida no olho. Fixo dentro do trecho porque o que
+        # produziu o tremor do v018 foi recalcular por frame.
+        teto_par = 1.0
+        if len(chaves) > 1:
+            esq = min(posto[c][1] - posto[c][0].meia_esq for c in chaves)
+            dir_ = max(posto[c][1] + posto[c][0].meia_dir for c in chaves)
+            largura = max(dir_ - esq, 1.0)
+            teto_par = W / (largura + 2.0 * MARGEM_LATERAL_PAR)
+            if i_tr == 0:
+                print(f"[camera] par ocupa {largura:.0f}px de {W}: "
+                      f"plano do par ate {min(TETO_PAR, teto_par):.2f}")
         # quem entrou agora não tem estado de objeto: a mão começa vazia
         for c in chaves:
             na_mao.setdefault(c, None)
@@ -3759,7 +3904,8 @@ def render(pasta_partes, spec, saida, tmpdir=None, amostra=0):
                 centro_rosto = (topo + (0.5 - 0.12) * hjan) / H
             z_tr, zy = _enquadramento(i_tr, n_trechos, len(chaves), t,
                                       centro_corpo, close=fecha,
-                                      centro_rosto=centro_rosto)
+                                      centro_rosto=centro_rosto,
+                                      teto_par=teto_par)
             cam["zoom"] = float(cam.get("zoom", 1.0)) * z_tr
             # A MIRA DA AÇÃO É RELATIVA AO CORPO, NÃO À TELA (29/08).
             #
@@ -3821,7 +3967,7 @@ def render(pasta_partes, spec, saida, tmpdir=None, amostra=0):
         # quem fala, e é o único jeito de ler no log que a alternância
         # aconteceu sem abrir o MP4.
         planos.append(
-            f"{_enquadramento(i_tr, n_trechos, len(chaves), 0.0, close=fecha)[0]:.2f}"
+            f"{_enquadramento(i_tr, n_trechos, len(chaves), 0.0, close=fecha, teto_par=teto_par)[0]:.2f}"
             + ("*" if fecha else ""))
         # O PAN DA CAMINHADA NÃO ATRAVESSA O CORTE. Ele acumulava de trecho
         # em trecho, de quando o fundo era um ladrilho infinito; agora cada
