@@ -2910,7 +2910,8 @@ def _enquadramento(i, n_trechos, n_atores, t, centro_corpo=None,
 
 
 # =====================================================================
-def _rig_do_trecho(tr, t, pan_base, acoes_do_ator, x_base, falando=True):
+def _rig_do_trecho(tr, t, pan_base, acoes_do_ator, x_base, falando=True,
+                   semente_gesto=0.0):
     """Ângulos do frame de UM ator. Dois caminhos:
 
     AÇÕES (novo)  -- verbos com janela, somados por cima do repouso.
@@ -2933,6 +2934,7 @@ def _rig_do_trecho(tr, t, pan_base, acoes_do_ator, x_base, falando=True):
         lista = [{"nome": "parado", "de": 0.0, "ate": 1.0}]
         if falando:
             lista.append({"nome": "gesticular", "de": 0.0, "ate": 1.0,
+                          "semente": semente_gesto,
                           "forca": ACOES.energia_gesto(tr.get("expressao"),
                                                        tr.get("intensidade", 1.0))})
         else:
@@ -4021,8 +4023,13 @@ def render(pasta_partes, spec, saida, tmpdir=None, amostra=0):
             rigs, cams = {}, {}
             for chave in chaves:
                 pers, x0, dy = posto[chave]
+                # A SEMENTE DO GESTO: quem é este ator, e em que trecho.
+                # Sem ela os dois gesticulam em sincronia e o mesmo ator
+                # repete o compasso trecho após trecho -- ver `gesticular`.
                 rig, c = _rig_do_trecho(tr, t, corte, por_ator[chave], x0,
-                                        falando=(chave == falante))
+                                        falando=(chave == falante),
+                                        semente_gesto=(chaves.index(chave)
+                                                       * 3.0 + i_tr))
                 # DOIS deslocamentos verticais, e a ordem importa:
                 #  `dy`      põe este ator na mesma linha dos outros
                 #            (_alinhar_pelos_pes, mede a folha de cada um);
