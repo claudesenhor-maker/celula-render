@@ -31,22 +31,62 @@ KEY = os.environ["SUPABASE_SERVICE_KEY"]
 BUCKET = os.environ.get("SUPABASE_BUCKET", "toonzueira")
 
 
-def subir(local, remoto, mime="video/mp4"):
+def subir(local, remoto, mime="video/mp4", tentativas=4):
+    """Sobe um arquivo para o Storage, COM TENTATIVAS.
+
+    POR QUE (02/09, volta 69)
+        O render terminou, o MP4 de 10,6 MB ficou pronto no runner, e o job
+        morreu num **504 Gateway Timeout** do Storage. Quinze minutos de
+        Action perdidos por uma falha transitoria de rede, sem uma unica
+        repeticao -- e o vazio que sobra no bucket vira, no lote, "nao
+        baixou o MP4: 400".
+
+        Este e o mesmo desenho de `E6` (o 413 depois de quinze minutos de
+        render): o passo mais caro do pipeline e o penultimo, e o ultimo
+        nao tinha rede de seguranca nenhuma. Nao ha nada a decidir aqui --
+        o arquivo existe e o servidor pediu para tentar de novo.
+
+    SO REPETE O QUE ADIANTA REPETIR. 5xx e timeout sao transitorios; 400,
+    401 e 413 sao permanentes (chave errada, nome invalido, arquivo grande
+    demais) e repetir so gasta minuto de Action e adia o diagnostico.
+    """
     dados = Path(local).read_bytes()
-    # PUT com x-upsert e o caminho que sobrescreve. POST devolve 400/409
-    # quando o objeto ja existe, e reprocessar o mesmo fila_id e comum.
-    r = requests.put(f"{SB}/storage/v1/object/{BUCKET}/{remoto}",
-                     data=dados,
-                     headers={"apikey": KEY, "Authorization": f"Bearer {KEY}",
-                              "Content-Type": mime, "x-upsert": "true"},
-                     timeout=300)
-    if r.status_code >= 400:
+    espera = 5
+    for k in range(tentativas):
+        try:
+            # PUT com x-upsert e o caminho que sobrescreve. POST devolve
+            # 400/409 quando o objeto ja existe, e reprocessar o mesmo
+            # fila_id e comum.
+            r = requests.put(f"{SB}/storage/v1/object/{BUCKET}/{remoto}",
+                             data=dados,
+                             headers={"apikey": KEY,
+                                      "Authorization": f"Bearer {KEY}",
+                                      "Content-Type": mime,
+                                      "x-upsert": "true"},
+                             timeout=300)
+        except requests.RequestException as e:
+            if k == tentativas - 1:
+                raise
+            print(f"[upload] rede caiu ({type(e).__name__}); "
+                  f"tentativa {k + 2} de {tentativas} em {espera}s")
+            time.sleep(espera)
+            espera *= 2
+            continue
+        if r.status_code < 400:
+            print(f"[upload] {r.status_code}  {len(dados)/1e6:.2f} MB"
+                  + (f"  (tentativa {k + 1})" if k else ""))
+            return f"{SB}/storage/v1/object/public/{BUCKET}/{remoto}"
         # sem o corpo da resposta, um 400 do Storage nao diz nada: pode ser
         # chave errada, bucket inexistente ou nome de objeto invalido
         print(f"[upload] {r.status_code} em {remoto}: {r.text[:400]}")
-        r.raise_for_status()
-    print(f"[upload] {r.status_code}  {len(dados)/1e6:.2f} MB")
-    return f"{SB}/storage/v1/object/public/{BUCKET}/{remoto}"
+        if r.status_code < 500 and r.status_code != 429:
+            r.raise_for_status()          # permanente: nao adianta insistir
+        if k == tentativas - 1:
+            r.raise_for_status()
+        print(f"[upload] transitorio; tentativa {k + 2} de {tentativas} "
+              f"em {espera}s")
+        time.sleep(espera)
+        espera *= 2
 
 
 def atualizar_fila(fila_id, campos):
