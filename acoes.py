@@ -122,7 +122,7 @@ SOLTURA_MIN, SOLTURA_MAX = 0.20, 0.55
 # anda fica no lugar e o fundo é que corre), então misturá-la é misturar só
 # a passada -- e uma passada que começa de uma vez é o mesmo salto de braço
 # por outro nome.
-SEM_ENVELOPE = frozenset(("parado", "gesticular", "virar"))
+SEM_ENVELOPE = frozenset(("parado", "gesticular", "escutar", "virar"))
 
 # ENTRAR E SAIR MISTURAM OS MEMBROS, NUNCA O LUGAR. A posição no mundo tem
 # de ser exata -- misturá-la faria o corpo aparecer no meio do caminho --,
@@ -141,6 +141,39 @@ def _suave(u):
 def _pulso(u):
     """0 -> 1 -> 0. Para ações de impacto, que vão e voltam."""
     return math.sin(math.pi * max(0.0, min(1.0, u)))
+
+
+# Quanto o gesto PASSA do alvo antes de assentar. 6% de um percurso de 90
+# graus são 5,4 graus -- invisível como erro, e é justamente ele que faz o
+# braço ler com peso.
+SOBRA_ATAQUE = 0.06
+FIM_DA_SOBRA = 0.78
+
+
+def _ataque(u):
+    """Ease-in-out que PASSA DO ALVO e volta (overshoot + settle).
+
+    POR QUE (01/09, volta 57)
+        `_suave` chega ao alvo e para, exatamente no alvo. Isso é o que um
+        computador faz e não é o que um corpo faz: uma massa que acelera
+        passa do ponto e assenta. Nos doze princípios da animação isso tem
+        nome -- *follow through* e *overlapping action* -- e a literatura
+        de percepção mostra que exagerar levemente a mecânica é o que faz
+        o movimento ser lido como VIVO, não como interpolado.
+
+        É a resposta mais barata que existe para "o vídeo é de gente
+        parada": não acrescenta ação nenhuma, não gasta LLM, não mexe no
+        roteiro. Só muda a CURVA com que as ações que já existem chegam.
+
+    A sobra é pequena de propósito (6%) e some até o fim da janela, então
+    a pose final continua sendo exatamente a que a ação escreveu -- o que
+    importa para `ACOES_QUE_FICAM`, que congela essa pose depois.
+    """
+    u = max(0.0, min(1.0, u))
+    if u <= FIM_DA_SOBRA:
+        return _suave(u / FIM_DA_SOBRA) * (1.0 + SOBRA_ATAQUE)
+    return (1.0 + SOBRA_ATAQUE) - SOBRA_ATAQUE * _suave(
+        (u - FIM_DA_SOBRA) / (1.0 - FIM_DA_SOBRA))
 
 
 # =====================================================================
@@ -520,7 +553,85 @@ def parado(u, rig, dur, a):
         vai montar a cavalo.
     """
     _pernas_retas(rig)
-    rig["cabeca"] = rig.get("cabeca", 0.0) + math.sin(2 * math.pi * 0.24 * u * dur) * 0.7
+    t = u * dur
+    rig["cabeca"] = rig.get("cabeca", 0.0) + math.sin(2 * math.pi * 0.24 * t) * 0.7
+    # RESPIRAÇÃO E TROCA DE APOIO (01/09, volta 57).
+    #
+    # A oscilação de cabeça acima é de 1980 e resolve "a imagem não está
+    # congelada". Não resolve "o corpo está vivo": na folha de contato da
+    # volta 57, doze quadros de dois idosos em pé, braços caídos, na mesma
+    # pose. O defeito está catalogado como `E8` desde 30/08 e a explicação
+    # aceita era a FORMA sorteada (uma ação por trecho). Ela é metade: a
+    # outra metade é que, fora de uma ação, o corpo não faz absolutamente
+    # nada -- e um corpo humano parado nunca está parado.
+    #
+    # São dois movimentos, os dois pequenos e os dois em frequências
+    # DIFERENTES, para não baterem em fase e virarem um balanço só:
+    #
+    #   * RESPIRAÇÃO, ~0,22 Hz, nos OMBROS. Ela não pode ir no quadril --
+    #     o quadril é a raiz e mover a raiz solta os pés do chão, que foi
+    #     o defeito de 26/08 ("ele fica flutuando"). O ombro é a junta que
+    #     sobe quando o peito enche, e mexê-la arrasta só o braço;
+    #   * TROCA DE APOIO, ~0,09 Hz (um ciclo a cada 11 s), no TRONCO. Quem
+    #     fica de pé muda o peso de perna de tempos em tempos, e é isso que
+    #     separa "de pé" de "empalhado". 0,6 grau é o bastante: o corpo
+    #     tem 850px de altura, então o topo da cabeça anda ~9px.
+    #
+    # Amplitudes escolhidas para caber MUITO abaixo do teto de `gesto.py`
+    # (480 graus/s): a respiração anda 1,1 grau por ciclo de 4,5 s.
+    rig["tronco"] = rig.get("tronco", -90.0) \
+        + math.sin(2 * math.pi * 0.09 * t + 1.1) * 0.6
+    resp = math.sin(2 * math.pi * 0.22 * t) * 0.55
+    for lado in ("e", "d"):
+        b = rig.get("braco_" + lado)
+        if isinstance(b, list) and b:
+            b[0] = b[0] + (resp if lado == "e" else -resp)
+    return {}
+
+
+def escutar(u, rig, dur, a):
+    """O corpo de quem NÃO está falando.
+
+    POR QUE ISTO EXISTE (01/09, volta 57)
+        `gesticular` é injetado em quem FALA, e só nele. Com dois em cena
+        isso quer dizer que, em todo trecho, UM dos dois atravessa a fala
+        inteira com os dois braços mortos ao lado do corpo -- e, como o
+        falante alterna, cada personagem passa metade do vídeo assim. Na
+        tira de rostos da volta 57 dá para ver: o que escuta está sempre
+        na mesma pose, do primeiro ao último quadro.
+
+        Não é um detalhe de acabamento. Numa conversa, quem escuta é
+        metade da cena, e quem escuta imóvel lê como boneco -- o que
+        estraga também a atuação de quem fala, porque ele parece falar
+        sozinho para um manequim.
+
+    O QUE ELA FAZ, E POR QUE É TÃO POUCO
+        Um ACENO DE CABEÇA lento, e um leve balanço do antebraço. Nada
+        mais: quem escuta não pode competir com quem fala pela atenção --
+        o olho vai para o que se mexe mais, e se o ouvinte gesticular
+        junto a cena vira duas pessoas falando ao mesmo tempo.
+
+        Fica na BASE da pilha, como `gesticular`: qualquer ação que o
+        roteirista tenha escrito para o ouvinte ganha dela.
+
+    A cabeça balança em torno de 0,31 Hz -- devagar o bastante para ler
+    como concordância, e primo com a respiração de `parado` (0,22) para os
+    dois não entrarem em fase.
+    """
+    f = max(0.0, min(1.5, float(a.get("forca", 1.0))))
+    if f < 0.01:
+        return {}
+    t = u * dur
+    # o aceno não é senoidal puro: um seno passa metade do tempo com a
+    # cabeça para trás, o que lê como estranheza. Elevado ao quadrado com
+    # sinal, ele desce rápido e volta devagar, que é como se acena.
+    s = math.sin(2 * math.pi * 0.31 * t)
+    rig["cabeca"] = rig.get("cabeca", 0.0) + abs(s) * s * 2.6 * f
+    w = 2 * math.pi * 0.17 * t
+    for lado in ("e", "d"):
+        b = rig.get("braco_" + lado)
+        if isinstance(b, list) and len(b) >= 2:
+            b[1] = b[1] + math.sin(w + (0.0 if lado == "e" else 2.4)) * 3.2 * f
     return {}
 
 
@@ -850,6 +961,7 @@ CATALOGO = {
     "virar": virar,
     "parado": parado,
     "gesticular": gesticular,
+    "escutar": escutar,
     "pegar_objeto": pegar_objeto,
     "mostrar_objeto": mostrar_objeto,
     "usar_objeto": usar_objeto,
@@ -1119,7 +1231,7 @@ def aplicar(acoes, t_rel, rig, dur_trecho):
                 peso = 1.0 - _suave(min(1.0, decorrido / janela))
             else:
                 janela = min(ATAQUE_MAX, max(ATAQUE_MIN, janela))
-                peso = _suave(min(1.0, decorrido / janela))
+                peso = _ataque(min(1.0, decorrido / janela))
             _pesar(rig, antes, peso,
                    exceto=("quadril",) if so_membros else None)
         if passou:
