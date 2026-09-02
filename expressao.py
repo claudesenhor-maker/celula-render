@@ -278,6 +278,37 @@ PROSODIA = {
 }
 
 
+# O QUANTO A EMOÇÃO PODE MEXER NA VOZ (02/09, item 3 do dono do projeto:
+# *"mesmo personagem e a voz altera muito durante a fala, parece outra
+# pessoa falando"*).
+#
+# A queixa está certa e o número mostra por quê. `intensidade` chega a 1,6
+# (ela virou fração do progresso em 30/08, então cresce ao longo do vídeo),
+# e a tabela acima é multiplicada por ela. Entre duas falas seguidas do
+# MESMO personagem, ir de `triste` para `chocado` dá:
+#
+#     rate    -22%  ->  +32%     (54 pontos de diferença)
+#     pitch   -22Hz ->  +48Hz    (70 Hz de diferença)
+#
+# Setenta hertz é mais que a distância entre muitas vozes masculinas e
+# femininas. Não é "o personagem se emocionou": é outro falante.
+#
+# A distinção que resolve, e ela é sobre percepção de fala e não sobre
+# código: **o TOM carrega a identidade do falante; a VELOCIDADE e o VOLUME
+# carregam a emoção.** A frequência fundamental é o traço que o ouvinte usa
+# para reconhecer quem está falando, e é justamente o que estava variando
+# mais. Então o tom fica com um teto apertado e a velocidade continua com
+# folga -- a emoção não se perde, ela passa a ser dita pelo instrumento
+# certo.
+TETO_PITCH_HZ = 10.0
+TETO_RATE_PCT = 20.0
+TETO_VOLUME_PCT = 8.0
+
+
+def _limitar(v, teto):
+    return max(-teto, min(teto, v))
+
+
 def _sinal(v, unidade):
     return f"{v:+.0f}{unidade}"
 
@@ -294,7 +325,14 @@ def prosodia(nome, intensidade=1.0, base=None):
     cfg = dict(base or {})
     dr, dp, dv = PROSODIA.get(normalizar(nome), (0, 0, 0))
     k = max(0.0, min(1.6, float(intensidade)))
-    dr, dp, dv = dr * k, dp * k, dv * k
+    # O TETO É APLICADO DEPOIS DA INTENSIDADE (02/09). Antes, `intensidade`
+    # multiplicava livremente e o desvio saía sem limite nenhum -- ver a
+    # nota em TETO_PITCH_HZ. O teto é do DESVIO da emoção; o perfil de voz
+    # do personagem (`base`) não é tocado, e continua sendo ele quem diz
+    # quem está falando.
+    dr = _limitar(dr * k, TETO_RATE_PCT)
+    dp = _limitar(dp * k, TETO_PITCH_HZ)
+    dv = _limitar(dv * k, TETO_VOLUME_PCT)
 
     def _num(txt, unidade):
         try:
