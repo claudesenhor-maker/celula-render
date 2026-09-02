@@ -1189,6 +1189,30 @@ def _cor_da_pele(img):
     return tuple(int(v) for v in np.median(base, axis=0))
 
 
+# QUANTO DO VÃO CADA PEÇA FECHA, e por que este número foi medido duas
+# vezes (01/09, voltas 57 e 58).
+#
+# Era 0,5: as duas vizinhas cresciam METADE do vão e ficavam encostadas.
+# Encostar basta enquanto a junta não gira; girando, elas se tocam num
+# ponto só e num ângulo grande deixam de se tocar -- o antebraço da Vovó
+# boiando ao lado do corpo num close do v057.
+#
+# A primeira correção foi para 1,0 (vão inteiro de cada lado, sobreposição
+# de um vão), e ela resolveu a junta -- `junta.py` foi de 2 para 1 na
+# senhora e os dez passam. Só que o anel cresce com a COR DO CONTORNO, e
+# no v058 ele apareceu: na Maria, de camisa azul lisa e calça clara, o
+# ombro, o cotovelo e o JOELHO ganharam uma faixa preta grossa que lê como
+# tira, não como traço. Na senhora não se via, porque o tricô é ocupado --
+# arte de padrão esconde a emenda, arte de cor chapada denuncia.
+#
+# 0,75 é o meio-termo MEDIDO, não escolhido: dá sobreposição de meio vão
+# (~6px na Maria, ~10 na enfermeira), que é o que sobrevive à rotação, com
+# um anel 25% mais fino. O teste é `junta.py` no elenco inteiro: se algum
+# personagem voltar a dar 2, este número sobe de novo -- junta aberta é
+# defeito, anel grosso é feiúra, e nessa ordem.
+FECHO_DO_VAO = 0.75
+
+
 def _fechar_vao(img, pivot, px):
     """Engrossa a peça `px` pixels com a cor do próprio contorno.
 
@@ -1314,7 +1338,8 @@ class Personagem:
             # 3px para 6; na Vovó (8,6) é de 5 para 9; na enfermeira (13,6)
             # de 8 para 14. Nada calibrado à mão, e vale para folha nova.
             im, pivo = _fechar_vao(im, self.pivos[nome],
-                                   int(round(vao)) + 1 if vao > 0.5 else 0)
+                                   int(round(vao * FECHO_DO_VAO)) + 1
+                                   if vao > 0.5 else 0)
             # o tamanho ANTES de centralizar: _centralizar infla a peça até
             # um quadrado grande o bastante para qualquer rotação, então
             # `self.img[x].size` não serve de régua. A expressão facial mede
