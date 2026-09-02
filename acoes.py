@@ -896,6 +896,150 @@ def largar_objeto(u, rig, dur, a):
     return {}
 
 
+# =====================================================================
+# INTERAÇÃO — as ações que envolvem O OUTRO PERSONAGEM
+# =====================================================================
+# POR QUE ESTA FAMÍLIA EXISTE (02/09, item 1 do dono do projeto:
+# *"personagens sempre acenam, a movimentação está fechada; o certo seria
+# alterar conforme o roteiro... faça vários tipos: pulo, andar, acenar,
+# high five, falar, usar objeto, bater no outro personagem"*).
+#
+# Medido nos 59 specs já produzidos: o catálogo É usado, e com variedade --
+# 24 ações diferentes, 2,33 por trecho, nenhum trecho vazio. O que a medida
+# mostrou é outra coisa, e explica a queixa melhor que "o catálogo é
+# pequeno":
+#
+#     das 1361 ações, ~60% são POSE DE BRAÇO de um personagem sozinho
+#     (apontar 17,6%, mostrar_objeto 11,5%, encolher_ombros 8,6%,
+#      maos_na_cabeca 6,9%, maos_na_cintura 5,6%, cocar_cabeca 5,2%,
+#      acenar 4,9%, negar 3,7%, ...)
+#
+# e, sobretudo: **NENHUMA ação do catálogo tocava no outro personagem.**
+# `entregar_objeto` era a única que sequer o alcançava, e ela nunca foi
+# usada em 59 vídeos. Duas pessoas dividem o quadro e gesticulam cada uma
+# para o nada -- é isso que lê como "sempre acenam", mesmo com o vocabulário
+# variando.
+#
+# COMO ELAS SABEM ONDE ESTÁ O OUTRO
+# O roteirista não sabe de que lado cada um está -- e não deve saber, é
+# divisão de quadro, não encenação (é a mesma razão de `mao_de_fora`). O
+# motor injeta `lado_alvo` (+1 se o outro está à direita, -1 se à esquerda)
+# uma vez por trecho, e as ações abaixo se escrevem em função dele.
+ACOES_DE_INTERACAO = ("high_five", "cutucar", "empurrar", "bater_no_outro",
+                      "apertar_mao")
+
+
+def _para_o_outro(ang, lado):
+    """Espelha um ângulo de tela quando o outro está à esquerda.
+
+    Os ângulos das poses abaixo são escritos como se o parceiro estivesse à
+    DIREITA (0 = direita, -90 = cima). Refletir no eixo vertical é
+    `180 - ang`, e é isso que faz a mesma pose servir dos dois lados sem
+    ninguém escrever duas versões."""
+    return ang if lado >= 0 else 180.0 - ang
+
+
+def _lado_e_mao(a):
+    """(+1/-1, 'd'/'e') -- para que lado está o outro, e que braço usar.
+
+    Sem `lado_alvo` a ação ainda funciona: ela assume o parceiro à direita,
+    que é o que acontece num monólogo (ninguém para alcançar) e não quebra
+    nada. Quem injeta o valor de verdade é o motor."""
+    lado = 1.0 if float(a.get("lado_alvo", 1)) >= 0 else -1.0
+    return lado, ("d" if lado > 0 else "e")
+
+
+def high_five(u, rig, dur, a):
+    """Bate na mão do outro, no alto.
+
+    A mão sobe acima da cabeça e vai ao ENCONTRO do parceiro -- é o único
+    gesto do catálogo em que os dois corpos se apontam. Vai e volta
+    (`_pulso`), porque high five não é uma pose: é um impacto.
+
+    O braço que sobe é o de DENTRO, ao contrário de tudo o mais aqui: para
+    as duas mãos se encontrarem no meio do quadro, cada um tem de erguer o
+    braço voltado para o outro. É a exceção que confirma `mao_de_fora` --
+    lá o objeto tem de ficar longe do parceiro, aqui ele É o parceiro.
+    """
+    lado, mao = _lado_e_mao(a)
+    p = _pulso(u)
+    # -58 é a diagonal para cima e para o lado do outro; o antebraço sobe
+    # mais que o ombro, senão a mão fica na altura do peito e o gesto lê
+    # como cumprimento, não como high five.
+    _braco(rig, mao, _para_o_outro(-42.0, lado), _para_o_outro(-72.0, lado),
+           0.0, _suave(min(1.0, u * 2.2)))
+    # o corpo acompanha um pouco: um high five move o tronco
+    rig["tronco"] = rig.get("tronco", -90.0) + lado * 4.0 * p
+    return {"zoom": 1.0 + 0.03 * p}
+
+
+def bater_no_outro(u, rig, dur, a):
+    """Um tapa no ombro do outro -- de leve, duas vezes.
+
+    É a ação que o dono do projeto pediu por último e a que mais muda a
+    leitura da cena: dois personagens que se TOCAM param de parecer dois
+    monólogos lado a lado. De leve de propósito: o humor da casa é o do
+    sujeito que se ferra sozinho (lei 30), e violência de verdade troca o
+    alvo da piada.
+
+    O braço sobe e desce num arco em direção ao parceiro, duas vezes na
+    janela -- um tapa só se perde numa amostra e lê como braço solto.
+    """
+    lado, mao = _lado_e_mao(a)
+    fase = math.sin(2 * math.pi * (u * 2.0) - math.pi / 2) * 0.5 + 0.5
+    sup = -34.0 + 62.0 * fase          # de erguido a horizontal
+    _braco(rig, mao, _para_o_outro(sup, lado),
+           _para_o_outro(sup + 16.0, lado), 0.0,
+           _suave(min(1.0, u * 3.0)))
+    return {"tremor": 0.4 * _pulso(u)}
+
+
+def cutucar(u, rig, dur, a):
+    """Cutuca o outro com o dedo, duas vezes.
+
+    O braço fica horizontal na direção do parceiro e o antebraço avança e
+    volta. É o gesto de quem cobra -- e ele existe porque `apontar` (17,6%
+    das ações de todo o canal) aponta para o NADA: aqui o alvo é uma
+    pessoa, e o corpo diz isso."""
+    lado, mao = _lado_e_mao(a)
+    jab = math.sin(2 * math.pi * (u * 2.0)) * 0.5 + 0.5
+    _braco(rig, mao, _para_o_outro(8.0, lado),
+           _para_o_outro(-6.0 - 14.0 * jab, lado), 0.0,
+           _suave(min(1.0, u * 3.0)))
+    rig["tronco"] = rig.get("tronco", -90.0) + lado * 2.5 * jab
+    return {}
+
+
+def empurrar(u, rig, dur, a):
+    """Empurra o outro com as duas mãos.
+
+    Os dois braços vão para a frente na direção do parceiro e o tronco se
+    inclina junto -- empurrar com o braço e o corpo parado lê como quem
+    apresenta um produto. `_pulso` porque o empurrão tem impacto e recuo."""
+    lado, _mao = _lado_e_mao(a)
+    p = _pulso(u)
+    k = _suave(min(1.0, u * 2.4))
+    for m, base in (("d", 12.0), ("e", -6.0)):
+        _braco(rig, m, _para_o_outro(base, lado),
+               _para_o_outro(base - 8.0 - 10.0 * p, lado), 0.0, k)
+    rig["tronco"] = rig.get("tronco", -90.0) + lado * 7.0 * p
+    return {"tremor": 0.6 * p, "zoom": 1.0 + 0.02 * p}
+
+
+def apertar_mao(u, rig, dur, a):
+    """Aperta a mão do outro: braço na direção dele, na altura da cintura,
+    subindo e descendo devagar.
+
+    É o gesto de acordo -- e num canal em que quase toda esquete termina em
+    alguém sendo passado para trás, ele serve de ironia física."""
+    lado, mao = _lado_e_mao(a)
+    bal = math.sin(2 * math.pi * (u * 1.6)) * 6.0
+    _braco(rig, mao, _para_o_outro(38.0 + bal, lado),
+           _para_o_outro(14.0 + bal, lado), 0.0,
+           _suave(min(1.0, u * 2.4)))
+    return {}
+
+
 # quais ações põem e quais tiram o objeto da mão. O motor lê esta lista,
 # não o nome da ação, para não espalhar string mágica pelo render.
 ACOES_PEGAM_OBJETO = ("pegar_objeto", "mostrar_objeto", "usar_objeto",
@@ -962,6 +1106,12 @@ CATALOGO = {
     "parado": parado,
     "gesticular": gesticular,
     "escutar": escutar,
+    # as que tocam no OUTRO personagem (02/09, item 1)
+    "high_five": high_five,
+    "bater_no_outro": bater_no_outro,
+    "cutucar": cutucar,
+    "empurrar": empurrar,
+    "apertar_mao": apertar_mao,
     "pegar_objeto": pegar_objeto,
     "mostrar_objeto": mostrar_objeto,
     "usar_objeto": usar_objeto,
