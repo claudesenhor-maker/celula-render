@@ -261,6 +261,47 @@ def _cor_da_casca(img):
     return tuple(int(v) for v in np.median(a[anel][:, :3], axis=0))
 
 
+def _cor_de_dentro(img, ponto=None, raio=26):
+    """A cor do PREENCHIMENTO da peça, perto de `ponto`.
+
+    POR QUE (02/09, item 6 do dono do projeto)
+        `_fechar_vao` pintava o anel com a cor do CONTORNO, e o resultado
+        na tela é uma faixa escura em toda junta -- o joelho, o punho e o
+        quadril da Maria leem como tiras sobre a calça clara. A queixa foi
+        literal: *"linhas muito grossas nos personagens"*.
+
+        O anel existe para as duas peças vizinhas se SOBREPOREM, não para
+        desenhar linha. Pintado com a cor de dentro, o vão fecha com a cor
+        do braço ou da calça, o contorno preto que a arte já tem continua
+        por cima, e a junta lê como membro contínuo -- que é como cut-out
+        de verdade emenda duas peças.
+
+    Amostrada PERTO DA JUNTA e não na peça inteira: uma calça com barra de
+    outra cor, ou uma manga sobre pele, tem duas cores, e a que interessa é
+    a que está encostando na vizinha. Sem ponto, é a mediana do miolo.
+    """
+    a = np.asarray(img.convert("RGBA"))
+    al = a[..., 3]
+    miolo = np.asarray(img.split()[3].filter(ImageFilter.MinFilter(7))) > 128
+    if not miolo.any():
+        miolo = al > 128
+    if not miolo.any():
+        return (200, 200, 200)
+    lum = a[..., :3].astype(np.float32).mean(axis=2)
+    # o contorno fica de fora: o que se quer é a cor de dentro, e num
+    # desenho de traço grosso o preto domina a mediana se entrar na conta
+    claro = miolo & (lum > 90)
+    alvo = claro if claro.sum() > 40 else miolo
+    if ponto is not None:
+        ys, xs = np.nonzero(alvo)
+        d = (xs - ponto[0]) ** 2 + (ys - ponto[1]) ** 2
+        perto = d <= raio * raio * 4
+        if perto.sum() > 30:
+            return tuple(int(v) for v in
+                         np.median(a[ys[perto], xs[perto]][:, :3], axis=0))
+    return tuple(int(v) for v in np.median(a[alvo][:, :3], axis=0))
+
+
 def _e_fiapo(img, limiar=0.22):
     """A peça é uma mancha cheia ou um pedaço de contorno?
 
@@ -1213,8 +1254,13 @@ def _cor_da_pele(img):
 FECHO_DO_VAO = 0.75
 
 
-def _fechar_vao(img, pivot, px):
-    """Engrossa a peça `px` pixels com a cor do próprio contorno.
+def _fechar_vao(img, pivot, px, juntas=None):
+    """Engrossa a peça `px` pixels com a cor do próprio contorno, PERTO DAS
+    JUNTAS.
+
+    `juntas` são os pontos, nas coordenadas da própria arte, em que esta
+    peça encosta em outra: o pivô dela e as saídas dos filhos. Sem a lista,
+    engrossa a peça inteira, que é o comportamento antigo.
 
     POR QUE (defeito visto no run #13 e explicado só agora)
         A folha é um BONECO DE PAPEL: cada parte tem contorno próprio e um
@@ -1236,14 +1282,79 @@ def _fechar_vao(img, pivot, px):
         verdade resolve: as peças se sobrepõem, não se tangenciam.
 
     O pivô não se mexe em relação ao desenho -- a peça cresce em volta
-    dele --, então nenhuma medida da folha é invalidada."""
+    dele --, então nenhuma medida da folha é invalidada.
+
+    O ANEL SÓ EXISTE PERTO DAS JUNTAS (02/09, item 6 do dono do projeto:
+    *"linhas muito grossas nos personagens, e não são constantes; afine
+    essa linha e torne padrão o contorno externo das peças"*).
+
+    A queixa está certa e a causa é esta função. `ferramentas/contorno.py`
+    mediu as duas parcelas separadas:
+
+        arte de origem   3 a 6 px, e CONSISTENTE entre os dez
+        anel de _fechar_vao   5 a 11 px, proporcional ao vão medido
+
+    Ou seja: o contorno que se vê é dominado pelo anel, e ele varia DUAS
+    VEZES de um personagem para o outro -- palavra por palavra a queixa.
+
+    O erro de projeto é engrossar a peça INTEIRA quando o problema é só a
+    JUNTA. O vão a fechar existe no ombro, no cotovelo, no punho, no
+    quadril, no joelho e no tornozelo; na silhueta -- as costas, a barriga,
+    o alto da cabeça -- não há vizinha nenhuma e o anel só engorda a linha.
+
+    Então o anel passa a ser recortado por uma máscara: discos em volta do
+    PIVÔ da peça (por onde ela se prende ao pai) e de cada SAÍDA (por onde
+    os filhos se prendem nela). Fora desses discos, a arte sai como foi
+    desenhada, e o contorno externo volta a ser o da folha -- que já é
+    padrão.
+
+    Isto NÃO é o "disco de articulação" que foi tentado e revertido em
+    28/08. Aquele desenhava um disco da COR DA PEÇA POR CIMA, e ele
+    aparecia por fora dos tornozelos. Aqui não se desenha nada por cima: a
+    dilatação que já existia é que fica limitada à vizinhança da junta, e a
+    arte original continua por último.
+    """
     if px <= 0:
         return img, pivot
     m = int(px)
     tela = Image.new("RGBA", (img.width + 2 * m, img.height + 2 * m), (0, 0, 0, 0))
     tela.alpha_composite(img, (m, m))
     alfa = tela.split()[3].filter(ImageFilter.MaxFilter(2 * m + 1))
-    grossa = Image.new("RGBA", tela.size, _cor_da_casca(img) + (255,))
+    if juntas:
+        # O raio cobre o vão inteiro mais a folga da rotação. Generoso o
+        # bastante para a junta nunca abrir, pequeno o bastante para não
+        # alcançar a silhueta: uma junta de 10px de vão pede ~34px de
+        # disco, e a peça mais estreita do rig (a mão) tem ~90px.
+        # O RAIO ESCALA COM A PEÇA (02/09). Com um raio constante de 12 e
+        # depois de 22, o astronauta descolava em TODAS as dez poses,
+        # `parado` inclusive, e a mancha solta era o CRÂNIO: o capacete dele
+        # é uma peça de 256px e o pescoço fica longe do pivô, então um disco
+        # dimensionado para uma mão de 84px não alcança a região em que as
+        # duas peças se encontram.
+        #
+        # A vizinhança de uma junta não é uma distância fixa em pixels -- é
+        # uma fração da peça. 22% do lado menor cobre o pescoço de um
+        # capacete e continua sendo um disco pequeno numa mão. O contorno
+        # externo não engorda por isso: o que importa é o disco NÃO alcançar
+        # a silhueta, e a silhueta de uma peça grande está longe do seu
+        # pivô exatamente na mesma proporção.
+        raio = max(22.0, m * 4.0, 0.22 * min(img.width, img.height))
+        mascara = Image.new("L", tela.size, 0)
+        d = ImageDraw.Draw(mascara)
+        for (jx, jy) in juntas:
+            cx, cy = jx + m, jy + m
+            d.ellipse([cx - raio, cy - raio, cx + raio, cy + raio], fill=255)
+        alfa = Image.composite(alfa, tela.split()[3], mascara)
+        # O ANEL É DA COR DE DENTRO, NÃO DA COR DO CONTORNO (02/09). Ver
+        # `_cor_de_dentro`: pintado de escuro, cada junta virava uma faixa
+        # preta sobre a calça clara; pintado com a cor do preenchimento, o
+        # vão fecha com a cor do próprio membro e o traço que a arte já tem
+        # continua por cima. Só vale com a máscara: sem ela o anel claro
+        # apareceria em volta da peça inteira, como um halo.
+        cor = _cor_de_dentro(img, ponto=juntas[0])
+    else:
+        cor = _cor_da_casca(img)
+    grossa = Image.new("RGBA", tela.size, cor + (255,))
     grossa.putalpha(alfa)
     grossa.alpha_composite(tela)          # a arte original por cima do anel
     return grossa, (pivot[0] + m, pivot[1] + m)
@@ -1337,9 +1448,19 @@ class Personagem:
             # que vem do desenho: no Pal (vão de 5 a 6px) a diferença é de
             # 3px para 6; na Vovó (8,6) é de 5 para 9; na enfermeira (13,6)
             # de 8 para 14. Nada calibrado à mão, e vale para folha nova.
+            # OS PONTOS EM QUE ESTA PEÇA ENCOSTA EM OUTRA: o pivô dela (por
+            # onde ela se prende ao pai) e cada saída (por onde um filho se
+            # prende nela). É só perto deles que o anel precisa existir.
+            juntas = [tuple(self.pivos[nome])]
+            for _f, ponto in (self.saidas.get(nome) or {}).items():
+                try:
+                    juntas.append((float(ponto[0]), float(ponto[1])))
+                except (TypeError, IndexError, ValueError):
+                    pass
             im, pivo = _fechar_vao(im, self.pivos[nome],
                                    int(round(vao * FECHO_DO_VAO)) + 1
-                                   if vao > 0.5 else 0)
+                                   if vao > 0.5 else 0,
+                                   juntas=juntas)
             # o tamanho ANTES de centralizar: _centralizar infla a peça até
             # um quadrado grande o bastante para qualquer rotação, então
             # `self.img[x].size` não serve de régua. A expressão facial mede
@@ -1633,6 +1754,51 @@ class Personagem:
         maior ou menor, a cara continua na mesma proporção sem ninguém
         reajustar constante nenhuma."""
         return float(self.tam.get("cranio", (1, 120))[1])
+
+    def fracao_da_palma(self, nome):
+        """Onde fica a PALMA dentro da peça da mão, em fração do osso.
+
+        POR QUE (02/09, item 4 do dono do projeto: *"personagem segurando
+        celular pelo pulso"*)
+            O motor colava o objeto a **0,30** do comprimento da mão a
+            partir do pivô, e o pivô é o PUNHO. Medido nas quatro folhas
+            disponíveis, o centro de massa da mão está a **0,42 a 0,47**:
+
+                pal      0,47 / 0,46      maria    0,43 / 0,42
+                senhora  0,46 / 0,44      soldado  0,44 / 0,43
+
+            Ou seja, a fração cravada punha o objeto a um terço do caminho
+            entre o punho e a ponta dos dedos -- que é, literalmente,
+            segurar pelo pulso.
+
+        A fração passa a ser MEDIDA na arte, como o pivô, a linha do chão e
+        a altura do ator: ela sai do desenho e vale para qualquer folha
+        nova, sem ninguém recalibrar (é a exigência do dono do projeto de
+        que nada seja calibrado à mão por personagem).
+
+        O limite existe para arte estranha: uma mão desenhada como um
+        risco daria um centro de massa colado no pivô ou além da ponta, e
+        os dois extremos são piores que o palpite.
+        """
+        f = getattr(self, "_frac_palma", None)
+        if f is None:
+            f = self._frac_palma = {}
+        if nome in f:
+            return f[nome]
+        valor = 0.44
+        try:
+            img, piv = self.p(nome)
+            a = np.asarray(img)[..., 3] > 128
+            ys, xs = np.nonzero(a)
+            comp = float(self.comp.get(nome, 0.0))
+            if len(ys) and comp > 1.0:
+                d = math.hypot(float(xs.mean()) - piv[0],
+                               float(ys.mean()) - piv[1])
+                valor = max(0.30, min(0.60, d / comp))
+        except Exception:                                     # noqa: BLE001
+            pass
+        f[nome] = valor
+        return valor
 
     def variar(self, nome, sx, sy):
         """A peça reescalada em x e y, com o pivô acompanhando.
@@ -1928,6 +2094,9 @@ def desenhar_personagem(pers, rig, boca_nivel=0.0, piscando=False, objeto=None,
         saida_pos.update(pos)
 
     # --- desenho, de trás para frente
+    # O QUE ESTÁ NA MÃO É DESENHADO POR ÚLTIMO, e por isso ele é guardado
+    # aqui e colado depois do laço (ver o fim desta função).
+    objeto_colar = None
     for nome in ORDEM_Z:
         if nome not in pos or not pers.tem(nome):
             continue
@@ -1993,10 +2162,16 @@ def desenhar_personagem(pers, rig, boca_nivel=0.0, piscando=False, objeto=None,
             # baixo, isso põe o objeto abaixo da mão, encostado na coxa. O
             # meio da peça é onde a palma está de verdade, e é ali que o
             # objeto tem que se sobrepor à mão para ler como segurado.
+            # A FRAÇÃO É MEDIDA NA ARTE (02/09) -- ver
+            # `Personagem.fracao_da_palma`. Era 0,30 cravado, e o centro de
+            # massa da mão está a 0,42-0,47 em todas as folhas: o objeto
+            # ficava a um terço do caminho entre o punho e os dedos, que é
+            # o "segurando pelo pulso" que o dono do projeto viu.
             comp = pers.comp.get(nome, 0.0) * pers.escala
             rad = math.radians(ang[nome])
-            palma = (pos[nome][0] + math.cos(rad) * comp * 0.30,
-                     pos[nome][1] + math.sin(rad) * comp * 0.30)
+            fp = pers.fracao_da_palma(nome)
+            palma = (pos[nome][0] + math.cos(rad) * comp * fp,
+                     pos[nome][1] + math.sin(rad) * comp * fp)
             # GUARDADO PARA COLAR NO FIM, e não aqui.
             #
             # POR QUE (01/09, volta 36 do ciclo). `ORDEM_Z` desenha o braço
@@ -2026,6 +2201,31 @@ def desenhar_personagem(pers, rig, boca_nivel=0.0, piscando=False, objeto=None,
                 r = max(oi.size) * float(objeto.get("escala", 1.0)) / 2.0
                 saida_pos["_objeto"] = (palma[0] - r, palma[1] - r,
                                         palma[0] + r, palma[1] + r)
+
+    # O OBJETO, POR ÚLTIMO -- E ELE NÃO ESTAVA SENDO DESENHADO (02/09).
+    #
+    # Achado medindo o item 4 do dono do projeto (*"personagem segurando
+    # celular pelo pulso"*): `ferramentas/objeto.py` devolvia **0% de
+    # visível para os dez objetos, nas quatro situações, em todos os
+    # personagens**, e a diferença entre o corpo desenhado com objeto e sem
+    # objeto era de ZERO pixels.
+    #
+    # A causa é uma linha que faltou. Em 01/09 o desenho do objeto foi
+    # movido do meio do laço para o fim da função -- correção certa, porque
+    # `ORDEM_Z` desenha o braço direito antes do esquerdo e o esquerdo
+    # passava por cima do que a mão direita segurava. O valor passou a ser
+    # guardado em `objeto_colar`... e a colagem no fim nunca foi escrita. O
+    # comentário do próprio código dizia "ver `_colar_objeto` no fim desta
+    # função", e não havia nada lá.
+    #
+    # Python não reclama de uma atribuição que ninguém lê, então isto
+    # passou em silêncio: o objeto sumiu de todos os vídeos e o único lugar
+    # que sabia era uma régua que ninguém rodou. É a lei 65 outra vez -- o
+    # ramo que falha precisa de um lugar que conte que ele falhou --, e
+    # desta vez o lugar existia.
+    if objeto_colar is not None:
+        oi, opv, palma, ang_mao, esc = objeto_colar
+        colar(base, oi, opv, palma, ang_mao, esc)
 
     return base
 
@@ -2287,8 +2487,25 @@ def montar_frame(camada, cenario, cam, quadril_x=W / 2, camadas=None,
     # media a sua (ver `caixa_do_nucleo`). Só quando há recorte: sem zoom
     # nenhuma guarda tem o que fazer, e a conta custa uma varredura do alfa
     # da tela inteira.
-    nucleo = _unir(caixa_do_nucleo(enquadrada), caixa_extra) \
-        if abs(z - 1.0) > 0.002 else None
+    # DUAS CAIXAS, E NÃO UMA (02/09, item 2 do dono do projeto: *"o
+    # enquadramento se perde às vezes quando o personagem vai mexer a
+    # mão"*).
+    #
+    # Desde 31/08 as três guardas miram o NÚCLEO -- tronco, cabeça e pernas
+    # --, justamente para a janela não subir e descer com o aceno (lei 71).
+    # Só que a caixa do OBJETO era unida a ele antes de qualquer guarda, e
+    # o objeto está na MÃO: quando a mão sobe 200px, a caixa sobe junto e
+    # as três guardas vão atrás. A correção do v013 continua certa no que
+    # ela queria -- objeto meio fora do quadro lê como adesivo --, mas ela
+    # devolveu o defeito que o núcleo tinha acabado de resolver.
+    #
+    # A distinção é de linguagem, não de código: o que não se corta NO ALTO
+    # é a cabeça, e o alto é do CORPO; o que não se corta PELO LADO inclui
+    # o que a mão segura, porque um objeto cortado ao meio pela borda é o
+    # que lê como adesivo. E o ZOOM é do corpo: deixar o objeto abrir o
+    # plano é a câmera recuando toda vez que alguém levanta o braço.
+    nucleo = caixa_do_nucleo(enquadrada) if abs(z - 1.0) > 0.002 else None
+    nucleo_lat = _unir(nucleo, caixa_extra) if nucleo else None
     bb = None
     if camadas and z > 1.002:
         bb = nucleo
@@ -2428,9 +2645,14 @@ def montar_frame(camada, cenario, cam, quadril_x=W / 2, camadas=None,
         # "quebrava" a cada gesto. O que elas protegem passa a ser o corpo e
         # o que a mão SEGURA (`caixa_extra`); a mão vazia pode encostar na
         # borda, que é o que um close faz. Ver `caixa_do_nucleo`.
-        bba = nucleo
+        # A LATERAL usa a caixa COM o objeto: objeto cortado ao meio pela
+        # borda é o que lê como adesivo, e empurrar a janela de lado não
+        # muda o tamanho do plano nem faz a câmera balançar na vertical.
+        bba = nucleo_lat
         if bba and (bba[2] - bba[0]) <= lw:
             cx = min(max(cx, bba[2] - lw / 2), bba[0] + lw / 2)
+        # O ALTO usa a caixa SEM o objeto: era daqui que vinha o tilt.
+        bba = nucleo
         cy = H * float(cam.get("zoom_y", 0.5))
         # A CABEÇA NUNCA É CORTADA. O close mira a cabeça (`centro_rosto`),
         # mas uma ação que ergue a mão sobe a silhueta acima dela -- e o
@@ -3720,9 +3942,23 @@ def render(pasta_partes, spec, saida, tmpdir=None, amostra=0):
         if len(chaves) > 1:
             for chave in chaves:
                 fora = ACOES.mao_de_fora(posto[chave][1])
+                # DE QUE LADO ESTÁ O OUTRO (02/09, item 1). As ações de
+                # interação -- high five, cutucar, empurrar, bater no outro,
+                # apertar a mão -- precisam saber para onde estender o
+                # braço, e quem sabe isso é o motor: o roteirista não tem
+                # como saber quem ficou de que lado do quadro, pela mesma
+                # razão que ele não escolhe a mão que segura o objeto.
+                #
+                # Decidido UMA vez por trecho, junto com a mão, porque as
+                # duas coisas têm de ler o mesmo estado -- se divergirem, o
+                # braço vai para um lado e o objeto para o outro.
+                outros = [posto[c][1] for c in chaves if c != chave]
+                lado = 1 if (outros and outros[0] > posto[chave][1]) else -1
                 for a in por_ator.get(chave) or []:
                     if a.get("nome") in ACOES.ACOES_OBJETO_MAO_DE_FORA:
                         a["mao"] = fora
+                    if a.get("nome") in ACOES.ACOES_DE_INTERACAO:
+                        a["lado_alvo"] = lado
         _fazer_voltar(por_ator, [c for c in fora_de_cena if c in chaves])
         fora_de_cena = _quem_saiu(por_ator)
         nf = max(1, int(tr["dur"] * FPS))
