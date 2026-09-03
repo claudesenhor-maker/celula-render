@@ -2857,7 +2857,9 @@ def _enquadramento(i, n_trechos, n_atores, t, centro_corpo=None,
         # seguidas é o que dá o descanso (a lição do período ímpar do
         # `_close_no_falante` é sobre quem FALA, e aqui não há falante).
         if i % 2:
-            z = 1.0
+            # o degrau ABERTO: 1,20 quando a largura do par o comporta, e o
+            # que ela comportar quando não (ver PISO_PAR_ABERTO)
+            z = min(PISO_PAR_ABERTO, max(1.0, float(teto_par)))
         return z * (1.0 + 0.035 * max(0.0, min(1.0, t))), \
             (0.5 if centro_corpo is None else
              max(0.0, min(1.0, float(centro_corpo))))
@@ -3194,6 +3196,24 @@ MARGEM_LATERAL_PAR = 60.0
 # começa a aparecer ampliada demais, e é o mesmo limite que segura
 # CLOSE_FALANTE em 1,90 com um corpo de 852px.
 TETO_PAR = 1.45
+# O DEGRAU ABERTO DO PAR DEIXOU DE SER 1,00 (02/09, volta 84).
+#
+# O ciclo do par alterna dois degraus, e o aberto era a constante 1,00 --
+# herança de quando nada acima de ~1,09 cabia (v018), antes de a abertura
+# cair para 0,32 e o par passar a ocupar ~606px de 1080. Na prévia do v084
+# os três quadros de 1,00 (10,1 s, 28,0 s, 63,8 s) são os mesmos três em que
+# os dois aparecem no rodapé com DOIS TERÇOS de quadro vazio em cima -- e o
+# que enche esse vazio é a parte fria do cenário, a janela em contorno e a
+# estante. Nos quadros de 1,45 e 1,90 as caras são grandes e legíveis.
+#
+# 1,20 e não mais: com o par a 606px, 1,20 leva a largura ocupada a ~727px
+# de 1080 e ainda sobra a margem lateral que `montar_frame` exige. E não
+# menos, porque o contraste com o close (1,90) é o que faz a troca de plano
+# ler como CORTE -- que é a razão de o degrau aberto existir.
+#
+# Ele continua sendo um TETO, nunca um piso forçado: quando a largura medida
+# do par não comporta 1,20, vale o que ela comporta.
+PISO_PAR_ABERTO = 1.20
 
 
 def _medir_corpo(pers, img, bb):
