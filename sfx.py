@@ -656,7 +656,39 @@ def eventos_do_spec(spec):
     #
     # O corte é por ganho, não por ordem: fica o que o roteiro marcou de
     # propósito e o impacto forte, sai o pop de encosto.
-    teto = max(4, int(_duracao_total(trechos) / 2.5))
+    # O SILÊNCIO ANTES DO REMATE (03/09, item 4 do dono do projeto).
+    #
+    # A trilha já corta antes da última fala (o `breque` de
+    # `segmentos_do_spec`) porque o silêncio antes da tirada é o instrumento
+    # mais barato da comédia. Os EFEITOS não obedeciam a isso: qualquer ação
+    # no fim do penúltimo trecho podia disparar um thud em cima da respiração
+    # que prepara a piada, e o rimshot -- o único som que PRECISA ser ouvido
+    # ali -- chegava depois de um estalo.
+    #
+    # Um segundo e meio antes do remate fica limpo. O que estiver marcado
+    # explicitamente pelo roteirista no ÚLTIMO trecho continua passando: ali a
+    # intenção é do texto, e o remate pode ser justamente um som.
+    if len(trechos) > 1:
+        t_remate = float(trechos[-1].get("_inicio_s", 0.0))
+        antes = [e for e in limpos
+                 if t_remate - 1.5 <= e["t"] < t_remate]
+        if antes:
+            limpos = [e for e in limpos if e not in antes]
+            print(f"[sfx] {len(antes)} efeito(s) tirado(s) do 1,5s que "
+                  f"antecede o remate: o silencio ali e' o setup da piada")
+
+    # A DENSIDADE, e por que ela afrouxou (03/09, item 4).
+    #
+    # Era um efeito a cada 2,5 s -- dezoito num vídeo de 45 s. Comédia de
+    # DIÁLOGO se sonoriza com efeito pontual e escasso: o efeito existe para
+    # marcar o que aconteceu, e quando ele acontece a cada dois segundos ele
+    # deixa de marcar coisa nenhuma e vira textura de desenho antigo. Um a
+    # cada 4 s dá onze num vídeo de 45 s, que ainda é generoso e deixa cada
+    # um ser ouvido.
+    #
+    # O corte continua sendo por GANHO: fica o que o roteiro marcou de
+    # propósito e o impacto forte; sai o pop de encosto.
+    teto = max(4, int(_duracao_total(trechos) / 4.0))
     if len(limpos) > teto:
         fortes = sorted(limpos, key=lambda e: -e["ganho"])[:teto]
         cortados = len(limpos) - len(fortes)
@@ -1075,6 +1107,89 @@ GENEROS = {
 }
 GENERO_PADRAO = "comedia_leve"
 
+# ============================================================================
+# QUAL TRILHA PODE ENTRAR, E QUANDO (03/09, item 3 do dono do projeto:
+# *"trilha sonora completamente fora de sentido"*)
+# ============================================================================
+#
+# O DEFEITO, MEDIDO. O v001 é uma esquete sobre uma taxa de R$ 4,90 de conta
+# digital e foi trilhado como **`suspense`**. No corpus antigo, `suspense` e
+# `terror` somam 5 dos 16 gêneros escolhidos -- um terço dos vídeos deste
+# canal de comédia saiu com trilha de filme de terror.
+#
+# A CAUSA NÃO É O GERADOR DE MÚSICA: é o contrato. `genero` é escolha livre do
+# roteirista numa lista PLANA de doze, sem nenhum critério que a ligue ao
+# material. Um LLM diante de doze opções equiprováveis sorteia.
+#
+# O QUE A PRÁTICA DE TRILHA DIZ, e é o que organiza a lista:
+#
+#   1. **A trilha serve à FUNÇÃO da cena, não ao assunto dela.** Ela não
+#      ilustra "banco" nem "conta": ela diz ao espectador em que registro
+#      assistir. Por isso não existe "trilha de tema", existe trilha de tom.
+#   2. **Comédia com diálogo se trilha com CAMA LEVE, não com dramaticidade.**
+#      Música dramática embaixo de uma piada instrui a plateia a levar a sério
+#      e mata o riso -- é o erro clássico de scoring cômico. A cama tem de
+#      sustentar sem competir com a fala.
+#   3. **O silêncio antes do remate vale mais que qualquer nota.** O corte da
+#      música imediatamente antes da tirada é o instrumento mais barato da
+#      comédia. Isto o motor JÁ faz (`breque` no último segmento, com o
+#      rimshot voltando junto) e continua certo.
+#   4. **A incongruência deliberada é um recurso real** -- trilhar o trivial
+#      como se fosse épico é uma piada de verdade. Mas ela só funciona quando
+#      o TEXTO joga a escalada a sério; solta, ela não lê como ironia, lê
+#      como erro. É exatamente a diferença entre o que o dono viu e o que se
+#      queria.
+#
+# ENTÃO A LISTA DEIXA DE SER PLANA. Dois grupos:
+#
+#   · CAMA (padrão): pode entrar sempre. São as trilhas que sustentam
+#     diálogo cômico sem instruir o espectador a se assustar.
+#   · REGISTRO SÉRIO: só entra quando o roteiro DECLARA a ironia
+#     (`musica.ironia: true`). Sem a declaração, cai na cama, com o motivo no
+#     log. Prompt é pedido, código é garantia (lei 16): pedir "não use terror
+#     sem motivo" a um modelo saturado é o que não funcionou até aqui.
+GENEROS_CAMA = ("comedia_leve", "espera", "lofi", "samba", "funk", "circo")
+GENEROS_SERIOS = ("suspense", "terror", "epico", "novela", "rock", "trap")
+
+# A CAMA PADRÃO SAI DO ASSUNTO, e só entre as camas. `espera` é a musiquinha
+# de call center -- o som de metade das esquetes deste canal acontecendo --,
+# e quando a esquete é de atendimento ela é a escolha certa por conteúdo, não
+# por tom. Fora disso, a comédia leve.
+PALAVRAS_ESPERA = ("atendente", "suporte", "central", "protocolo", "ligacao",
+                   "ligar", "liguei", "telefone", "espera", "aguard", "fila",
+                   "chamado", "sac", "ouvidoria", "call")
+
+
+def genero_permitido(genero, ironia=False, falas=None):
+    """O gênero que vai tocar de verdade, e por quê.
+
+    Devolve `(genero, motivo)`. O motivo entra no log: quando a trilha sai
+    diferente do que o roteiro pediu, isso tem de aparecer -- é a mesma regra
+    de `cenarios.resolver`, e ela existe porque troca silenciosa foi o que
+    escondeu o fundo verde por duas sessões."""
+    g = str(genero or "").strip().lower()
+    if g and g not in GENEROS:
+        return _cama_para(falas), f"'{g}' nao existe no catalogo"
+    if not g:
+        return _cama_para(falas), "o roteiro nao pediu trilha"
+    if g in GENEROS_SERIOS and not ironia:
+        return (_cama_para(falas),
+                f"'{g}' e registro serio e o roteiro nao declarou ironia "
+                f"(`musica.ironia: true`); trilha dramatica embaixo de piada "
+                f"instrui a plateia a levar a serio")
+    return g, "pedido"
+
+
+def _cama_para(falas):
+    """A cama que o assunto pede, entre as camas."""
+    texto = " ".join(str(f or "") for f in (falas or [])).lower()
+    for a, b in (("á", "a"), ("ã", "a"), ("â", "a"), ("é", "e"), ("ê", "e"),
+                 ("í", "i"), ("ó", "o"), ("ô", "o"), ("ú", "u"), ("ç", "c")):
+        texto = texto.replace(a, b)
+    if sum(1 for p in PALAVRAS_ESPERA if p in texto) >= 2:
+        return "espera"
+    return GENERO_PADRAO
+
 
 def trilha(dur_s, estilo="leve", bpm=None, semente=3, sr=SR, segmentos=None,
            genero=None):
@@ -1380,11 +1495,14 @@ def mixar(voz_wav, eventos, destino, musica=None, dur_s=None, sr=SR, bipes=None)
                 print(f"[musica] faixa do disco: {os.path.basename(caminho)}")
             else:
                 segs = cfg.get("segmentos") or None
-                gen = str(cfg.get("genero") or "").strip().lower()
-                if gen and gen not in GENEROS:
-                    print(f"[musica] genero '{gen}' nao existe; caindo em "
-                          f"{GENERO_PADRAO}")
-                    gen = ""
+                # O GÊNERO PASSA PELO PORTÃO (03/09, item 3). Ver
+                # `genero_permitido`: registro sério só entra com ironia
+                # declarada, e a troca sempre diz o motivo.
+                gen, motivo = genero_permitido(cfg.get("genero"),
+                                               ironia=bool(cfg.get("ironia")),
+                                               falas=cfg.get("falas"))
+                if motivo != "pedido":
+                    print(f"[musica] '{cfg.get('genero')}' -> '{gen}': {motivo}")
                 # SEMENTE POR VÍDEO: duas esquetes do mesmo gênero não podem
                 # sair com o arpejo idêntico nota por nota. O fila_id é o que
                 # há de único em cada vídeo, e ele já está no spec.
