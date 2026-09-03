@@ -1921,6 +1921,80 @@ def _destacar_objeto(img, esp=None):
     return fora
 
 
+# A linha de separação clara: quanto ela avança PARA FORA do contorno escuro
+# que `_destacar_objeto` já assou na arte. Dois pixels bastam para o olho
+# separar as duas manchas; mais que isso lê como brilho em volta da coisa, e
+# halo em volta da figura é queixa registrada do dono do projeto (30/08).
+SEPARA_OBJETO_PX = int(os.environ.get("SEPARA_OBJETO_PX", "2"))
+# Abaixo desta luminância o que está atrás é ESCURO, e a linha escura do
+# objeto desaparece nele. 110 de 255: a calça da Maya mede 74 e a do Pal 46,
+# a pele mede 205 e a camisa dela 150 -- o corte cai na folga entre os dois
+# grupos, e não no meio de nenhum deles.
+FUNDO_ESCURO_LUM = 110
+
+
+def _colar_objeto(base, oi, opv, palma, ang, esc):
+    """Cola o objeto e desenha a separação DELE contra o que está atrás.
+
+    POR QUE (02/09, voltas 088 e 091: *o boleto na mão baixa e o celular
+    lendo como adesivo colado à coxa*, em cinco dos dezesseis quadros)
+        `_destacar_objeto` põe um contorno ESCURO em volta do objeto, e o
+        motivo dele está escrito lá: em 28/08 um boleto de papel branco, com
+        traço fino, sumia sobre um cenário claro. A linha escura resolveu
+        aquilo e passou a valer para tudo.
+
+        Só que em REPOUSO o que está atrás do objeto não é o cenário: é a
+        ROUPA de quem o segura, e a roupa é escura em quase todo o elenco (a
+        calça da Maya mede 74 de luminância, a do Pal 46). Linha escura sobre
+        calça escura não separa nada -- o celular, o contorno dele e a coxa
+        viram uma mancha só, que é exatamente o adesivo que se vê no vídeo.
+        A carteira laranja do Pal, na mesma pose e no mesmo lugar, lê perfeita:
+        o defeito nunca foi a posição, foi o CONTRASTE.
+
+        Uma linha fixa não pode separar nos dois fundos, porque os dois fundos
+        são opostos. Então ela deixa de ser fixa: aqui se mede a luminância do
+        que ficou atrás, pixel por pixel, e onde ela é escura a separação sai
+        CLARA. Onde é clara (ou não há nada atrás -- o objeto recorta contra o
+        cenário, que entra depois em `montar_frame`), fica só o contorno
+        escuro que já existia, e nada muda.
+
+    O anel sai por bbox, e não no quadro inteiro: dilatar 1080x1920 por
+    deslocamento custa (2r+1)² passadas de dois milhões de pixels, por ator e
+    por frame. Na caixa do objeto são ~300px de lado.
+    """
+    camada = Image.new("RGBA", base.size, (0, 0, 0, 0))
+    colar(camada, oi, opv, palma, ang, esc)
+    bb = camada.getbbox()
+    if not bb:
+        return
+    r = SEPARA_OBJETO_PX
+    x0, y0 = max(bb[0] - r - 1, 0), max(bb[1] - r - 1, 0)
+    x1, y1 = min(bb[2] + r + 1, base.size[0]), min(bb[3] + r + 1, base.size[1])
+    ao = np.asarray(camada)[y0:y1, x0:x1, 3]
+    dentro = ao > 32
+    grosso = dentro.copy()
+    for dy in range(-r, r + 1):
+        for dx in range(-r, r + 1):
+            if dx * dx + dy * dy > r * r:
+                continue
+            grosso |= np.roll(np.roll(dentro, dy, 0), dx, 1)
+    anel = grosso & ~dentro
+    if anel.any():
+        b = np.asarray(base)[y0:y1, x0:x1]
+        # SÓ ONDE HÁ CORPO ATRÁS. Onde a base é transparente o objeto recorta
+        # contra o cenário, e o cenário é o caso que a linha escura já
+        # resolve -- pôr uma linha clara ali seria inventar halo onde o
+        # problema não existe.
+        atras = b[..., 3] > 32
+        lum = (0.299 * b[..., 0] + 0.587 * b[..., 1] + 0.114 * b[..., 2])
+        escuro = anel & atras & (lum < FUNDO_ESCURO_LUM)
+        if escuro.any():
+            fatia = Image.new("RGBA", (x1 - x0, y1 - y0), (238, 236, 230, 0))
+            fatia.putalpha(Image.fromarray((escuro * 235).astype(np.uint8)))
+            base.alpha_composite(fatia, (x0, y0))
+    base.alpha_composite(camada)
+
+
 def _pivo_de_pega(img):
     """Onde a mão segura o objeto.
 
@@ -2225,7 +2299,10 @@ def desenhar_personagem(pers, rig, boca_nivel=0.0, piscando=False, objeto=None,
     # desta vez o lugar existia.
     if objeto_colar is not None:
         oi, opv, palma, ang_mao, esc = objeto_colar
-        colar(base, oi, opv, palma, ang_mao, esc)
+        # `_colar_objeto` e não `colar`: além de colar, ele desenha a
+        # separação do objeto contra o que ficou ATRÁS dele -- ver lá o
+        # porquê (o celular lendo como adesivo na coxa, voltas 088 e 091).
+        _colar_objeto(base, oi, opv, palma, ang_mao, esc)
 
     return base
 
