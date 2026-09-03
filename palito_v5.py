@@ -291,6 +291,28 @@ def _eleven(texto, cfg, out_mp3):
     print(f"[voz] eleven: {len(audio)/1024:.0f} KB, {len(marcas)} palavras alinhadas")
     return marcas
 
+# QUEM FALOU COM QUAL MOTOR, CONTADO (03/09, item 6 do dono do projeto:
+# *"garanta que estamos usando as vozes do ElevenLabs na producao"*).
+#
+# A queda para o Edge sempre existiu e sempre avisou -- no log do Action, que
+# ninguem le. Um video inteiro pode sair com a voz errada e o unico lugar que
+# sabe disso e uma linha perdida em 2.000. Aqui a queda vira DADO: o motor de
+# cada fala e' contado, `palito_cutout` imprime o placar depois da timeline, e
+# `job.py` o carrega para o registro da volta.
+#
+# A queda continua sendo queda e nao erro fatal: perder 13 minutos de render
+# por causa de uma fala e' pior que um video com uma voz trocada. O que muda e'
+# que agora da para SABER.
+USOU_MOTOR = {}
+
+
+def placar_de_voz():
+    """O que foi usado, e o que foi pedido. Zera o contador."""
+    d = dict(USOU_MOTOR)
+    USOU_MOTOR.clear()
+    return d
+
+
 def sintetizar(texto, cfg, destino, modo):
     if modo == "real":
         mp3 = destino + ".mp3"
@@ -322,6 +344,9 @@ def sintetizar(texto, cfg, destino, modo):
             else:
                 falta = "ELEVEN_API_KEY" if not os.environ.get("ELEVEN_API_KEY") else "voice_id"
                 print(f"[voz] motor 'eleven' pedido mas falta {falta}; usando o Edge")
+        usou = "eleven" if marcas is not None else "edge"
+        USOU_MOTOR[f"pedido_{motor}"] = USOU_MOTOR.get(f"pedido_{motor}", 0) + 1
+        USOU_MOTOR[f"usou_{usou}"] = USOU_MOTOR.get(f"usou_{usou}", 0) + 1
         if marcas is None:
             marcas, _ = asyncio.run(_edge(texto, cfg, mp3))
         subprocess.run(["ffmpeg", "-y", "-v", "error", "-i", mp3,
