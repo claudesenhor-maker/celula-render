@@ -180,6 +180,31 @@ def normalizar(nome):
     return _SINONIMO.get(n, n)
 
 
+# CENÁRIOS REPROVADOS — a arte existe, passa nas réguas, e não pode ir ao ar.
+#
+# POR QUE ISTO EXISTE (03/09, queixa 3 do dono do projeto: *"o fundo do vídeo
+# 98 de uma qualidade horrível"*)
+#     O v098 se passa no `comercio`, e o `comercio` de hoje é um corredor
+#     vazio: sem prateleira, sem balcão, sem produto. Ele chegou assim por um
+#     caminho documentado em `tentar_cenario.py` — CINCO descrições, cinco
+#     modos de errar. As três réguas de cenário (cor, traço, letreiro) medem
+#     ausência de defeito e nenhuma mede PRESENÇA de lugar, então o laço
+#     `gerar-medir-repetir` convergiu para o que tem menos de tudo: uma sala
+#     vazia. A descrição em vigor chega a pedir *"one long smooth red
+#     counter"* e a imagem entregue não tem balcão nenhum.
+#
+#     Enquanto não houver arte feita à mão (lei 3) ou uma régua de IDENTIDADE,
+#     a decisão certa não é gerar de novo — é PARAR DE USAR. `comercio` sai em
+#     ~1/4 dos vídeos; deixá-lo no ar é publicar um fundo ruim em um quarto do
+#     canal para não admitir que o gerador não sabe desenhar uma loja.
+#
+#     Isto é reversível numa linha: apague a entrada quando a arte existir.
+REPROVADOS = {
+    "comercio": "virou um corredor vazio; sem balcao, sem prateleira, "
+                "sem produto (03/09). Espera arte feita a mao",
+}
+
+
 def escolher(fala, padrao=PADRAO):
     """O cenário que a FALA pede, por palavra-chave.
 
@@ -221,8 +246,13 @@ def resolver(pedido, disponiveis, fala=None):
         return None, "nenhum cenario disponivel"
 
     alvo = normalizar(pedido)
-    if alvo in disp:
+    if alvo in disp and alvo not in REPROVADOS:
         return alvo, "pedido" if _limpo(pedido) == alvo else f"sinonimo de '{pedido}'"
+    if alvo in REPROVADOS:
+        for p in CATALOGO.get(alvo, {}).get("parecidos", ()):
+            if p in disp and p not in REPROVADOS:
+                return p, (f"'{alvo}' esta REPROVADO ({REPROVADOS[alvo]}); "
+                           f"usando '{p}'")
 
     for p in CATALOGO.get(alvo, {}).get("parecidos", ()):
         if p in disp:
