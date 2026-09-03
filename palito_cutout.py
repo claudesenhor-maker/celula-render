@@ -3595,6 +3595,56 @@ def _fazer_voltar(por_ator, fora_de_cena):
         print(f"[cena] {chave} tinha saido: volta entrando")
 
 
+def _gancho_ja_em_cena(por_ator, falante):
+    """No PRIMEIRO trecho, quem fala não entra andando: ele já está em cena.
+
+    POR QUE (03/09, folha e primeiros frames do v096)
+        O v096 abre com ~2,5 s de cenário VAZIO -- uma parede em close, sem
+        ninguém, com a voz já dizendo *"O curso de sobrevivência custa
+        duzentos e cinquenta pra mim"* -- e o Pal só entra correndo no fim do
+        terceiro segundo. Num Short, esses são os segundos em que a
+        plataforma decide se distribui o vídeo.
+
+        Não é um bug de um lugar: são DUAS correções certas se somando.
+
+          · 01/09 (R1 do DIAGNOSTICO): *o gancho FECHA*. `_close_no_falante`
+            devolve True para `i == 0`, para a cara aparecer grande no
+            primeiro segundo em vez dos dois bonecos de corpo inteiro que
+            todo vídeo do canal tinha.
+          · 31/08 (defeito 5): *quem vai entrar está FORA*. A entrada é
+            aplicada com u=0 antes da janela, senão o ator ficava parado no
+            destino e saltava para a borda quando a janela abria.
+
+        Juntas: a câmera fecha em quem fala, quem fala está fora do quadro
+        porque está entrando, e o close aponta para a parede até ele chegar.
+        Cada metade continua certa; o encontro das duas é que não pode.
+
+    E A SAÍDA É DESFAZER A ENTRADA, NÃO O CLOSE
+        A entrada existe por um motivo que **não existe no trecho 0**: ela
+        impede que alguém que a plateia acabou de ver sair reapareça parado
+        no lugar dele (ver `_fazer_voltar`). No instante zero não há "antes"
+        -- ninguém viu ninguém sair, e portanto não há teletransporte a
+        evitar. O close, ao contrário, tem motivo de sobra ali, e ele é
+        medido: é o gancho.
+
+        Quem NÃO fala continua entrando no trecho 0, e é bom que entre: a
+        câmera está no falante, e alguém chegando ao lado dele é movimento
+        de graça. O que se proíbe é só a contradição -- fechar em quem ainda
+        não está lá.
+    """
+    acoes = por_ator.get(falante)
+    if not acoes:
+        return
+    fica = [a for a in acoes if a.get("nome") not in ACOES.ACOES_DE_ENTRADA]
+    if len(fica) != len(acoes):
+        tirou = [a.get("nome") for a in acoes
+                 if a.get("nome") in ACOES.ACOES_DE_ENTRADA]
+        por_ator[falante] = fica
+        print(f"[cena] {falante} fala no trecho 0 e nao entra andando "
+              f"({', '.join(tirou)} descartada): o gancho fecha nele, e a "
+              f"camera nao pode fechar em quem esta fora do quadro")
+
+
 def _quem_recebe(por_ator, na_mao, t, objetos):
     """Entregar é PASSAR: o que sai de uma mão entra na outra.
 
@@ -4058,6 +4108,32 @@ def render(pasta_partes, spec, saida, tmpdir=None, amostra=0):
                         a["mao"] = fora
                     if a.get("nome") in ACOES.ACOES_DE_INTERACAO:
                         a["lado_alvo"] = lado
+        # O GANCHO NÃO PODE FECHAR EM QUEM ESTÁ FORA (03/09, v096). Vem antes
+        # de `_fazer_voltar` porque no trecho 0 não há de onde voltar, e
+        # depois de `mao_de_fora` para não mexer no que já foi decidido.
+        # `GANCHO_ENTRA=1` desliga a guarda, e existe só para a prévia A/B
+        # poder reproduzir o defeito -- é o mesmo recurso de
+        # `SEPARA_OBJETO_PX`. Sem um jeito de desligar, a única prova
+        # possível é "depois", e "depois" sozinho não prova nada.
+        if i_tr == 0 and os.environ.get("GANCHO_ENTRA") != "1":
+            _gancho_ja_em_cena(por_ator, falante)
+        # E A REGRA GERAL, PARA OS OUTROS TRECHOS: a câmera não fecha em quem
+        # está entrando. O trecho 0 é o caso caro (é o gancho, e a correção
+        # ali é desfazer a entrada, que não tem motivo no instante zero), mas
+        # o close também cai em `i % 5 in (1, 4)` e na virada -- e num desses
+        # o mesmo encontro produz o mesmo quadro vazio, no meio do vídeo.
+        #
+        # Aqui a entrada FICA e o close cede: no meio do vídeo a entrada tem
+        # o motivo que no trecho 0 ela não tem (a plateia acabou de ver a
+        # pessoa sair), e quem chega andando aparece melhor no plano do par,
+        # que mostra de onde ele vem. Decidido UMA vez por trecho, e não por
+        # frame: recalcular plano por frame é o tremor do v018.
+        if fecha and any(a.get("nome") in ACOES.ACOES_DE_ENTRADA
+                         for a in (por_ator.get(falante) or [])):
+            fecha = False
+            print(f"[camera] trecho {i_tr}: o close cede o lugar ao plano do "
+                  f"par -- {falante} entra andando neste trecho, e fechar "
+                  f"nele mostraria cenario vazio ate ele chegar")
         _fazer_voltar(por_ator, [c for c in fora_de_cena if c in chaves])
         fora_de_cena = _quem_saiu(por_ator)
         nf = max(1, int(tr["dur"] * FPS))
