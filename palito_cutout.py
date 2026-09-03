@@ -1251,7 +1251,31 @@ def _cor_da_pele(img):
 # um anel 25% mais fino. O teste é `junta.py` no elenco inteiro: se algum
 # personagem voltar a dar 2, este número sobe de novo -- junta aberta é
 # defeito, anel grosso é feiúra, e nessa ordem.
-FECHO_DO_VAO = 0.75
+# ZERO, E O ANEL POR PEÇA DEIXOU DE EXISTIR (03/09).
+#
+# Queixa do dono do projeto: *"linhas das cores do personagem para tampar
+# vão, ficou muito ruim, era só manter como estava"*. Ela está certa, e o
+# A/B mostra que **as duas cores são ruins e a escolha entre elas era falsa**:
+#
+#   · anel da cor do CONTORNO (o "como estava"): faixa preta grossa em todo
+#     ombro, cotovelo, quadril, joelho e tornozelo. Lê como boneco
+#     articulado de plástico — foi por isso que 02/09 trocou a cor;
+#   · anel da cor de DENTRO (o que estava no ar): faixa rosa no cotovelo da
+#     Maya, faixa azul no ombro do Pal, e joelheiras nas calças. Lê como
+#     esparadrapo — é a queixa de hoje.
+#
+# O defeito não é a COR: é o anel existir. `_fechar_vao` dilata a peça em
+# todas as direções e a arte original volta por cima, então o que sobra
+# visível é justamente a parte do anel que ficou FORA da silhueta da peça —
+# uma tira de cor arbitrária ao redor da junta, que nenhuma cor conserta.
+#
+# O fecho passa a ser feito no CORPO MONTADO, por morfologia, em
+# `_fechar_vaos_do_corpo`: uma operação de fechamento tapa qualquer fenda
+# mais estreita que o pincel e, por definição, não cria nada onde não havia
+# uma fenda entre duas partes. A cor sai do próprio entorno, então no
+# cotovelo ela vem do braço e na cintura vem da calça — sem escolher cor
+# nenhuma. Ver lá o porquê inteiro.
+FECHO_DO_VAO = 0.0
 
 
 def _fechar_vao(img, pivot, px, juntas=None):
@@ -1995,6 +2019,85 @@ def _colar_objeto(base, oi, opv, palma, ang, esc):
     base.alpha_composite(camada)
 
 
+# O RAIO DO PINCEL DE FECHAMENTO, em pixels do quadro montado. Ele tem de
+# ser maior que a metade da fenda mais larga e menor que a metade da menor
+# separação que DEVE continuar existindo. Os vãos medidos nas folhas vão de
+# 5 px (Pal) a 14 px (enfermeira), e a menor separação legítima é a dos dedos
+# da mão fechada (~30 px na escala de cena). Nove fecha 18 px de fenda e não
+# alcança 30.
+RAIO_FECHO = 9
+
+
+def _fechar_vaos_do_corpo(base):
+    """Tapa as fendas ENTRE as peças, no corpo já montado.
+
+    POR QUE ASSIM, E NÃO ENGROSSANDO CADA PEÇA (03/09)
+        A folha é um BONECO DE PAPEL: cada parte tem contorno próprio e um
+        vão branco a separa da vizinha (lei 5). O vão é o que permite
+        segmentar a folha e continua certo. Com cenário atrás, porém, cada
+        vão vira uma fresta por onde a rua aparece.
+
+        Até hoje o conserto era dilatar CADA PEÇA e devolver a arte original
+        por cima (`_fechar_vao`). O problema é geométrico e não tem cor que
+        resolva: a dilatação cresce em TODAS as direções, e o pedaço dela
+        que fica fora da silhueta da peça é uma tira visível em volta da
+        junta. Pintada de escuro, vira faixa preta de boneco articulado;
+        pintada com a cor de dentro, vira esparadrapo. As duas foram vistas
+        e reprovadas pelo dono do projeto, em 02/09 e em 03/09.
+
+    O QUE MUDA
+        O fecho passa a ser uma operação de FECHAMENTO (dilatar e depois
+        erodir com o mesmo pincel) sobre o alfa do corpo inteiro, depois de
+        todas as peças compostas. Duas propriedades tornam isto correto onde
+        o anel era errado:
+
+          1. um fechamento só acrescenta pixel onde havia uma CONCAVIDADE
+             mais estreita que o pincel. A silhueta externa — as costas, a
+             barriga, o alto da cabeça — não tem vizinha nenhuma e não muda;
+          2. a cor não é escolhida: ela é lida do próprio entorno, por um
+             desfoque do que já está composto. No cotovelo ela vem do braço,
+             na cintura vem da calça, na manga vem da manga.
+
+        A arte original volta por cima no fim, então o traço que o
+        desenhista fez continua sendo o contorno — o fecho só existe DENTRO
+        da fenda, atrás de tudo.
+
+    O custo é uma dilatação e uma erosão na caixa do personagem (~600x1200),
+    as duas em C dentro do PIL, mais um desfoque: uns poucos milissegundos
+    por ator e por frame.
+    """
+    bb = base.getbbox()
+    if not bb:
+        return base
+    r = RAIO_FECHO
+    x0, y0 = max(bb[0] - r, 0), max(bb[1] - r, 0)
+    x1, y1 = min(bb[2] + r, base.width), min(bb[3] + r, base.height)
+    corte = base.crop((x0, y0, x1, y1))
+    alfa = corte.split()[3]
+    # fechamento: dilata e erode com o mesmo pincel
+    fechado = alfa.filter(ImageFilter.MaxFilter(2 * r + 1)) \
+                  .filter(ImageFilter.MinFilter(2 * r + 1))
+    a0 = np.asarray(alfa)
+    a1 = np.asarray(fechado)
+    fenda = (a1 > 128) & (a0 <= 128)
+    if not fenda.any():
+        return base
+    # A COR VEM DO ENTORNO. Um desfoque sobre a arte já composta leva a cor
+    # das duas peças vizinhas para dentro da fenda; onde a fenda é estreita
+    # (que é o caso, por construção) o desfoque já a atravessa.
+    borrado = corte.filter(ImageFilter.GaussianBlur(r))
+    tapa = Image.new("RGBA", corte.size, (0, 0, 0, 0))
+    tapa.paste(borrado, (0, 0))
+    m = Image.fromarray((fenda * 255).astype(np.uint8))
+    tapa.putalpha(m)
+    # o tapa entra ATRÁS: a arte original manda no que se vê
+    novo = Image.new("RGBA", corte.size, (0, 0, 0, 0))
+    novo.alpha_composite(tapa)
+    novo.alpha_composite(corte)
+    base.paste(novo, (x0, y0))
+    return base
+
+
 def _pivo_de_pega(img):
     """Onde a mão segura o objeto.
 
@@ -2297,6 +2400,11 @@ def desenhar_personagem(pers, rig, boca_nivel=0.0, piscando=False, objeto=None,
     # que sabia era uma régua que ninguém rodou. É a lei 65 outra vez -- o
     # ramo que falha precisa de um lugar que conte que ele falhou --, e
     # desta vez o lugar existia.
+    # AS FENDAS ENTRE AS PEÇAS, TAPADAS NO CORPO MONTADO (03/09). Vem DEPOIS
+    # de todas as peças e ANTES do objeto: o objeto não é parte do corpo, e
+    # deixá-lo entrar na conta faria o fechamento tentar emendá-lo à mão.
+    _fechar_vaos_do_corpo(base)
+
     if objeto_colar is not None:
         oi, opv, palma, ang_mao, esc = objeto_colar
         # `_colar_objeto` e não `colar`: além de colar, ele desenha a
@@ -3595,6 +3703,88 @@ def _fazer_voltar(por_ator, fora_de_cena):
         print(f"[cena] {chave} tinha saido: volta entrando")
 
 
+# UM GESTO DELIBERADO A CADA 3,5 SEGUNDOS, no máximo.
+#
+# Medido no corpus (voltas 061 a 100, 409 trechos, 1.000 ações, 1.646 s de
+# vídeo): o motor recebia **uma ação a cada 1,65 segundo**. Numa conversa,
+# uma pessoa faz um gesto nomeável a cada cinco ou dez segundos; a cada
+# segundo e meio ela está tendo um piti. É a queixa 2 do dono do projeto em
+# 03/09 (*"personagem acena excessivamente sem motivo nenhum"*), e o v098 é
+# o retrato: `susto → apontar → encolher_ombros` em quatro segundos, e depois
+# `apontar_para_si → comemorar → acenar`, as duas últimas SOBREPOSTAS.
+#
+# 3,5 s é o comprimento típico de um trecho deste canal, então na prática a
+# regra vira "um gesto por fala" — que é o que uma fala comporta.
+INTERVALO_GESTO_S = 3.5
+
+
+def _ralear_gestos(por_ator, dur_s):
+    """Tira do trecho os gestos DECORATIVOS que passam da conta.
+
+    POR QUE ISTO É CÓDIGO E NÃO PROMPT (lei 16)
+        O número de ações por trecho é pedido no prompt (`acoes_min`, nas
+        formas: 3 na `dupla_agitada`, 3 no `monologo_fisico`, 2 no
+        `monologo_seco`). Esse mínimo nasceu em 28/08 para consertar *"os dois
+        ficam quase parados"* — e é a lei 53 outra vez: a regra que consertou
+        a imobilidade produziu o piti. Baixar o `acoes_min` é necessário e não
+        é suficiente, porque mínimo é pedido e o modelo entrega o que quiser.
+
+    O QUE SE PRESERVA, E POR QUÊ
+        Só se rareia o que é DECORATIVO. Ação que muda o ESTADO da cena não
+        pode sumir, senão o vídeo quebra em vez de melhorar:
+
+          · entrada e saída       -- quem entra tem de entrar;
+          · objeto                -- pegar, mostrar, usar, largar, entregar
+                                     movem o objeto de mão em mão;
+          · interação             -- high five, cutucar, empurrar precisam do
+                                     outro e são a cena acontecendo;
+          · `andar`               -- é o que move o personagem no mundo, e o
+                                     travelling do cenário sai dele.
+
+        O que sobra -- apontar, acenar, cocar_cabeca, maos_na_cintura,
+        encolher_ombros, susto, negar, comemorar -- é ilustração da fala, e é
+        aí que está o excesso: `apontar` sozinho aparece 129 vezes em vinte
+        voltas, três vezes mais que a segunda colocada.
+
+    A ESCOLHA DE QUEM FICA é a PRIMEIRA de cada janela, e não a "melhor":
+        escolher a melhor exigiria saber qual gesto a fala pede, que é
+        exatamente o que ninguém sabe medir hoje. A primeira é a que o
+        roteirista pôs mais cedo, e ela costuma ser a que responde ao começo
+        da fala. Sem informação para ranquear, a regra simples é a honesta.
+
+    E o que continua animando o corpo o tempo todo é `gesticular` (de quem
+    fala) e `escutar` (de quem ouve) -- movimento contínuo e pequeno, que é o
+    que o dono do projeto sempre pediu, em vez de um gesto grande por segundo.
+    """
+    cabem = max(1, int(round(max(dur_s, 0.1) / INTERVALO_GESTO_S)))
+    for chave, acoes in list(por_ator.items()):
+        if not acoes:
+            continue
+        estruturais, decorativas = [], []
+        for a in acoes:
+            nome = a.get("nome")
+            if (nome in ACOES.ACOES_DE_ENTRADA or nome in ACOES.ACOES_DE_SAIDA
+                    or nome in ACOES.ACOES_PEGAM_OBJETO
+                    or nome in ACOES.ACOES_LARGAM_OBJETO
+                    or nome in ACOES.ACOES_ENTREGAM_OBJETO
+                    or nome in ACOES.ACOES_DE_INTERACAO
+                    or nome in ("andar", "parado", "gesticular", "escutar")):
+                estruturais.append(a)
+            else:
+                decorativas.append(a)
+        if len(decorativas) <= cabem:
+            continue
+        decorativas.sort(key=lambda a: float(a.get("de", 0.0)))
+        ficam = decorativas[:cabem]
+        saiu = [a.get("nome") for a in decorativas[cabem:]]
+        # a ordem original importa para `acoes.aplicar` (a precedência é
+        # cronológica desde 31/08), então reordena pelo início
+        por_ator[chave] = sorted(estruturais + ficam,
+                                 key=lambda a: float(a.get("de", 0.0)))
+        print(f"[gesto] {chave}: {len(decorativas)} gestos em {dur_s:.1f}s "
+              f"e cabem {cabem}; saiu {', '.join(saiu)}")
+
+
 def _gancho_ja_em_cena(por_ator, falante):
     """No PRIMEIRO trecho, quem fala não entra andando: ele já está em cena.
 
@@ -4115,6 +4305,10 @@ def render(pasta_partes, spec, saida, tmpdir=None, amostra=0):
         # poder reproduzir o defeito -- é o mesmo recurso de
         # `SEPARA_OBJETO_PX`. Sem um jeito de desligar, a única prova
         # possível é "depois", e "depois" sozinho não prova nada.
+        # O EXCESSO DE GESTO SAI AQUI (03/09, queixa 2). Antes de qualquer
+        # outra guarda: as que vêm depois olham a lista de ações, e olhar uma
+        # lista que ainda vai encolher é medir o que não vai acontecer.
+        _ralear_gestos(por_ator, float(tr.get("dur") or 0.0))
         if i_tr == 0 and os.environ.get("GANCHO_ENTRA") != "1":
             _gancho_ja_em_cena(por_ator, falante)
         # E A REGRA GERAL, PARA OS OUTROS TRECHOS: a câmera não fecha em quem
@@ -4347,7 +4541,35 @@ def render(pasta_partes, spec, saida, tmpdir=None, amostra=0):
                                       centro_corpo, close=fecha,
                                       centro_rosto=centro_rosto,
                                       teto_par=teto_par)
-            cam["zoom"] = float(cam.get("zoom", 1.0)) * z_tr
+            # A AÇÃO NÃO COMANDA MAIS A CÂMERA (03/09, queixa 5 do dono do
+            # projeto: *"enquadramento não foi resolvido, o personagem acena
+            # e o fundo inteiro vai com ele"*).
+            #
+            # As guardas de janela miram o núcleo desde 31/08 (lei 71) e o
+            # centro horizontal sai do QUADRIL, não do bbox — então nem o
+            # aceno nem o braço estendido mexem o enquadramento por esse
+            # caminho. Só que havia um segundo caminho, e ele nunca foi
+            # tocado: **as próprias ações declaram `zoom` e `zoom_y`**.
+            # `susto` pede `zoom: 1,28` e `zoom_y: 0,34` — 28% de avanço mais
+            # um tilt de 16% da altura —, e `susto` aparece 20 vezes nas
+            # últimas 20 voltas, quase sempre como gesto decorativo dentro de
+            # um trecho de 4 s. `tropecar` pede 1,10. O que se vê é o quadro
+            # inteiro dando um tranco a cada poucos segundos.
+            #
+            # O `zoom_y` da ação já estava documentado como número velho
+            # (o comentário abaixo, de 29/08: 0,34 era "o rosto" quando o
+            # personagem ficava a 78% do quadro, e hoje ele pode estar a 95%).
+            #
+            # A regra passa a ser de LINGUAGEM, e é a mesma do gesto: **o
+            # plano é do trecho, não da ação**. Quem decide enquadramento é
+            # `_enquadramento` (um plano por trecho, mais o push-in de 3,5%);
+            # a ação fica com o que é dela — a pose, e o `tremor`, que sacode
+            # sem mudar para onde a câmera aponta.
+            #
+            # O avanço da ação não some: fica limitado a 4%, que é da ordem
+            # do push-in e lê como ênfase em vez de tranco.
+            z_acao = max(0.96, min(1.04, float(cam.get("zoom", 1.0))))
+            cam["zoom"] = z_acao * z_tr
             # A MIRA DA AÇÃO É RELATIVA AO CORPO, NÃO À TELA (29/08).
             #
             # Uma ação pode querer olhar mais para cima -- o `susto` pede
@@ -4362,10 +4584,13 @@ def render(pasta_partes, spec, saida, tmpdir=None, amostra=0):
             # subir 0,16), não a altura absoluta. O desvio se aplica a
             # partir do centro do corpo que `_enquadramento` calculou para
             # este cenário, e o clamp mantém a janela dentro do quadro.
-            zy_acao = float(cam.get("zoom_y", 0.5))
-            alvo = zy + (zy_acao - 0.5)
+            # E O DESVIO VERTICAL DA AÇÃO PASSA A SER ZERO (03/09). Ele é o
+            # tilt da queixa 5 — o único jeito de uma ação mover para onde a
+            # câmera aponta —, e o comentário acima já dizia que o número
+            # dela envelheceu. O alvo vertical é só o que `_enquadramento`
+            # decidiu para este trecho e este cenário.
             meia = 0.5 / max(cam["zoom"], 1e-6)
-            cam["zoom_y"] = max(meia, min(1.0 - meia, alvo))
+            cam["zoom_y"] = max(meia, min(1.0 - meia, zy))
             # O MEIO DE QUEM ESTÁ EM CENA, para a câmera fechar ali. Só
             # conta quem tem o corpo dentro do quadro: quem está entrando
             # ou saindo puxaria o enquadramento para fora junto com ele.
