@@ -271,11 +271,56 @@ def buscar_cenarios_e_objetos(spec):
 
     import sob_demanda as SD
 
-    urls = dict(spec.get("cenarios") or {})
+    # CENARIO REPROVADO NAO SE BAIXA (03/09, item 3 do dono do projeto).
+    #
+    # `cenarios.REPROVADOS` tira do ar a arte que existe e nao presta -- hoje
+    # o `comercio`, que virou um corredor vazio. So que a proibicao mora em
+    # `cenarios.resolver`, e ela e' CONTORNADA aqui: o spec traz
+    # `cenarios: {comercio: <url>}`, este laco baixa SO o que o spec cita, e
+    # entao o motor descobre um inventario com um item so. `resolver` tenta o
+    # parecido, nao o encontra no disco (ninguem o baixou) e cai no ramo "o
+    # unico que ha" -- devolvendo justamente o cenario proibido.
+    #
+    # A troca tem de acontecer ANTES do download, que e aqui: o substituto
+    # entra no lugar e e' ele que vai para o disco. Sem isto a proibicao e'
+    # letra morta, e foi o que o v002 mostrou -- ele saiu no `comercio`
+    # depois de o `comercio` ter sido reprovado.
+    def _trocar(nome):
+        alvo = CEN.normalizar(nome)
+        if alvo not in getattr(CEN, "REPROVADOS", {}):
+            return nome, None
+        for p in CEN.CATALOGO.get(alvo, {}).get("parecidos", ()):
+            if p not in getattr(CEN, "REPROVADOS", {}):
+                return p, f"'{alvo}' esta reprovado ({CEN.REPROVADOS[alvo]})"
+        return nome, None
+
+    import cenarios as CEN
+
+    urls, trocas = {}, {}
+    for nome, url in (spec.get("cenarios") or {}).items():
+        novo, motivo = _trocar(nome)
+        if motivo:
+            print(f"[cenario] {nome} -> {novo}: {motivo}")
+            trocas[nome] = novo
+            urls[novo] = None                # a URL era do reprovado; refaz
+        else:
+            urls[nome] = url
     for tr in spec.get("trechos") or []:
         nome = tr.get("cenario")
-        if nome and nome not in urls:
-            urls[nome] = None                    # marca para tentar o padrao
+        if not nome:
+            continue
+        if nome in trocas:
+            tr["cenario"] = trocas[nome]     # o trecho passa a pedir o novo
+            nome = trocas[nome]
+        else:
+            novo, motivo = _trocar(nome)
+            if motivo:
+                print(f"[cenario] {nome} -> {novo}: {motivo}")
+                trocas[nome] = novo
+                tr["cenario"] = novo
+                nome = novo
+        if nome not in urls:
+            urls[nome] = None                # marca para tentar o padrao
     faltaram = []
     for nome, url in urls.items():
         # a URL do spec primeiro; sem ela, as grafias possiveis do bucket.
