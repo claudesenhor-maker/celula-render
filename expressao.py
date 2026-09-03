@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+﻿#!/usr/bin/env python3
 """
 expressao — a CARA do personagem no motor cut-out.
 
@@ -39,6 +39,7 @@ A EXCEÇÃO: A BOCA
     que `boca_curva` curva. É a única coisa do personagem desenhada por
     código, e some sozinha no dia em que a folha trouxer o queixo.
 """
+import os
 import math
 
 # =====================================================================
@@ -66,9 +67,71 @@ _Z = {"cabeca_rot": 0.0, "sobrancelha_dy": 0.0, "sobrancelha_rot": 0.0,
       "boca_min": 0.0, "mandibula_dx": 0.0, "boca_curva": 0.0}
 
 
+# QUANTO DA EXPRESSÃO DE FATO CHEGA AO ROSTO (03/09).
+#
+# Queixa do dono do projeto sobre o v001: *"a cara do personagem foi
+# completamente deformada pelo efeito da boca e expressão, antes não era
+# assim, tente preservar mais a arte do personagem"*.
+#
+# A folha de rostos do Zeca mostra por quê. Os números do catálogo eram
+# grandes demais para arte de traço:
+#
+#     chocado    olho_sy = 1,48   -> o olho fica MEIA VEZ MAIOR
+#     chocado    sobrancelha_dy = -0,105 -> a sobrancelha sobe 10,5% do
+#                crânio e sai da testa, virando uma mancha cinza no cabelo
+#     surpreso   olho_sy = 1,30, olho_sx = 1,22
+#
+# Uma peça de arte esticada 48% deixa de ser a peça que o desenhista fez --
+# é essa a "deformação" da queixa. E o problema não é a ESCOLHA de cada
+# expressão (a hierarquia entre elas está certa: chocado > surpreso >
+# duvida); é a AMPLITUDE de todas.
+#
+# Por isso o conserto é um fator único aplicado ao catálogo inteiro, e não
+# doze ajustes à mão: um número mantém a hierarquia desenhada e é reversível
+# numa linha. Ele amortece o DESVIO em relação ao repouso -- escala volta na
+# direção de 1,0, deslocamento e rotação na direção de 0.
+#
+# 0,45 foi escolhido na folha de rostos: com ele o olho de `chocado` vai de
+# 1,48 para 1,22 (visível, sem descolar da órbita) e a sobrancelha de -0,105
+# para -0,047 (sobe, sem entrar no cabelo).
+AMPLITUDE = float(os.environ.get("AMPLITUDE_EXPRESSAO", "0.45"))
+
+# As escalas partem de 1,0; o resto parte de 0. Amortecer sem saber disso
+# encolheria o olho para perto de zero em vez de o trazer para o repouso.
+_PARTEM_DE_UM = ("olho_sx", "olho_sy")
+
+# O QUE O AMORTECIMENTO ALCANÇA -- E A DISTINÇÃO É O PONTO DA CORREÇÃO.
+#
+# A primeira versão amorteceu o catálogo INTEIRO e a folha de rostos mostrou o
+# erro na hora: a boca virou uma linha reta nas doze expressões, `chocado` e
+# `desesperado` inclusive, e `sorrindo` deixou de sorrir. Amortecer de menos
+# não conserta e amortecer tudo apaga a cara.
+#
+# A linha certa é a que o dono do projeto desenhou na própria queixa --
+# *"tente preservar mais a ARTE DO PERSONAGEM"*:
+#
+#   · sobrancelha, olho e inclinação de cabeça movem PEÇAS QUE O DESENHISTA
+#     FEZ. Esticar um olho 48% é deformar a arte dele, e é isso que se
+#     amortece;
+#   · `boca_min`, `boca_curva` e `mandibula_dx` governam a boca, que **não é
+#     arte**: ela é apagada da folha e DESENHADA por código (ver
+#     `_boca_desenhada`), justamente porque a folha não traz queixo. Ela é o
+#     que sobra para carregar a emoção depois que as peças param de esticar --
+#     amortecê-la seria tirar a expressão sem preservar arte nenhuma.
+#
+# O tamanho da boca ABERTA foi tratado onde ele mora: `BOCA_ABERTURA_MAX` em
+# `palito_cutout`, que caiu de 0,55 para 0,30 da largura.
+_ARTE_DO_DESENHISTA = ("sobrancelha_dy", "sobrancelha_rot",
+                       "olho_sx", "olho_sy", "olho_dy", "cabeca_rot")
+
+
 def _e(**kw):
     d = dict(_Z)
     d.update(kw)
+    if AMPLITUDE != 1.0:
+        for k in _ARTE_DO_DESENHISTA:
+            base = 1.0 if k in _PARTEM_DE_UM else 0.0
+            d[k] = base + (d[k] - base) * AMPLITUDE
     return d
 
 
@@ -311,6 +374,67 @@ def _limitar(v, teto):
 
 def _sinal(v, unidade):
     return f"{v:+.0f}{unidade}"
+
+
+# QUANTO A VOZ PODE MUDAR DE UM TRECHO PARA O SEGUINTE (03/09, item 7 do
+# dono do projeto: *"a voz do personagem muda muito durante a fala, não é algo
+# natural como alguém ficando mais bravo ou algo do gênero"*).
+#
+# A correção de 02/09 apertou o TETO ABSOLUTO do desvio (pitch a ±10 Hz, rate
+# a ±20%) e resolveu metade do problema -- a metade da identidade do falante.
+# A metade que sobrou é outra, e a queixa a nomeia com precisão: o que soa
+# falso não é o quanto a voz chega a mudar, é **a velocidade com que ela
+# muda**.
+#
+# Hoje a emoção é escolhida por TRECHO e a prosódia salta no corte. Duas falas
+# seguidas do mesmo personagem, `triste` e depois `chocado`, dão
+#
+#     rate  -20%  ->  +20%      quarenta pontos, num corte
+#
+# e o ouvido lê isso como troca de falante, não como emoção. "Alguém ficando
+# mais bravo" -- as palavras do dono -- é exatamente uma RAMPA: a voz acelera
+# ao longo de vários trechos.
+#
+# Então a prosódia ganha um limite de VARIAÇÃO, e não outro limite de valor.
+# Oito pontos de rate e cinco hertz por trecho: em três trechos ainda se
+# atravessa a faixa inteira, o que é um arco, e em um corte não se atravessa
+# mais que um passo, o que é uma pessoa.
+#
+# O teto absoluto continua valendo por cima disto -- os dois fazem coisas
+# diferentes e nenhum substitui o outro.
+PASSO_RATE_PCT = 8.0
+PASSO_PITCH_HZ = 5.0
+PASSO_VOLUME_PCT = 4.0
+
+
+def suavizar(cfg, anterior):
+    """Limita o quanto `cfg` pode se afastar de `anterior` num corte.
+
+    `anterior` é a cfg do trecho passado DO MESMO PERFIL DE VOZ -- a
+    continuidade é de cada personagem, e não da cena: quando o falante muda,
+    a voz muda mesmo, e limitar isso seria fazer um personagem herdar a
+    emoção do outro.
+
+    Devolve a cfg ajustada. Sem `anterior` (primeira fala do personagem no
+    vídeo), devolve como veio: não há de onde vir uma rampa."""
+    if not anterior:
+        return cfg
+    saida = dict(cfg)
+    for chave, unidade, passo in (("rate", "%", PASSO_RATE_PCT),
+                                  ("pitch", "Hz", PASSO_PITCH_HZ),
+                                  ("volume", "%", PASSO_VOLUME_PCT)):
+        try:
+            novo = float(str(cfg.get(chave, "0")).replace(unidade, "")
+                         .replace("+", "").strip() or 0)
+            velho = float(str(anterior.get(chave, "0")).replace(unidade, "")
+                          .replace("+", "").strip() or 0)
+        except ValueError:
+            continue
+        d = novo - velho
+        if abs(d) > passo:
+            novo = velho + (passo if d > 0 else -passo)
+            saida[chave] = f"{novo:+.0f}{unidade}"
+    return saida
 
 
 def prosodia(nome, intensidade=1.0, base=None):
