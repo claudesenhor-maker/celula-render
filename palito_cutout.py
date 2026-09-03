@@ -726,6 +726,11 @@ def _tapar_entalhe(img, cor=None, rosto=None):
     return suave, caixa
 
 
+# Fração da LARGURA da boca a que ela chega quando aberta ao máximo. Ver o
+# comentário na chamada, em `desenhar_personagem`.
+BOCA_ABERTURA_MAX = float(os.environ.get("BOCA_ABERTURA_MAX", "0.30"))
+
+
 def _boca_desenhada(larg, alt_max, nivel, curva, cor_traco, cor_dentro=None,
                     espessura=None):
     """A boca, quando a folha não traz queixo articulado.
@@ -2019,13 +2024,38 @@ def _colar_objeto(base, oi, opv, palma, ang, esc):
     base.alpha_composite(camada)
 
 
-# O RAIO DO PINCEL DE FECHAMENTO, em pixels do quadro montado. Ele tem de
-# ser maior que a metade da fenda mais larga e menor que a metade da menor
-# separação que DEVE continuar existindo. Os vãos medidos nas folhas vão de
-# 5 px (Pal) a 14 px (enfermeira), e a menor separação legítima é a dos dedos
-# da mão fechada (~30 px na escala de cena). Nove fecha 18 px de fenda e não
-# alcança 30.
-RAIO_FECHO = 9
+# ZERO: O VÃO NÃO SE TAPA. TERCEIRA TENTATIVA, E A ÚLTIMA (03/09, à noite).
+#
+# Queixa do dono do projeto sobre o v001: *"junção de peças, ele simplesmente
+# criou uma 'ligação' entre as peças, é completamente desnecessário"*.
+#
+# Ele está certo, e o A/B (`RAIO_FECHO=0` contra 9, mesmo spec do v001) não
+# deixa dúvida: **com o fecho há faixas escuras no punho, no cotovelo, na
+# cintura, no joelho e no tornozelo; sem ele, o corpo sai limpo.** A causa do
+# escurecimento é direta -- o preenchimento lê a cor por desfoque, e no vão as
+# duas peças vizinhas apresentam uma para a outra o próprio CONTORNO PRETO;
+# desfocar dois traços pretos separados por uma fresta dá cinza escuro, e o
+# resultado é uma ponte pintada exatamente onde não devia haver nada.
+#
+# TRÊS TENTATIVAS, TRÊS ARTEFATOS, E O MESMO ERRO DE PREMISSA:
+#
+#   · anel da cor do CONTORNO (até 02/09)  -> faixa preta de boneco articulado
+#   · anel da cor de DENTRO   (02 a 03/09) -> esparadrapo rosa/azul na junta
+#   · fechamento morfológico  (03/09)      -> ponte cinza entre as peças
+#
+# A premissa errada é a de que o vão APARECE. Ela vinha do run #13, quando o
+# personagem era desenhado sem cenário e depois com cenário atrás -- e a
+# conclusão "cada vão virou um rasgo por onde a rua aparece" nunca foi
+# remedida depois que a geometria dos pivôs melhorou. Nas poses e escalas de
+# hoje as peças vizinhas já se sobrepõem o bastante: a prévia com
+# `RAIO_FECHO=0` mostra ombro, cotovelo, punho, quadril, joelho e tornozelo
+# fechados, com o traço da própria arte fazendo a emenda.
+#
+# **Cutout de papel se emenda por sobreposição, não por remendo pintado.** Se
+# um dia uma folha nova trouxer vão largo demais e ele aparecer de verdade, o
+# conserto é na SEGMENTAÇÃO (medir melhor o pivô) ou na arte, não aqui: este
+# ponto do código só sabe pintar por cima, e pintar por cima sempre apareceu.
+RAIO_FECHO = int(os.environ.get("RAIO_FECHO", "0"))
 
 
 def _fechar_vaos_do_corpo(base):
@@ -2067,9 +2097,9 @@ def _fechar_vaos_do_corpo(base):
     por ator e por frame.
     """
     bb = base.getbbox()
-    if not bb:
-        return base
     r = RAIO_FECHO
+    if not bb or r <= 0:
+        return base
     x0, y0 = max(bb[0] - r, 0), max(bb[1] - r, 0)
     x1, y1 = min(bb[2] + r, base.width), min(bb[3] + r, base.height)
     corte = base.crop((x0, y0, x1, y1))
@@ -2313,8 +2343,21 @@ def desenhar_personagem(pers, rig, boca_nivel=0.0, piscando=False, objeto=None,
             estilo = getattr(pers, "boca_estilo", None) or {}
             # a curva da emoção SOMA à curva de repouso que o desenhista deu
             # à boca: a cara neutra continua sendo a que ele desenhou
+            # A ABERTURA MÁXIMA DA BOCA (03/09, queixa 2 do dono do projeto:
+            # *"a cara foi completamente deformada pelo efeito da boca"*).
+            #
+            # Era 0,55 da largura: numa boca de 81 px (o Zeca) isso dá 45 px
+            # de abertura, e o que aparece na folha de rostos é um buraco
+            # escuro ocupando o terço de baixo da cara. Uma pessoa FALANDO
+            # abre a boca a algo como um terço da largura dela; 0,55 é grito,
+            # e o motor a punha aí em toda sílaba forte.
+            #
+            # 0,30 é o teto de uma fala normal. O `boca_min` das expressões
+            # continua podendo levantar o piso -- é ele que faz o queixo cair
+            # no susto --, então a cara de espanto não se perde: o que se
+            # perde é o grito permanente.
             bimg, bpiv = _boca_desenhada(
-                blarg * e, blarg * e * 0.55, boca_nivel,
+                blarg * e, blarg * e * BOCA_ABERTURA_MAX, boca_nivel,
                 max(-1.0, min(1.0, ex["boca_curva"] + float(estilo.get("curva", 0.0)))),
                 _cor_da_casca(pers.img["cranio"]),
                 espessura=float(estilo.get("esp", 0.0)) * e or None)
@@ -2690,7 +2733,25 @@ def montar_frame(camada, cenario, cam, quadril_x=W / 2, camadas=None,
     # que lê como adesivo. E o ZOOM é do corpo: deixar o objeto abrir o
     # plano é a câmera recuando toda vez que alguém levanta o braço.
     nucleo = caixa_do_nucleo(enquadrada) if abs(z - 1.0) > 0.002 else None
-    nucleo_lat = _unir(nucleo, caixa_extra) if nucleo else None
+    # A GUARDA LATERAL VOLTA A MIRAR SÓ O NÚCLEO (03/09, item 5 do dono do
+    # projeto: *"em momentos que o foco acompanha o movimento da mão"*).
+    #
+    # Em 02/09 a caixa do OBJETO foi unida ao núcleo para a guarda lateral,
+    # com um argumento correto: objeto cortado ao meio pela borda lê como
+    # adesivo. Só que o objeto está NA MÃO — quando a mão sobe ou se estende,
+    # a caixa vai junto e a janela anda atrás dela. O texto de 02/09 já
+    # separava alto (só o corpo) de lateral (corpo + objeto) para não repetir
+    # o defeito do aceno; o que faltou ver é que **o lado tem o mesmo
+    # problema que o alto**: a mão se mexe nos dois eixos.
+    #
+    # Fica o núcleo puro nas três guardas. O que se perde é a garantia de que
+    # o objeto nunca encosta na borda — e isso é o custo aceito, pela mesma
+    # razão que o projeto já aceita cortar um braço estendido num close
+    # (`caixa_do_nucleo`): **enquadramento que persegue a extremidade é
+    # câmera tremendo, e câmera tremendo estraga o plano inteiro, não um
+    # objeto.** `caixa_extra` continua chegando aqui e deixou de ser usada de
+    # propósito: apagá-la do contrato esconderia esta decisão.
+    nucleo_lat = nucleo
     bb = None
     if camadas and z > 1.002:
         bb = nucleo
@@ -4056,6 +4117,8 @@ def render(pasta_partes, spec, saida, tmpdir=None, amostra=0):
 
     # VOZ PRIMEIRO: a duração real vira a timeline (igual ao palito_v5)
     faixas, respiros, marcas_por_trecho, total = [], [], [], 0.0
+    # a última prosódia de CADA perfil de voz, para a rampa do item 7
+    prosodia_ant = {}
     n_trechos = len(spec["trechos"])
     for i, tr in enumerate(spec["trechos"]):
         wav = os.path.join(tmp, f"v{i:02d}.wav")
@@ -4066,6 +4129,12 @@ def render(pasta_partes, spec, saida, tmpdir=None, amostra=0):
         # falas com a mesma entonação. O rótulo é um só (`expressao`), e
         # daqui saem os dois -- ver expressao.PROSODIA.
         cfg = EXPR.prosodia(tr.get("expressao"), tr.get("intensidade", 1.0), cfg)
+        # A VOZ NÃO SALTA NO CORTE (03/09, item 7). A emoção é escolhida por
+        # trecho e mudava a prosódia de uma vez; `suavizar` limita o passo
+        # por trecho, POR PERFIL DE VOZ -- a continuidade é de cada
+        # personagem. Ver `expressao.suavizar`.
+        cfg = EXPR.suavizar(cfg, prosodia_ant.get(perfil))
+        prosodia_ant[perfil] = cfg
         for k in ("rate", "pitch", "volume"):    # o trecho pode cravar
             if tr.get(k):
                 cfg[k] = tr[k]
@@ -4083,6 +4152,27 @@ def render(pasta_partes, spec, saida, tmpdir=None, amostra=0):
         marcas_por_trecho.append(marcas or [])
         total += tr["dur"]
     print(f"[voz] timeline real: {total:.2f}s")
+    # O PLACAR DE MOTOR DE VOZ (03/09, item 6). Ver `palito_v5.USOU_MOTOR`:
+    # a queda do ElevenLabs para o Edge sempre avisou numa linha perdida do
+    # log. Aqui ela vira uma linha que se procura, e um alarme quando TODAS as
+    # falas cairam -- que e o caso em que o video inteiro sai com a voz errada.
+    try:
+        from palito_v5 import placar_de_voz
+        placar = placar_de_voz()
+        if placar:
+            print("[voz] motor: "
+                  + ", ".join(f"{k}={v}" for k, v in sorted(placar.items())))
+            pedidos_eleven = placar.get("pedido_eleven", 0)
+            usou_eleven = placar.get("usou_eleven", 0)
+            if pedidos_eleven and not usou_eleven:
+                print("[voz] !! TODAS as falas pediram ElevenLabs e NENHUMA "
+                      "conseguiu: o video inteiro esta com a voz de reserva. "
+                      "Conferir ELEVEN_API_KEY e os voice_id da identidade.")
+            elif pedidos_eleven and usou_eleven < pedidos_eleven:
+                print(f"[voz] ! {pedidos_eleven - usou_eleven} de "
+                      f"{pedidos_eleven} falas cairam para o Edge")
+    except Exception as e:                                    # noqa: BLE001
+        print(f"[voz] nao consegui ler o placar de motor ({type(e).__name__})")
 
     # o respiro entra no áudio como silêncio de verdade. Sem isto o
     # -shortest do fim decepava a cauda de cada trecho -- o vídeo saía
@@ -4122,6 +4212,11 @@ def render(pasta_partes, spec, saida, tmpdir=None, amostra=0):
             # a semente do fila_id, para que duas esquetes do mesmo gênero
             # não saiam com o mesmo arpejo nota por nota
             musica.setdefault("semente", spec.get("fila_id", "sem-fila"))
+            # AS FALAS CHEGAM À TRILHA (03/09, item 3). `sfx.genero_permitido`
+            # escolhe a cama pelo ASSUNTO quando o gênero pedido não pode
+            # entrar -- uma esquete de call center pede a musiquinha de
+            # espera, e quem sabe que ela é de call center é o texto.
+            musica.setdefault("falas", [t.get("fala") for t in spec["trechos"]])
         audio = SFX.mixar(voz, eventos, os.path.join(tmp, "mix.wav"),
                           musica=musica, dur_s=total, bipes=bipes)
 
