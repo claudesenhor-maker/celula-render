@@ -84,6 +84,24 @@ CATALOGO = {
     "sala": {
         "e": "sala de estar com sofá",
         "chao": 0.95,
+        # O TAPETE RABISCADO (04/09, ciclo 25). O terço de baixo desta arte --
+        # exatamente onde os personagens pisam -- é um tapete desenhado em
+        # TRAÇO BRANCO SEM COR: um emaranhado de linhas com o mesmo peso do
+        # contorno do personagem e nenhuma cor para separar os dois. Aparece
+        # em quase todo quadro dos v025, v029 e v030, e o `sala` é 48% do
+        # corpus.
+        #
+        # Tentei apagá-lo pintando por cima com a cor do assoalho que o cerca,
+        # e a máscara não separa: o assoalho de madeira é claro e pouco
+        # saturado como o tapete, então ela come o piso e o sofá junto. Arte de
+        # uma vez só se conserta à mão (lei 3) -- e enquanto a mão não vem, o
+        # que o motor pode fazer é o que a câmera faria: **jogar mais o fundo
+        # para fora de foco**. Não conserta a arte; tira dela o peso de traço
+        # que disputa com o personagem, que é o dano real.
+        #
+        # 2,2 vezes o borrão do plano aberto. Medido no olho contra a folha do
+        # v030: abaixo disso o rabisco ainda se lê como rabisco.
+        "foco": 2.2,
         "sinonimos": ("casa", "estar", "sofa", "tv", "apartamento"),
         "parecidos": ("quarto", "cozinha"),
         "palavras": ("sofa", "televisao", "tv", "novela", "controle",
@@ -155,6 +173,17 @@ def chao_de(chave):
     dentro ou um pouco fora do piso; errar por 10% é o boneco flutuando."""
     return float((CATALOGO.get(normalizar(chave)) or {}).get("chao",
                                                              CHAO_PADRAO))
+
+
+def foco_de(chave):
+    """Quanto ESTA arte precisa sair de foco, em múltiplos do padrão.
+
+    Anotação por asset, como a linha do chão, e pelo mesmo motivo: é uma
+    propriedade do desenho, dura para sempre, e nenhum detector automático
+    acertou (`ferramentas/regiao_sem_cor.py` está aberto desde 02/09 e não
+    separa os oito). 1,0 é o normal; acima disso é arte com região grande em
+    traço sem cor, que disputa peso de linha com o personagem."""
+    return float((CATALOGO.get(normalizar(chave)) or {}).get("foco", 1.0))
 
 
 def _limpo(s):
