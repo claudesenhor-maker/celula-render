@@ -2450,10 +2450,16 @@ def _fechar_vaos_do_corpo(base):
     # `MaxFilter(k)` do PIL é um filtro de posto ingênuo: custa k² por pixel.
     # Medido numa caixa de personagem típica (620x1300), o par dilata-erode
     # custa **396 ms por ator e por frame** com raio 4 -- vinte e quatro
-    # minutos de CPU num vídeo de 1800 quadros com dois em cena, dentro de um
-    # Action que morre aos 18. Ele cabe hoje porque o resto é rápido, e por
-    # isso ninguém tinha medido; subir o raio para 8, que é o que o pescoço da
-    # Maya pedia, custaria 1,66 s por ator e por frame e derrubaria o render.
+    # minutos de CPU num vídeo de 1800 quadros com dois em cena. Ele cabe hoje
+    # porque o resto é rápido, e por isso ninguém tinha medido; subir o raio
+    # para 8, que é o que o pescoço da Maya pedia, custaria 1,66 s por ator e
+    # por frame e derrubaria o render.
+    #
+    # QUAL É O TETO, DE VERDADE (corrigido em 04/09): não são os 18 minutos do
+    # Action -- eles acabaram em 30/08 e o `render.yml` dá **90**. Quem manda
+    # aqui é `lote_video.TETO_VOLTA_S`, que abandona a volta aos **35 min**, e
+    # os renders desta tarde estão em 23 a 26. A margem é de nove minutos, não
+    # de nenhum: é pouca do mesmo jeito, mas pela razão certa.
     #
     # Reduzir o alfa pela metade antes de filtrar troca as duas contas de
     # lugar: são quatro vezes menos pixels E um pincel de metade do diâmetro
