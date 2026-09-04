@@ -1378,6 +1378,30 @@ ACOES_QUE_FICAM = frozenset((
     "apontar", "apresentar", "cair",
 ))
 
+# E O QUE FICA NEM SEMPRE FICA INTEIRO (04/09, ciclo 25).
+#
+# `apontar` está aqui em cima porque largá-lo ao fim da janela devolvia o braço
+# ao repouso no meio da fala, e isso é o boneco parado. Só que congelar a pose
+# a 100% tem o defeito oposto, e a prova do gancho do v028 o mostra inteiro: o
+# roteiro pede `apontar` de 0,2 a 0,4 e **o braço fica esticado na horizontal
+# pelos 2,4 s seguintes, cortado pela borda do quadro**, em oito dos doze
+# quadros dos três segundos que decidem a distribuição do vídeo.
+#
+# Ninguém aponta e fica apontando. Aponta-se, e a mão DESCE um pouco e fica
+# no ar -- é o *settle* dos doze princípios, o mesmo que a lei 76 já aplica ao
+# ataque do gesto, agora aplicado à saída dele. A pose assentada continua bem
+# acima do repouso (o braço não morre ao lado do corpo) e não alcança mais a
+# borda do quadro.
+#
+# Só os dois GESTOS da lista assentam. `maos_na_cintura`, `bracos_cruzados`,
+# `mao_no_queixo` e `maos_na_cabeca` são POSTURAS pela lei 35 -- o corpo as
+# assume e as mantém, e assentá-las seria desfazer o que a lei 35 conserta.
+# `cair` fica inteira pelo motivo óbvio: quem caiu está no chão.
+ASSENTA_EM = {"apontar": 0.5, "apresentar": 0.55}
+
+# Em quanto tempo a pose assenta, depois que a janela da ação fecha.
+TEMPO_DE_ASSENTAR_S = 0.7
+
 
 def _percurso(antes, rig):
     """Quantos graus o osso que mais andou andou, entre dois rigs.
@@ -1504,15 +1528,27 @@ def aplicar(acoes, t_rel, rig, dur_trecho):
             u = (t_rel - de) / (ate - de)
             decorrido, passou = (t_rel - de) * dur_trecho, False
         pilha.append(((de, i_a),
-                      (f, u, env, so_membros, decorrido, de, ate, a, passou)))
+                      (f, u, env, so_membros, decorrido, de, ate, a, passou,
+                       nome)))
 
-    for _o, (f, u, env, so_membros, decorrido, de, ate, a, passou) in sorted(
-            pilha, key=lambda p: p[0]):
+    for _o, (f, u, env, so_membros, decorrido, de, ate, a, passou,
+             nome) in sorted(pilha, key=lambda p: p[0]):
+        # O GESTO QUE FICA ASSENTA (04/09). Ver `ASSENTA_EM`: `apontar` e
+        # `apresentar` continuam valendo depois da janela, mas a meio caminho
+        # do repouso, e não congelados no extremo -- ninguém aponta e fica
+        # apontando com o braço esticado pelos dois segundos seguintes.
+        assenta = ASSENTA_EM.get(nome) if passou else None
         antes = None
-        if env:
+        if env or assenta is not None:
             antes = {o: (list(v) if isinstance(v, list) else v)
                      for o, v in rig.items()}
         d = f(u, rig, dur_trecho * (ate - de), a) or {}
+        if assenta is not None:
+            k = assenta + (1.0 - assenta) * (
+                1.0 - _suave(min(1.0, decorrido / TEMPO_DE_ASSENTAR_S)))
+            _pesar(rig, antes, k,
+                   exceto=("quadril",) if so_membros else None)
+            continue
         if antes is not None:
             # A JANELA DO ENVELOPE SAI DO PERCURSO, não de uma constante:
             # o braço tem uma velocidade máxima, e o tempo que ele leva
