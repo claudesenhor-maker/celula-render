@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+﻿#!/usr/bin/env python3
 """
 palito_v5 — VOZ PRIMEIRO, CENA DEPOIS.
 
@@ -254,7 +254,7 @@ def _eleven(texto, cfg, out_mp3):
     marcas -- ou seja, ligar o ElevenLabs DESLIGAVA a legenda por palavra.
     O endpoint /with-timestamps devolve o mesmo audio (em base64) mais o
     alinhamento por caractere, e sai pelo mesmo preco."""
-    import base64, urllib.request
+    import base64, urllib.request, urllib.error
     chave = os.environ["ELEVEN_API_KEY"]
     voz = cfg.get("eleven_voice_id") or os.environ.get("ELEVEN_VOICE_ID")
     if not voz:
@@ -275,8 +275,39 @@ def _eleven(texto, cfg, out_mp3):
         data=corpo, method="POST",
         headers={"xi-api-key": chave, "Content-Type": "application/json",
                  "Accept": "application/json"})
-    with urllib.request.urlopen(req, timeout=180) as r:
-        resp = json.loads(r.read().decode())
+    # O MOTIVO DE VERDADE, E NAO SO O CODIGO HTTP (04/09).
+    #
+    # Em 03/09 as nove falas do v001 cairam para o Edge com
+    # `HTTP Error 401: Unauthorized`, e o diagnostico foi "a chave nao tem
+    # permissao de text-to-speech". Estava errado. O corpo da resposta dizia
+    # outra coisa:
+    #
+    #     "code": "quota_exceeded"
+    #     "You have 0 credits remaining, while 6 credits are required"
+    #
+    # A chave funciona, o endpoint funciona e a permissao existe -- **a conta
+    # esta sem credito**. A ElevenLabs devolve 401 para cota estourada, e nao
+    # 429, entao o codigo HTTP sozinho aponta para o lugar errado.
+    #
+    # `urlopen` levanta HTTPError e o `except` de quem chama imprime so o
+    # `str(e)`, que e a linha de status. O corpo -- onde esta a resposta --
+    # ia para o lixo. Ler o corpo custa tres linhas e teria poupado a sessao
+    # inteira que foi gasta atras de uma permissao que nunca esteve faltando.
+    try:
+        with urllib.request.urlopen(req, timeout=180) as r:
+            resp = json.loads(r.read().decode())
+    except urllib.error.HTTPError as e:
+        detalhe = ""
+        try:
+            corpo_erro = json.loads(e.read().decode("utf-8", "replace"))
+            d = corpo_erro.get("detail") or corpo_erro
+            if isinstance(d, dict):
+                detalhe = f"{d.get('status') or d.get('code')}: {d.get('message')}"
+            else:
+                detalhe = str(d)[:200]
+        except Exception:                                  # noqa: BLE001
+            pass
+        raise RuntimeError(f"HTTP {e.code} -- {detalhe or 'sem detalhe no corpo'}")
     audio = base64.b64decode(resp.get("audio_base64") or "")
     if not audio:
         raise RuntimeError("ElevenLabs devolveu audio vazio")
