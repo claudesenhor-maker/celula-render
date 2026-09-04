@@ -2870,6 +2870,7 @@ class Cenario:
         self.faixa = max(0, self.tira.width - W)      # o quanto dá para andar
         self._borrada = None            # a versão fora de foco, sob demanda
         self._leve = None               # e a de foco brando do plano aberto
+        self._corte = None              # os pontos de corte, já puxados
 
     def ponto_do_trecho(self, i):
         """Onde a câmera fica DURANTE o trecho `i`, em pixels da tira.
@@ -2878,7 +2879,68 @@ class Cenario:
         única coisa que move o fundo dentro de uma fala."""
         if self.faixa <= 0:
             return 0.0
-        return self.faixa * PONTOS_DE_CORTE[i % len(PONTOS_DE_CORTE)]
+        return self._pontos()[i % len(PONTOS_DE_CORTE)]
+
+    def _pontos(self):
+        """Os pontos de corte, PUXADOS PARA ONDE A ARTE TEM COR (04/09).
+
+        POR QUE (ciclo 25, folhas do v026 e do v031)
+            `PONTOS_DE_CORTE` são dezesseis frações fixas da faixa, escolhidas
+            para saltar de um lado ao outro da arte (lei 26). Elas não sabem
+            NADA sobre a arte -- e a arte deste canal não é uniforme: o
+            `escritorio` tem uma parede de janela que é cidade em traço claro,
+            o `sala` tem o tapete rabiscado.
+
+            Medido, janela de 1080 px por janela, a saturação média de cada
+            corte contra a melhor janela da mesma tira:
+
+                cozinha      melhor 149    nos oito pontos  127 a 147
+                escritorio   melhor  78    nos oito pontos   52 a  68
+                sala         melhor  80    nos oito pontos   62 a  77
+
+            No `escritorio` -- e ele é o segundo cenário mais usado -- **os
+            pontos fixos caem sistematicamente na metade lavada**: o pior deles
+            entrega 67% da cor que a melhor janela da mesma arte entrega. Não
+            é defeito da arte inteira; é a câmera cortando no lugar errado
+            dela.
+
+        O QUE MUDA
+            Cada ponto procura, numa vizinhança de ±10% da faixa em volta de
+            onde ele já estava, a janela com mais cor. Vizinhança e não a faixa
+            inteira: o que faz os cortes lerem como corte é eles saltarem de um
+            lado ao outro (lei 26), e uma busca global juntaria todos no mesmo
+            pedaço bom -- o fundo repetido, que é o defeito que a lista de
+            dezesseis pontos existe para evitar.
+
+            Dois pontos que caiam a menos de 6% um do outro depois da busca:
+            o segundo volta para onde estava, pela mesma razão.
+
+        Custa uma soma cumulativa por cenário, no primeiro trecho que o usa.
+        """
+        if self._corte is not None:
+            return self._corte
+        a = np.asarray(self.tira.convert("RGB")).astype(np.int16)
+        mx, mn = a.max(axis=2), a.min(axis=2)
+        sat = np.where(mx > 0, (mx - mn) * 255.0 / np.maximum(mx, 1), 0.0)
+        cum = np.concatenate([[0.0], np.cumsum(sat.mean(axis=0))])
+        viz = max(1, int(self.faixa * 0.10))
+        escolhidos, mudou = [], 0
+        for p in PONTOS_DE_CORTE:
+            x0 = int(self.faixa * p)
+            cands = range(max(0, x0 - viz), min(self.faixa, x0 + viz) + 1, 24)
+            melhor = max(cands, key=lambda x: cum[x + W] - cum[x], default=x0)
+            if any(abs(melhor - e) < self.faixa * 0.06 for e in escolhidos):
+                melhor = x0
+            mudou += 1 if abs(melhor - x0) > 24 else 0
+            escolhidos.append(melhor)
+        ganho = (sum(cum[x + W] - cum[x] for x in escolhidos)
+                 / max(sum(cum[int(self.faixa * p) + W] - cum[int(self.faixa * p)]
+                           for p in PONTOS_DE_CORTE), 1e-6))
+        print(f"[cenario] cortes puxados para onde ha cor: {mudou} de "
+              f"{len(PONTOS_DE_CORTE)} mudaram, {100 * (ganho - 1):+.0f}% de "
+              f"cor no quadro")
+        self._corte = escolhidos
+        return escolhidos
 
     def _posicao(self, dx):
         """Deslocamento pedido -> coluna da arte, refletindo nas bordas."""
