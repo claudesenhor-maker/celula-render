@@ -708,6 +708,13 @@ def escutar(u, rig, dur, a):
     return {}
 
 
+# QUANTO O OMBRO ABRE E FECHA ENQUANTO SE FALA, em graus. Era 5, e a mão
+# percorria 2,8% da altura do corpo num trecho inteiro -- gesto que não
+# existe. Escolhido por medida e não por olho: ver `gesticular`, e a régua é
+# o percurso da peça `mao_d` na tela.
+BALANCO_OMBRO = float(os.environ.get("BALANCO_OMBRO", "13"))
+
+
 def gesticular(u, rig, dur, a):
     """A mão que acompanha a fala. Não é uma ação do roteiro: é o que o
     corpo faz sozinho enquanto a boca trabalha.
@@ -752,24 +759,35 @@ def gesticular(u, rig, dur, a):
     # como algemado. O limite é a mão não cruzar o eixo do corpo: o gesto
     # de quem conta um caso acontece na frente do PRÓPRIO ombro.
     #
-    # E 36 GRAUS FOI TENTADO OUTRA VEZ, EM 04/09, E DEU O MESMO (ciclo 25).
-    # A folha de contato dos v020 a v025 mostra os dois com os braços
-    # esticados ao lado do corpo em dez de cada dezesseis quadros, e a
-    # tentação é levantar a mão. Levantar por aqui não funciona e a geometria
-    # diz por quê: com o cotovelo na altura do quadril, girar o ANTEBRAÇO para
-    # dentro leva a mão para o EIXO do corpo, não para cima -- na prévia do
-    # v022 as duas mãos se encontraram na frente da virilha, que é pior que o
-    # braço caído. Para a mão subir de verdade o COTOVELO tem de sair do
-    # quadril, e isso é postura de tronco, não este gesto.
+    # O BALANÇO É DO OMBRO, E ELE ESTAVA EM 2,8% DA ALTURA (04/09, ciclo 25).
     #
-    # E há uma segunda razão para não mexer: "está parado" foi lido numa FOLHA
-    # DE CONTATO, que é imagem parada -- ela não mostra oscilação, por
-    # definição (lei 40). O defeito medido nas folhas é a JUNTA que abre, e é
-    # esse que foi corrigido.
-    _braco(rig, "e", 102.0 + 5.0 * f * math.sin(w),
+    # As folhas de contato dos v020 a v032 mostram os dois com os braços
+    # esticados ao lado do corpo em dez de cada dezesseis quadros, e a
+    # objeção óbvia é a lei 40: folha de contato é imagem parada e não mostra
+    # oscilação. Então a oscilação foi MEDIDA, sem render -- o percurso do
+    # centro da peça `mao_d` na tela ao longo de um trecho inteiro:
+    #
+    #     a mao percorre  x: 32 px   y: 10 px      (2,8% da altura do corpo)
+    #
+    # Trinta e dois pixels num corpo de 1160. Não é a folha que engana: o
+    # gesto realmente não existe.
+    #
+    # Como ele foi parar aí: em 02/09 a amplitude caiu de 26 para 9 graus
+    # contra *"os personagens sempre acenam"*. A causa que aquele dia
+    # DIAGNOSTICOU foi outra -- o gesto era idêntico para todo mundo, mesma
+    # frequência e mesma fase --, e ela foi consertada pela semente. A queda
+    # de amplitude veio junto, por precaução, e é ela que sobrou.
+    #
+    # O balanço volta pelo OMBRO e não pelo antebraço, e a diferença importa:
+    # dobrar mais o antebraço leva a mão para o EIXO do corpo (as duas mãos se
+    # encontrando na frente da virilha -- tentado nesta mesma sessão, e é pior
+    # que o braço caído). Abrir pelo ombro leva a mão para FORA, que é para
+    # onde ela vai quando alguém conta um caso, e os dois lados andam em
+    # contratempo, então eles nunca se aproximam.
+    _braco(rig, "e", 102.0 + BALANCO_OMBRO * f * math.sin(w),
            92.0 - 9.0 * f * (0.5 + 0.5 * math.sin(w + 0.9)),
            5.0 * f * math.sin(w + 1.6))
-    _braco(rig, "d", 78.0 - 5.0 * f * math.sin(w + 2.3),
+    _braco(rig, "d", 78.0 - BALANCO_OMBRO * f * math.sin(w + 2.3),
            88.0 + 9.0 * f * (0.5 + 0.5 * math.sin(w + 3.1)),
            -5.0 * f * math.sin(w + 3.9))
     return {}
