@@ -123,7 +123,8 @@ SOLTURA_MIN, SOLTURA_MAX = 0.20, 0.55
 # anda fica no lugar e o fundo é que corre), então misturá-la é misturar só
 # a passada -- e uma passada que começa de uma vez é o mesmo salto de braço
 # por outro nome.
-SEM_ENVELOPE = frozenset(("parado", "gesticular", "escutar", "virar"))
+SEM_ENVELOPE = frozenset(("parado", "gesticular", "escutar", "virar",
+                          "segurar"))
 
 # ENTRAR E SAIR MISTURAM OS MEMBROS, NUNCA O LUGAR. A posição no mundo tem
 # de ser exata -- misturá-la faria o corpo aparecer no meio do caminho --,
@@ -728,6 +729,42 @@ def _braco(rig, lado, sup, ante, pulso=0.0, k=1.0):
     rig[osso] = [b + (v - b) * k for b, v in zip(base, alvo)]
 
 
+def segurar(u, rig, dur, a):
+    """A mão que está com alguma coisa a LEVANTA. Não é gesto do roteiro.
+
+    POR QUE (04/09, ciclo 25 -- folhas dos v024 e v027)
+        `_objeto_na_mao` faz o que a lei 35 manda -- quem pega, segura, e o
+        objeto atravessa os trechos. Só que o BRAÇO volta ao repouso quando a
+        ação de pegar acaba, e repouso é o braço esticado ao lado do corpo.
+        Resultado: em cinco dos dezesseis quadros do v024 e em quatro do v027 o
+        celular é um retângulo escuro grudado na COXA, meio em cima da perna.
+        Foi lido como *"adesivo na coxa"* pelo dono do projeto em 02/09, e a
+        correção daquele dia atacou o CONTRASTE (`_destacar_objeto`) -- a
+        borda ficou visível e a posição continuou a mesma.
+
+        O contraste não era o problema inteiro: **ninguém segura um celular
+        pendurado na coxa.** Quem está com uma coisa na mão a mantém na frente
+        do corpo, na altura da cintura -- e é aí, na frente do tronco, que ela
+        aparece inteira e não se confunde com a perna.
+
+    E POR QUE SÓ A MÃO QUE SEGURA
+        Levantar os DOIS antebraços foi tentado no mesmo dia, como conserto
+        genérico de *"o personagem está parado"*, e a prévia do v022 mostrou as
+        duas mãos se encontrando na frente da virilha -- as "mãos postas" que
+        02/09 já tinha reprovado. Com uma mão só não há encontro, e o
+        levantamento tem um motivo que se vê na tela: tem coisa nela.
+
+    Fica na base da pilha, junto de `gesticular`: qualquer ação que o
+    roteirista escreva para este braço ganha dela. `mostrar_objeto` continua
+    erguendo o objeto acima da cabeça quando o roteiro pedir.
+    """
+    if str(a.get("mao", "d")) == "e":
+        _braco(rig, "e", 112.0, 52.0, 8.0)
+    else:
+        _braco(rig, "d", 68.0, 128.0, -8.0)
+    return {}
+
+
 def maos_na_cintura(u, rig, dur, a):
     """Mão na cintura: cobrança, impaciência, "eu avisei".
 
@@ -1136,6 +1173,10 @@ CATALOGO = {
     "tropecar": tropecar,
     "cair": cair,
     "virar": virar,
+    # Injetada pelo MOTOR quando a mão está com alguma coisa, nunca pelo
+    # roteirista -- ele já diz `objeto` na ação de pegar, e quem sabe que a
+    # coisa continua lá é `_objeto_na_mao`. Ver `segurar`.
+    "segurar": segurar,
     "parado": parado,
     "gesticular": gesticular,
     "escutar": escutar,
