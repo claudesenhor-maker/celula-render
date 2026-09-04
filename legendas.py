@@ -129,6 +129,38 @@ CANDIDATAS = [
 ]
 
 
+# A FONTE DO TÍTULO É OUTRA, DE PROPÓSITO (04/09, item 2 do dono do projeto:
+# *"no texto superior colocar uma fonte diferente com fundo para chamar
+# atenção"*).
+#
+# Legenda e título fazem trabalhos diferentes e por isso não podem ter a mesma
+# cara: a legenda acompanha a boca e se lê no impulso; o título é um cartaz --
+# ele para o polegar. Duas famílias na mesma tela só ficam ruins quando as
+# duas disputam a mesma função; aqui elas se dividem.
+#
+# A ordem prefere CONDENSADA e depois BLACK/HEAVY: letra estreita cabe mais
+# palavra na largura de um 9:16, e peso alto é o que sobrevive a uma faixa de
+# fundo. Se nada disso existir, cai na mesma da legenda -- o título continua
+# existindo, só sem o contraste de família.
+CANDIDATAS_TITULO = [
+    "/usr/share/fonts/truetype/dejavu/DejaVuSansCondensed-Bold.ttf",
+    "/usr/share/fonts/truetype/liberation/LiberationSansNarrow-Bold.ttf",
+    "C:/Windows/Fonts/impact.ttf",
+    "C:/Windows/Fonts/ariblk.ttf",
+    "C:/Windows/Fonts/seguibl.ttf",
+]
+
+
+def _fonte_titulo(tamanho):
+    for c in CANDIDATAS_TITULO:
+        if os.path.exists(c):
+            try:
+                return ImageFont.truetype(c, tamanho)
+            except Exception:
+                pass
+    return _fonte(tamanho)
+
+
 def _fonte(tamanho):
     for c in CANDIDATAS:
         if os.path.exists(c):
@@ -296,7 +328,12 @@ TITULO_SEGUNDOS = 4.5
 # Duas linhas no máximo: três já é parágrafo, e parágrafo no alto de um Short
 # não se lê -- se lê a boca de quem fala.
 TITULO_LINHAS = 2
-TITULO_COR = (255, 211, 77, 255)          # o mesmo âmbar da palavra ativa
+TITULO_COR = (255, 255, 255, 255)         # branco sobre a faixa escura
+# A FAIXA: quase preta e quase opaca. Escura porque o texto é claro e o
+# contraste tem de sobreviver a qualquer cenário atrás; quase opaca (e não
+# opaca) porque uma tarja 100% chapada lê como erro de player, e deixar o
+# cenário insinuado atrás mantém a tela viva.
+TITULO_FUNDO = (18, 16, 22, 224)
 
 
 class Titulo:
@@ -323,7 +360,7 @@ class Titulo:
         self.linhas = []
         for frac in (0.043, 0.039, 0.035, 0.032):
             self.tam = int(altura * frac)
-            self.fonte = _fonte(self.tam)
+            self.fonte = _fonte_titulo(self.tam)
             self.borda = max(4, self.tam // 7)
             linhas = self._linhas_de(self.texto.split()) if self.texto else []
             if linhas and len(linhas) <= TITULO_LINHAS:
@@ -385,18 +422,45 @@ class Titulo:
         alfa = 255
         if t > self.ate - 0.5:
             alfa = max(0, int(255 * (self.ate - t) / 0.5))
+        # A FAIXA DE FUNDO (04/09, item 2). Sem ela o título depende do que
+        # estiver atrás: sobre a parede clara de um cenário ele some, e o
+        # contorno sozinho não resolve porque ele é uma linha, não uma
+        # superfície. A faixa dá ao título o mesmo que um cartaz tem -- um
+        # plano próprio -- e é o que o faz parar o polegar.
+        #
+        # Desenhada numa camada à parte e composta: o `quadro` chega em RGB e
+        # `d.rectangle` com alfa não mistura, ele substitui. Sem isto a faixa
+        # sairia opaca no primeiro frame e o fade final não existiria.
+        cx = self.W / 2.0
+        alt_linha = int(self.tam * 1.18)
+        larg = max(self.fonte.getlength(l) for l in self.linhas)
+        pad_x, pad_y = int(self.tam * 0.55), int(self.tam * 0.34)
+        y0 = int(self.H * TITULO_Y) - pad_y
+        x0 = int(cx - larg / 2.0) - pad_x
+        x1 = int(cx + larg / 2.0) + pad_x
+        y1 = y0 + alt_linha * len(self.linhas) + pad_y * 2 - int(self.tam * 0.16)
+        faixa = Image.new("RGBA", quadro.size, (0, 0, 0, 0))
+        df = ImageDraw.Draw(faixa)
+        raio = int(self.tam * 0.30)
+        df.rounded_rectangle([x0, y0, x1, y1], radius=raio,
+                             fill=TITULO_FUNDO[:3] + (int(TITULO_FUNDO[3] * alfa / 255),))
+        quadro.paste(Image.alpha_composite(
+            quadro.crop((0, 0, self.W, self.H)).convert("RGBA"), faixa
+        ).convert(quadro.mode), (0, 0))
+
         d = ImageDraw.Draw(quadro)
         y = int(self.H * TITULO_Y)
         for linha in self.linhas:
             w = self.fonte.getlength(linha)
             x = (self.W - w) / 2.0
-            # o mesmo contorno da legenda: em cima de cenário claro ou escuro
-            # o texto tem de continuar legível, e é o contorno que garante
+            # o contorno CONTINUA, mesmo com a faixa: ela é escura e o texto é
+            # claro, mas o fade final passa por valores intermediários em que
+            # os dois se aproximam
             d.text((x, y), linha, font=self.fonte,
                    fill=TITULO_COR[:3] + (alfa,),
-                   stroke_width=self.borda,
+                   stroke_width=max(2, self.borda // 2),
                    stroke_fill=COR_BORDA[:3] + (alfa,))
-            y += int(self.tam * 1.18)
+            y += alt_linha
         return quadro
 
 
