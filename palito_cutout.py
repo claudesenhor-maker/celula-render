@@ -1393,6 +1393,15 @@ def _estender_para_a_junta(tela, img, juntas, m):
         return tela
     cx, cy = float(xs.mean()), float(ys.mean())
     raio = max(22.0, m * 4.0, 0.22 * min(img.width, img.height))
+    # O TOCO SAI SEM O TRAÇO (04/09, v034). Deslocar a peça inteira desloca a
+    # BORDA ESCURA dela junto, e o que sobra à vista além da peça original é
+    # justamente essa borda: um segundo contorno a `m` px do primeiro, que na
+    # folha de contato lê como a faixa de boneco articulado das quatro
+    # tentativas anteriores -- medido em `tinta_junta.py`, 62% do que o fecho
+    # acrescenta é pixel escuro. O prolongamento tem de ser a arte de DENTRO
+    # da peça; o contorno continua desenhado uma vez só, pela original que
+    # entra por cima. Custa uma vez por peça, na carga (`Personagem.__init__`).
+    corpo = _sem_traco(tela, m + 4)
     fundo = Image.new("RGBA", tela.size, (0, 0, 0, 0))
     for (jx, jy) in juntas:
         jx, jy = jx + m, jy + m
@@ -1402,7 +1411,7 @@ def _estender_para_a_junta(tela, img, juntas, m):
             continue
         dx, dy = dx / n * m, dy / n * m
         desl = Image.new("RGBA", tela.size, (0, 0, 0, 0))
-        desl.paste(tela, (int(round(dx)), int(round(dy))))
+        desl.paste(corpo, (int(round(dx)), int(round(dy))))
         mascara = Image.new("L", tela.size, 0)
         ImageDraw.Draw(mascara).ellipse(
             [jx - raio, jy - raio, jx + raio, jy + raio], fill=255)
@@ -2236,6 +2245,100 @@ def _espalhar(img, r):
     return fora
 
 
+# O TRAÇO ACABA AQUI: 32 DE LUMINÂNCIA (04/09, v034).
+#
+# O número é da ARTE, e a primeira tentativa (90) estava errada de um jeito
+# que só a medição mostrou. Percentis de luminância por peça, no elenco:
+#
+#     pal/peito         p2=1   p10=87   p50=146     a camisa
+#     pal/perna_sup     p2=0   p10=6    p50=58      a calça, escura
+#     maya/perna_sup    p2=2   p10=7    p50=90
+#     preso/peito       p2=0   p10=225  p50=233
+#
+# O traço vive de 0 a 20 em todas elas; o miolo mais escuro do elenco é a
+# calça do Pal, em 56. Com o limiar em 90 a CALÇA INTEIRA virava traço --
+# sobravam 122 pixels de miolo numa peça de 8.452 --, e o espalhamento
+# preenchia a cintura com o cinza desses poucos pixels claros. Era essa a
+# granulação cinza sob a camisa. Trinta e dois separa os dois grupos com
+# folga dos dois lados.
+LUM_TRACO = int(os.environ.get("LUM_TRACO", "32"))
+
+
+def _sem_traco(img, r=6):
+    """A mesma arte, com o CONTORNO substituído pela cor de dentro.
+
+    POR QUE ISTO EXISTE, E POR QUE É O CONSERTO DAS CINCO TENTATIVAS (04/09)
+        Fechar o vão foi tentado cinco vezes -- anel da cor do contorno, anel
+        da cor de dentro, fechamento por desfoque, anel por `_espalhar` e a
+        extensão da peça na direção da junta -- e as cinco produziram a MESMA
+        queixa do dono do projeto: uma faixa escura em volta de cada junta. O
+        v034 é a quinta, e nela a faixa saiu serrilhada em pescoço, ombro,
+        cotovelo, cintura, quadril e joelho.
+
+        As quatro primeiras foram diagnosticadas como problema de COR, e a
+        quinta como problema de DIREÇÃO. Nenhuma das duas leituras estava
+        completa, e `ferramentas/tinta_junta.py` mostra o que faltava: dos
+        pixels que o fecho ACRESCENTA ao corpo, **62% são escuros** (87% na
+        Maya). O fecho não está tapando o vão com arte -- está tapando com
+        TRAÇO.
+
+        A causa é a mesma nos dois caminhos que sobraram, e é uma frase:
+        **o pixel de arte mais próximo de qualquer fenda é o contorno da
+        peça.** `_espalhar` estende o vizinho mais próximo, e a extensão
+        desloca a peça inteira com a borda dela junto -- as duas, portanto,
+        prolongam o traço. Enquanto a fonte da cor for a borda, trocar de
+        técnica só troca o formato da faixa preta.
+
+    O QUE ELA FAZ
+        Apaga do alfa os pixels escuros (o traço) e deixa a cor do miolo
+        crescer sobre eles. A forma não muda -- o alfa que sai é o alfa que
+        entrou --, só a cor: uma peça cujo interior chega até a própria
+        borda. Usada como FONTE do fecho, o que entra na fenda é pele no
+        pescoço, camisa no ombro e calça na cintura.
+
+        A arte original continua sendo desenhada por cima, então o traço que
+        o desenhista fez segue lá, uma vez só, no lugar dele.
+    """
+    # SÓLIDO É ALFA > 200, E NÃO > 128 (04/09, medido na cintura do Pal).
+    # A primeira versão aceitava qualquer pixel opaco e ressuscitou a faixa
+    # PÁLIDA que `_espalhar` já tinha aprendido a evitar: a borda da arte é
+    # anti-serrilhada contra o branco da folha, então ela traz pixels
+    # cinza-claros de alfa parcial. Como aqui o alfa é REESCRITO em 255,
+    # esses pixels viravam fonte legítima e o espalhamento levava cinza para
+    # dentro da fenda -- a granulação que aparecia sob a camisa. O corte em
+    # 200 é o mesmo de `_espalhar`, e pela mesma razão.
+    a = np.asarray(img.convert("RGBA"))
+    op = a[..., 3] > 200
+    # E A FONTE COMEÇA DOIS PIXELS PARA DENTRO (04/09).
+    #
+    # Cortar o alfa em 200 não bastou: a peça foi recortada de uma folha de
+    # fundo BRANCO, e a fileira de transição da borda ficou opaca e clara. Ela
+    # passa em `lum >= LUM_TRACO` com folga, vira fonte legítima, e o
+    # espalhamento leva branco de folha para dentro da fenda -- as manchas
+    # claras que sobraram na cintura do Pal depois de o preto sair.
+    #
+    # Erodir o opaco antes de escolher o miolo resolve as duas sujeiras de
+    # borda de uma vez, e não custa nada: a cor de uma peça é a mesma dois
+    # pixels para dentro. Peça fina demais para sobreviver à erosão não tem
+    # miolo e sai por baixo, pelo `if not miolo.any()`.
+    op = np.asarray(Image.fromarray((op * 255).astype(np.uint8))
+                    .filter(ImageFilter.MinFilter(5))) > 128
+    lum = a[..., :3].astype(np.int16).max(axis=2)
+    miolo = op & (lum >= LUM_TRACO)
+    # PEÇA QUE É SÓ TRAÇO CONTINUA COMO ESTÁ. Um fiapo de contorno (a
+    # sobrancelha recortada do crânio) não tem miolo nenhum, e inventar cor
+    # para ele seria pior que deixá-lo escuro -- ele é escuro mesmo.
+    if not miolo.any():
+        return img.copy()
+    fonte = Image.fromarray(a.copy(), "RGBA")
+    fonte.putalpha(Image.fromarray((miolo * 255).astype(np.uint8)))
+    cheio = _espalhar(fonte, int(r))
+    saida = Image.new("RGBA", img.size, (0, 0, 0, 0))
+    saida.paste(cheio, (0, 0))
+    saida.putalpha(img.split()[3])
+    return saida
+
+
 # ZERO: O VÃO NÃO SE TAPA. TERCEIRA TENTATIVA, E A ÚLTIMA (03/09, à noite).
 #
 # Queixa do dono do projeto sobre o v001: *"junção de peças, ele simplesmente
@@ -2379,7 +2482,28 @@ def _fechar_vaos_do_corpo(base):
     #
     # `_espalhar` estende, não mistura: no pescoço a cor vem da pele, na
     # cintura vem da calça, e o traço do desenhista continua sendo o traço.
-    espalhado = _espalhar(corte, r)
+    #
+    # E A FONTE DELE É O MIOLO, NÃO A ARTE COMO ESTÁ (04/09, v034). Estender
+    # "o pixel de arte mais próximo" da fenda entrega sempre o CONTORNO, que é
+    # o que está na borda de toda peça -- e foi assim que a fresta virou faixa
+    # preta serrilhada no v034, com 62% de pixel escuro no que o fecho
+    # acrescenta (`ferramentas/tinta_junta.py`). `_sem_traco` deixa a cor de
+    # dentro crescer sobre a borda ANTES do espalhamento, e aí o que preenche
+    # a fenda é pele, camisa ou calça. Ver a docstring dela: é o conserto
+    # comum das cinco tentativas de fechar o vão.
+    #
+    # As duas operações rodam em MEIA RESOLUÇÃO, como o fechamento acima e
+    # pelo mesmo motivo -- e aqui isto não é só economia: `_espalhar` custa r
+    # passadas sobre a caixa inteira, então o par sai oito vezes mais barato
+    # que o espalhamento em tamanho cheio que estava no ar.
+    # O raio do espalhamento é `r` INTEIRO na meia resolução -- o dobro do
+    # alcance da fenda, de propósito: a fonte da cor recuou dois pixels para
+    # dentro da peça (ver `_sem_traco`), e o que não for alcançado fica com o
+    # RGB de um pixel transparente, que é preto. Ainda assim sai quatro vezes
+    # mais barato que o espalhamento em tamanho cheio que estava no ar.
+    meio_img = corte.resize(meio, Image.NEAREST)
+    espalhado = _espalhar(_sem_traco(meio_img, r),
+                          r).resize(alfa.size, Image.NEAREST)
     tapa = Image.new("RGBA", corte.size, (0, 0, 0, 0))
     tapa.paste(espalhado, (0, 0))
     m = Image.fromarray((fenda * 255).astype(np.uint8))
