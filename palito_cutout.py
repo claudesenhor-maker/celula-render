@@ -3801,7 +3801,7 @@ def _fazer_voltar(por_ator, fora_de_cena):
 INTERVALO_GESTO_S = 3.5
 
 
-def _ralear_gestos(por_ator, dur_s):
+def _ralear_gestos(por_ator, dur_s, gancho=False):
     """Tira do trecho os gestos DECORATIVOS que passam da conta.
 
     POR QUE ISTO É CÓDIGO E NÃO PROMPT (lei 16)
@@ -3839,7 +3839,21 @@ def _ralear_gestos(por_ator, dur_s):
     fala) e `escutar` (de quem ouve) -- movimento contínuo e pequeno, que é o
     que o dono do projeto sempre pediu, em vez de um gesto grande por segundo.
     """
+    # O GANCHO GANHA UM GESTO A MAIS (03/09, item 3 do dono do projeto:
+    # *"nada me prende o começo do vídeo"*).
+    #
+    # O teto foi posto para acabar com o piti de um gesto a cada 1,65 s, e
+    # acabou -- só que ele valia igual no trecho 0, e a folha do gancho do
+    # v005 mostra o custo: três segundos de personagem parado, mexendo só a
+    # boca, no único trecho em que movimento é o que segura a rolagem.
+    #
+    # A regra vale para o vídeo e não vale para a abertura, pelo mesmo motivo
+    # que `gancho_forte` existe: os primeiros segundos são um lugar diferente
+    # do resto do vídeo, e o que os governa é retenção, não naturalidade. UM a
+    # mais, e não "sem teto" -- o piti começava em três.
     cabem = max(1, int(round(max(dur_s, 0.1) / INTERVALO_GESTO_S)))
+    if gancho:
+        cabem += 1
     for chave, acoes in list(por_ator.items()):
         if not acoes:
             continue
@@ -4441,7 +4455,7 @@ def render(pasta_partes, spec, saida, tmpdir=None, amostra=0):
         # O EXCESSO DE GESTO SAI AQUI (03/09, queixa 2). Antes de qualquer
         # outra guarda: as que vêm depois olham a lista de ações, e olhar uma
         # lista que ainda vai encolher é medir o que não vai acontecer.
-        _ralear_gestos(por_ator, float(tr.get("dur") or 0.0))
+        _ralear_gestos(por_ator, float(tr.get("dur") or 0.0), gancho=(i_tr == 0))
         if i_tr == 0 and os.environ.get("GANCHO_ENTRA") != "1":
             _gancho_ja_em_cena(por_ator, falante)
         # E A REGRA GERAL, PARA OS OUTROS TRECHOS: a câmera não fecha em quem
