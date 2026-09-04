@@ -3483,7 +3483,7 @@ def _enquadramento(i, n_trechos, n_atores, t, centro_corpo=None,
 
 # =====================================================================
 def _rig_do_trecho(tr, t, pan_base, acoes_do_ator, x_base, falando=True,
-                   semente_gesto=0.0):
+                   semente_gesto=0.0, na_mao=None):
     """Ângulos do frame de UM ator. Dois caminhos:
 
     AÇÕES (novo)  -- verbos com janela, somados por cima do repouso.
@@ -3519,6 +3519,15 @@ def _rig_do_trecho(tr, t, pan_base, acoes_do_ator, x_base, falando=True,
             lista.append({"nome": "escutar", "de": 0.0, "ate": 1.0,
                           "forca": 0.7 + 0.3 * ACOES.energia_gesto(
                               tr.get("expressao"), tr.get("intensidade", 1.0))})
+        # QUEM ESTÁ COM ALGUMA COISA NA MÃO A SEGURA NA FRENTE DO CORPO
+        # (04/09). Depois de `gesticular`/`escutar` porque é o braço que
+        # segura que manda nele, e antes das ações do roteiro porque o que o
+        # roteirista escrever para esse braço continua ganhando. Ver
+        # `acoes.segurar`: sem isto o objeto desce com o braço em repouso e
+        # vira um adesivo na coxa.
+        if na_mao:
+            lista.append({"nome": "segurar", "de": 0.0, "ate": 1.0,
+                          "mao": na_mao.get("mao", "d")})
         cam = ACOES.aplicar(lista + list(acoes_do_ator or []), t, rig, tr["dur"])
     else:
         p1 = merge(REST, POSES.get(tr.get("pose", "parado_falando"), {}),
@@ -4845,7 +4854,8 @@ def render(pasta_partes, spec, saida, tmpdir=None, amostra=0):
                 rig, c = _rig_do_trecho(tr, t, corte, por_ator[chave], x0,
                                         falando=(chave == falante),
                                         semente_gesto=(chaves.index(chave)
-                                                       * 3.0 + i_tr))
+                                                       * 3.0 + i_tr),
+                                        na_mao=na_mao.get(chave))
                 # DOIS deslocamentos verticais, e a ordem importa:
                 #  `dy`      põe este ator na mesma linha dos outros
                 #            (_alinhar_pelos_pes, mede a folha de cada um);
