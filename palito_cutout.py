@@ -2264,6 +2264,37 @@ def _espalhar(img, r):
 LUM_TRACO = int(os.environ.get("LUM_TRACO", "32"))
 
 
+def _fonte_do_miolo(img):
+    """A arte com alfa só no MIOLO: sem o traço e sem a borda.
+
+    É a fonte de cor de todo fecho deste motor. Sai daqui, e não da arte como
+    está, porque o pixel de arte mais próximo de qualquer fenda é o contorno
+    da peça -- ver `_sem_traco`, que conta a história inteira.
+    """
+    a = np.asarray(img.convert("RGBA"))
+    op = a[..., 3] > 200
+    # E A FONTE COMEÇA DOIS PIXELS PARA DENTRO (04/09).
+    #
+    # Cortar o alfa em 200 não bastou: a peça foi recortada de uma folha de
+    # fundo BRANCO, e a fileira de transição da borda ficou opaca e clara. Ela
+    # passa em `lum >= LUM_TRACO` com folga, vira fonte legítima, e o
+    # espalhamento leva branco de folha para dentro da fenda -- as manchas
+    # claras que sobraram na cintura do Pal depois de o preto sair.
+    #
+    # Erodir o opaco antes de escolher o miolo resolve as duas sujeiras de
+    # borda de uma vez, e não custa nada: a cor de uma peça é a mesma dois
+    # pixels para dentro.
+    op = np.asarray(Image.fromarray((op * 255).astype(np.uint8))
+                    .filter(ImageFilter.MinFilter(5))) > 128
+    lum = a[..., :3].astype(np.int16).max(axis=2)
+    miolo = op & (lum >= LUM_TRACO)
+    if not miolo.any():
+        return None
+    fonte = Image.fromarray(a.copy(), "RGBA")
+    fonte.putalpha(Image.fromarray((miolo * 255).astype(np.uint8)))
+    return fonte
+
+
 def _sem_traco(img, r=6):
     """A mesma arte, com o CONTORNO substituído pela cor de dentro.
 
@@ -2299,39 +2330,12 @@ def _sem_traco(img, r=6):
         A arte original continua sendo desenhada por cima, então o traço que
         o desenhista fez segue lá, uma vez só, no lugar dele.
     """
-    # SÓLIDO É ALFA > 200, E NÃO > 128 (04/09, medido na cintura do Pal).
-    # A primeira versão aceitava qualquer pixel opaco e ressuscitou a faixa
-    # PÁLIDA que `_espalhar` já tinha aprendido a evitar: a borda da arte é
-    # anti-serrilhada contra o branco da folha, então ela traz pixels
-    # cinza-claros de alfa parcial. Como aqui o alfa é REESCRITO em 255,
-    # esses pixels viravam fonte legítima e o espalhamento levava cinza para
-    # dentro da fenda -- a granulação que aparecia sob a camisa. O corte em
-    # 200 é o mesmo de `_espalhar`, e pela mesma razão.
-    a = np.asarray(img.convert("RGBA"))
-    op = a[..., 3] > 200
-    # E A FONTE COMEÇA DOIS PIXELS PARA DENTRO (04/09).
-    #
-    # Cortar o alfa em 200 não bastou: a peça foi recortada de uma folha de
-    # fundo BRANCO, e a fileira de transição da borda ficou opaca e clara. Ela
-    # passa em `lum >= LUM_TRACO` com folga, vira fonte legítima, e o
-    # espalhamento leva branco de folha para dentro da fenda -- as manchas
-    # claras que sobraram na cintura do Pal depois de o preto sair.
-    #
-    # Erodir o opaco antes de escolher o miolo resolve as duas sujeiras de
-    # borda de uma vez, e não custa nada: a cor de uma peça é a mesma dois
-    # pixels para dentro. Peça fina demais para sobreviver à erosão não tem
-    # miolo e sai por baixo, pelo `if not miolo.any()`.
-    op = np.asarray(Image.fromarray((op * 255).astype(np.uint8))
-                    .filter(ImageFilter.MinFilter(5))) > 128
-    lum = a[..., :3].astype(np.int16).max(axis=2)
-    miolo = op & (lum >= LUM_TRACO)
     # PEÇA QUE É SÓ TRAÇO CONTINUA COMO ESTÁ. Um fiapo de contorno (a
     # sobrancelha recortada do crânio) não tem miolo nenhum, e inventar cor
     # para ele seria pior que deixá-lo escuro -- ele é escuro mesmo.
-    if not miolo.any():
+    fonte = _fonte_do_miolo(img)
+    if fonte is None:
         return img.copy()
-    fonte = Image.fromarray(a.copy(), "RGBA")
-    fonte.putalpha(Image.fromarray((miolo * 255).astype(np.uint8)))
     cheio = _espalhar(fonte, int(r))
     saida = Image.new("RGBA", img.size, (0, 0, 0, 0))
     saida.paste(cheio, (0, 0))
@@ -2496,14 +2500,17 @@ def _fechar_vaos_do_corpo(base):
     # pelo mesmo motivo -- e aqui isto não é só economia: `_espalhar` custa r
     # passadas sobre a caixa inteira, então o par sai oito vezes mais barato
     # que o espalhamento em tamanho cheio que estava no ar.
-    # O raio do espalhamento é `r` INTEIRO na meia resolução -- o dobro do
-    # alcance da fenda, de propósito: a fonte da cor recuou dois pixels para
-    # dentro da peça (ver `_sem_traco`), e o que não for alcançado fica com o
-    # RGB de um pixel transparente, que é preto. Ainda assim sai quatro vezes
-    # mais barato que o espalhamento em tamanho cheio que estava no ar.
+    # UMA PASSADA SÓ, DO MIOLO ATÉ FORA DA FENDA (04/09). A primeira versão
+    # chamava `_sem_traco` (que espalha r para cobrir o traço) e espalhava
+    # outra vez para sair da peça: 2r iterações, e `_espalhar` é metade do
+    # custo desta função no perfil. Aqui a forma da peça não importa -- o que
+    # se usa é só o pedaço que cai DENTRO da fenda --, então uma passada de
+    # `r + 4` do miolo cobre o traço e a fenda de uma vez. Quatro é a largura
+    # do contorno mais grosso do elenco, medida em `contorno.py`.
     meio_img = corte.resize(meio, Image.NEAREST)
-    espalhado = _espalhar(_sem_traco(meio_img, r),
-                          r).resize(alfa.size, Image.NEAREST)
+    fonte = _fonte_do_miolo(meio_img)
+    espalhado = _espalhar(fonte if fonte is not None else meio_img,
+                          r + 4).resize(alfa.size, Image.NEAREST)
     tapa = Image.new("RGBA", corte.size, (0, 0, 0, 0))
     tapa.paste(espalhado, (0, 0))
     m = Image.fromarray((fenda * 255).astype(np.uint8))
