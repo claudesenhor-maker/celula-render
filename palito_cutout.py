@@ -1280,7 +1280,130 @@ def _cor_da_pele(img):
 # uma fenda entre duas partes. A cor sai do próprio entorno, então no
 # cotovelo ela vem do braço e na cintura vem da calça — sem escolher cor
 # nenhuma. Ver lá o porquê inteiro.
-FECHO_DO_VAO = 0.0
+#
+# UM DE VOLTA, E A COR DEIXOU DE SER INVENTADA (04/09, ciclo 25).
+#
+# Zerar isto em 03/09 se apoiou num A/B (`RAIO_FECHO=0` contra 9) feito no
+# spec do v001, que tem **Pal, Zeca e Maya** em cena — e nesses três o vão da
+# folha mede 5 a 6 px, tão estreito que as peças já se sobrepõem sozinhas. A
+# conclusão *"nas poses e escalas de hoje as peças já se sobrepõem"* foi
+# tirada de um caminho e aplicada aos dez: é a lei 60 na geometria.
+#
+# `ferramentas/junta.py` mede o que sobrou, sobre o elenco inteiro, com o
+# fecho do corpo montado (`RAIO_FECHO=4`) já no ar:
+#
+#     pal, maya, zeca   1 mancha    o corpo inteiro, em dez poses
+#     senhora           4 manchas   solta em `comemorar`
+#     soldado           7 manchas   solta em `maos_na_cabeca`
+#     preso            10 manchas   o corpo em dez pedaços
+#     e ainda astronauta, enfermeira, joao, maria
+#
+# Sete dos dez REPROVAM, e eles são 62% dos trechos do corpus. O fechamento
+# morfológico do corpo montado não podia salvá-los, e não é falha dele: um
+# fechamento só emenda fenda mais estreita que o pincel, e nunca cria a
+# SOBREPOSIÇÃO que sobrevive à rotação (lei 73). Quem faz peça sobrepor peça é
+# o anel por peça, e só ele.
+#
+# E O ANEL CONTINUA EM ZERO — a QUARTA cor foi tentada e reprovada na mesma
+# sessão. Com `FECHO_DO_VAO = 1.0` e o anel preenchido por `_espalhar`, o
+# `junta.py` foi de sete reprovados a ZERO (os dez com uma mancha só, em dez
+# poses) e a prévia do v022 saiu com **cotoveleiras e joelheiras pretas** em
+# Pal e Maya: `_espalhar` estende o pixel de arte mais próximo, e o mais
+# próximo da borda de uma peça é o CONTORNO dela. Estender a peça é engrossar o
+# traço — a faixa de boneco articulado outra vez, por um caminho novo.
+#
+# É o quarto artefato da mesma família, e a lição já não é sobre cor: **não
+# existe conteúdo certo para o anel, porque o anel aparece FORA da silhueta da
+# peça.** O que a rotação precisa é de sobreposição, e sobreposição de verdade
+# se faz na SEGMENTAÇÃO (cortar a peça com sobra por baixo da vizinha), não
+# aqui, onde só dá para pintar por cima.
+#
+# E A QUINTA TENTATIVA NÃO É UMA COR: É UMA DIREÇÃO (04/09, ciclo 25).
+#
+# O que as quatro têm em comum não é o conteúdo do anel -- é `MaxFilter`, que
+# cresce a peça para TODOS os lados. O pedaço que se vê é o que cresce
+# PERPENDICULAR ao osso, onde não há vizinha para cobri-lo; ali é silhueta, e
+# qualquer coisa posta em cima da silhueta aparece. Trocar a tinta de uma
+# região que não devia existir nunca ia funcionar.
+#
+# `_estender_para_a_junta` desloca a peça na direção da junta em vez de
+# engrossá-la: ela CONTINUA por baixo da vizinha, que é o que um cut-out de
+# papel faz. Ver lá.
+#
+# 1,0 é a lei 73 (o vão INTEIRO de cada lado, não a metade) e continua sendo
+# um número que vem do desenho, medido pelo segmentador, peça a peça.
+FECHO_DO_VAO = float(os.environ.get("FECHO_DO_VAO", "1.0"))
+
+# Qual dos dois fechos por peça está no ar. `estender` é o de 04/09 (a peça
+# continua na direção do osso); `anel` é o `MaxFilter` das quatro tentativas
+# anteriores, guardado só para o A/B poder reproduzir o defeito -- é o mesmo
+# recurso de `GANCHO_ENTRA` e `SEPARA_OBJETO_PX`. Sem um jeito de desligar, a
+# única prova possível é "depois", e "depois" sozinho não prova nada.
+MODO_FECHO = os.environ.get("MODO_FECHO", "estender")
+
+
+def _estender_para_a_junta(tela, img, juntas, m):
+    """A peça CONTINUA por baixo da vizinha, `m` px além de cada junta.
+
+    POR QUE ISTO, DEPOIS DE QUATRO ANÉIS REPROVADOS (04/09, ciclo 25)
+        Fechar o vão engrossando a peça foi tentado com quatro conteúdos e os
+        quatro apareceram na tela: cor do contorno (faixa preta de boneco
+        articulado), cor de dentro (esparadrapo rosa e azul), desfoque (ponte
+        cinza) e `_espalhar` (cotoveleiras pretas). A conclusão que se repete é
+        sempre sobre a cor, e a cor nunca foi o problema.
+
+        O problema é a DIREÇÃO. `MaxFilter` dilata em todas as direções, e a
+        parte da dilatação que fica visível é justamente a que cresce para os
+        LADOS da junta -- perpendicular ao osso, onde não há vizinha nenhuma
+        para cobri-la. Qualquer coisa que se ponha ali aparece, porque ali é
+        silhueta. É por isso que trocar o conteúdo do anel nunca resolveu.
+
+        Num cut-out de papel a peça não engorda: ela CONTINUA por baixo da
+        vizinha. A continuação acontece numa direção só -- a do osso -- e some
+        atrás da peça de cima.
+
+    COMO
+        Para cada junta (o pivô, por onde esta peça se prende ao pai, e cada
+        saída, por onde um filho se prende nela), a direção de saída é a do
+        centro da peça PARA a junta: é para lá que fica a vizinha, por
+        definição -- a junta é o ponto de contato entre as duas. Uma cópia da
+        peça, deslocada `m` px nessa direção, entra ATRÁS da original.
+
+        O que isso acrescenta é exatamente o prolongamento do toco além da
+        junta. Para os lados não acrescenta nada mensurável: o deslocamento é
+        paralelo à silhueta ali, então a cópia cai em cima da própria peça.
+
+        A máscara de disco continua valendo, pela mesma razão de 02/09: numa
+        peça curva (o tronco, o crânio) o deslocamento também empurraria a
+        borda do outro lado, e ali não há vizinha.
+
+    E a cor não é escolhida por ninguém: o que aparece no prolongamento é a
+    arte da própria peça, deslocada. Na manga sai manga, na perna sai perna,
+    e o traço do desenhista continua sendo o traço."""
+    a = np.asarray(tela.split()[3])
+    ys, xs = np.nonzero(a > 128)
+    if not len(xs):
+        return tela
+    cx, cy = float(xs.mean()), float(ys.mean())
+    raio = max(22.0, m * 4.0, 0.22 * min(img.width, img.height))
+    fundo = Image.new("RGBA", tela.size, (0, 0, 0, 0))
+    for (jx, jy) in juntas:
+        jx, jy = jx + m, jy + m
+        dx, dy = jx - cx, jy - cy
+        n = math.hypot(dx, dy)
+        if n < 1e-6:
+            continue
+        dx, dy = dx / n * m, dy / n * m
+        desl = Image.new("RGBA", tela.size, (0, 0, 0, 0))
+        desl.paste(tela, (int(round(dx)), int(round(dy))))
+        mascara = Image.new("L", tela.size, 0)
+        ImageDraw.Draw(mascara).ellipse(
+            [jx - raio, jy - raio, jx + raio, jy + raio], fill=255)
+        desl.putalpha(Image.composite(desl.split()[3],
+                                      Image.new("L", tela.size, 0), mascara))
+        fundo.alpha_composite(desl)
+    fundo.alpha_composite(tela)          # a arte original por cima
+    return fundo
 
 
 def _fechar_vao(img, pivot, px, juntas=None):
@@ -1348,6 +1471,9 @@ def _fechar_vao(img, pivot, px, juntas=None):
     m = int(px)
     tela = Image.new("RGBA", (img.width + 2 * m, img.height + 2 * m), (0, 0, 0, 0))
     tela.alpha_composite(img, (m, m))
+    if juntas and MODO_FECHO == "estender":
+        return _estender_para_a_junta(tela, img, juntas, m), \
+            (pivot[0] + m, pivot[1] + m)
     alfa = tela.split()[3].filter(ImageFilter.MaxFilter(2 * m + 1))
     if juntas:
         # O raio cobre o vão inteiro mais a folga da rotação. Generoso o
@@ -1380,6 +1506,16 @@ def _fechar_vao(img, pivot, px, juntas=None):
         # vão fecha com a cor do próprio membro e o traço que a arte já tem
         # continua por cima. Só vale com a máscara: sem ela o anel claro
         # apareceria em volta da peça inteira, como um halo.
+        #
+        # E `_espalhar` NÃO SERVE AQUI — tentado e revertido em 04/09 (ciclo
+        # 25). Ele estende o pixel de arte mais próximo, e o pixel mais próximo
+        # da BORDA de uma peça é sempre o CONTORNO PRETO: estender a peça é
+        # estender o traço dela, e a prévia saiu com cotoveleiras e joelheiras
+        # pretas em todo mundo — a "faixa de boneco articulado" pela quarta
+        # vez, agora por um caminho novo. `_espalhar` continua certo em
+        # `_fechar_vaos_do_corpo`, onde o que ele preenche é uma FENDA de
+        # poucos pixels entre dois contornos, e sair preto ali é o resultado
+        # desejado: lê como o traço da emenda, não como um remendo.
         cor = _cor_de_dentro(img, ponto=juntas[0])
     else:
         cor = _cor_da_casca(img)
@@ -1479,13 +1615,43 @@ class Personagem:
             # de 8 para 14. Nada calibrado à mão, e vale para folha nova.
             # OS PONTOS EM QUE ESTA PEÇA ENCOSTA EM OUTRA: o pivô dela (por
             # onde ela se prende ao pai) e cada saída (por onde um filho se
-            # prende nela). É só perto deles que o anel precisa existir.
-            juntas = [tuple(self.pivos[nome])]
+            # prende nela). É só perto deles que o fecho precisa existir.
+            #
+            # E SÓ QUEM É DESENHADO ANTES ESTENDE (04/09, ciclo 25).
+            #
+            # A extensão de `_estender_para_a_junta` é um toco da peça além da
+            # junta, e ele SÓ pode existir onde a vizinha o cobre. Estender a
+            # peça de cima é o defeito: o `braco_sup_e` é desenhado DEPOIS do
+            # `peito` (ver `ORDEM_Z`), então o toco dele para o ombro não vai
+            # parar debaixo do peito -- vai parar EM CIMA da camisa, com o
+            # contorno próprio à vista. Foi essa a faixa escura que apareceu no
+            # ombro e no cotovelo da primeira prévia deste conserto.
+            #
+            # Quem fecha cada vão é, portanto, o vizinho de BAIXO -- e a
+            # `ORDEM_Z` diz qual é. O vão do ombro é fechado pelo peito
+            # (desenhado antes do braço), o do cotovelo pelo braço superior
+            # (antes do inferior), o do quadril pela coxa (antes do abdômen). O
+            # vão fecha uma vez só, sempre pelo lado escondido, e a peça de
+            # cima sai da folha como o desenhista a desenhou.
+            z = {n: i for i, n in enumerate(ORDEM_Z)}
+            meu_z = z.get(nome, len(ORDEM_Z))
+            juntas = []
+            pai = ESQUELETO.get(nome)
+            if pai and z.get(pai, len(ORDEM_Z)) > meu_z:
+                juntas.append(tuple(self.pivos[nome]))
             for _f, ponto in (self.saidas.get(nome) or {}).items():
+                if z.get(_f, len(ORDEM_Z)) <= meu_z:
+                    continue
                 try:
                     juntas.append((float(ponto[0]), float(ponto[1])))
                 except (TypeError, IndexError, ValueError):
                     pass
+            if not juntas:
+                # nenhuma junta a fechar por este lado. Sem esta saída o
+                # `if juntas:` de `_fechar_vao` cairia no ramo antigo, que
+                # engrossa a PEÇA INTEIRA com a cor da casca -- o halo de
+                # 02/09, agora em quem não pediu fecho nenhum.
+                vao = 0.0
             im, pivo = _fechar_vao(im, self.pivos[nome],
                                    int(round(vao * FECHO_DO_VAO)) + 1
                                    if vao > 0.5 else 0,
@@ -2110,7 +2276,13 @@ def _espalhar(img, r):
 # fendas medidas vao de 5 a 14 px na escala da folha -- que em cena, com a
 # escala de dois em cena, ficam bem menores. Raio grande alcanca separacoes
 # legitimas (os dedos, o vao entre as pernas).
-RAIO_FECHO = int(os.environ.get("RAIO_FECHO", "4"))
+# OITO, E MAIS BARATO QUE OS QUATRO DE ONTEM (04/09, ciclo 25). O fechamento
+# passou a rodar em meia resolução (ver `_fechar_vaos_do_corpo`), então o raio
+# que fecha o pescoço da Maya -- o buraco por onde o azulejo do banheiro
+# aparecia debaixo do queixo, na prévia do v022 -- custa um quarto do que o
+# raio antigo custava. O A/B: com 4 sobra um quadrado de fundo sob o queixo;
+# com 8 o pescoço fecha e lê como sombra, que é o que um cut-out faz.
+RAIO_FECHO = int(os.environ.get("RAIO_FECHO", "8"))
 
 
 def _fechar_vaos_do_corpo(base):
@@ -2159,9 +2331,32 @@ def _fechar_vaos_do_corpo(base):
     x1, y1 = min(bb[2] + r, base.width), min(bb[3] + r, base.height)
     corte = base.crop((x0, y0, x1, y1))
     alfa = corte.split()[3]
-    # fechamento: dilata e erode com o mesmo pincel
-    fechado = alfa.filter(ImageFilter.MaxFilter(2 * r + 1)) \
-                  .filter(ImageFilter.MinFilter(2 * r + 1))
+    # O FECHAMENTO SE FAZ NA METADE DA RESOLUÇÃO (04/09, ciclo 25).
+    #
+    # `MaxFilter(k)` do PIL é um filtro de posto ingênuo: custa k² por pixel.
+    # Medido numa caixa de personagem típica (620x1300), o par dilata-erode
+    # custa **396 ms por ator e por frame** com raio 4 -- vinte e quatro
+    # minutos de CPU num vídeo de 1800 quadros com dois em cena, dentro de um
+    # Action que morre aos 18. Ele cabe hoje porque o resto é rápido, e por
+    # isso ninguém tinha medido; subir o raio para 8, que é o que o pescoço da
+    # Maya pedia, custaria 1,66 s por ator e por frame e derrubaria o render.
+    #
+    # Reduzir o alfa pela metade antes de filtrar troca as duas contas de
+    # lugar: são quatro vezes menos pixels E um pincel de metade do diâmetro
+    # para o mesmo alcance em pixels de tela. Um raio 8 na tela sai por um
+    # pincel 4 sobre um quarto da área -- **dezesseis vezes mais barato que
+    # fazer o mesmo em tamanho cheio, e quatro vezes mais barato que o raio 4
+    # de hoje**.
+    #
+    # O que se perde é precisão de um pixel na borda da fenda, e ela não
+    # importa: o que sai daqui é a máscara de uma FRESTA que vai ficar ATRÁS
+    # da arte original. Quem decide o que se vê continua sendo a peça.
+    meio = ((alfa.width + 1) // 2, (alfa.height + 1) // 2)
+    k = 2 * max(1, r // 2) + 1
+    fechado = (alfa.resize(meio, Image.BILINEAR)
+                   .filter(ImageFilter.MaxFilter(k))
+                   .filter(ImageFilter.MinFilter(k))
+                   .resize(alfa.size, Image.BILINEAR))
     a0 = np.asarray(alfa)
     a1 = np.asarray(fechado)
     fenda = (a1 > 128) & (a0 <= 128)
