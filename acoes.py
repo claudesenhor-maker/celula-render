@@ -58,6 +58,7 @@ CONVENÇÃO DE ÂNGULO (a mesma do palito_v4)
     para a direita, a dobra é negativa.
 """
 import math
+import os
 
 # Câmera neutra: nada de zoom, nada de deslocamento, personagem virado
 # para a direita (que é como a folha do personagem foi desenhada).
@@ -678,6 +679,21 @@ def gesticular(u, rig, dur, a):
     # encontravam na frente da barriga -- lido como mãos postas, ou pior,
     # como algemado. O limite é a mão não cruzar o eixo do corpo: o gesto
     # de quem conta um caso acontece na frente do PRÓPRIO ombro.
+    #
+    # E 36 GRAUS FOI TENTADO OUTRA VEZ, EM 04/09, E DEU O MESMO (ciclo 25).
+    # A folha de contato dos v020 a v025 mostra os dois com os braços
+    # esticados ao lado do corpo em dez de cada dezesseis quadros, e a
+    # tentação é levantar a mão. Levantar por aqui não funciona e a geometria
+    # diz por quê: com o cotovelo na altura do quadril, girar o ANTEBRAÇO para
+    # dentro leva a mão para o EIXO do corpo, não para cima -- na prévia do
+    # v022 as duas mãos se encontraram na frente da virilha, que é pior que o
+    # braço caído. Para a mão subir de verdade o COTOVELO tem de sair do
+    # quadril, e isso é postura de tronco, não este gesto.
+    #
+    # E há uma segunda razão para não mexer: "está parado" foi lido numa FOLHA
+    # DE CONTATO, que é imagem parada -- ela não mostra oscilação, por
+    # definição (lei 40). O defeito medido nas folhas é a JUNTA que abre, e é
+    # esse que foi corrigido.
     _braco(rig, "e", 102.0 + 5.0 * f * math.sin(w),
            92.0 - 9.0 * f * (0.5 + 0.5 * math.sin(w + 0.9)),
            5.0 * f * math.sin(w + 1.6))
