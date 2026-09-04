@@ -2847,9 +2847,15 @@ class Cenario:
     pés do personagem pousam.
     """
 
-    def __init__(self, img, chao_rel=None):
+    def __init__(self, img, chao_rel=None, foco=1.0):
         self.chao_y = H * float(chao_rel if chao_rel is not None
                                 else CENARIOS.CHAO_PADRAO)
+        # QUANTO ESTA ARTE PRECISA SAIR DE FOCO, em múltiplos do padrão. É uma
+        # anotação por asset, como a linha do chão, e pelo mesmo motivo: é uma
+        # propriedade do desenho que dura para sempre e que nenhum detector
+        # automático acertou. O `sala` pede 2,2 porque o terço de baixo dele é
+        # um tapete em traço branco sem cor -- ver `cenarios.CATALOGO`.
+        self.foco = max(0.5, min(4.0, float(foco or 1.0)))
         base = img.convert("RGB")
         # COBRIR: a arte precisa preencher a altura do quadro e ter pelo
         # menos a largura dele. Esticar deformaria (prédio vira torre); o
@@ -2913,7 +2919,8 @@ class Cenario:
         """
         if not borrado:
             if self._leve is None:
-                self._leve = self.tira.filter(ImageFilter.GaussianBlur(3))
+                self._leve = self.tira.filter(
+                    ImageFilter.GaussianBlur(3.0 * self.foco))
             return self._leve
         return self._tira_borrada()
 
@@ -2945,7 +2952,8 @@ class Cenario:
             # 9px numa tira de ~2300 de largura: o bastante para o traço
             # perder a aresta e não tanto que o lugar deixe de ser
             # reconhecível -- o cenário ainda tem de dizer onde a cena é.
-            self._borrada = self.tira.filter(ImageFilter.GaussianBlur(9))
+            self._borrada = self.tira.filter(
+                ImageFilter.GaussianBlur(9.0 * self.foco))
         return self._borrada
 
 
@@ -4775,7 +4783,8 @@ def render(pasta_partes, spec, saida, tmpdir=None, amostra=0):
             chao_rel = CENARIOS.chao_de(cen)
             print(f"[cenario] {pedido} -> {cen} ({motivo}, chao a "
                   f"{chao_rel * 100:.0f}%): {cam_path}")
-            cenarios[cen] = Cenario(Image.open(cam_path), chao_rel=chao_rel)
+            cenarios[cen] = Cenario(Image.open(cam_path), chao_rel=chao_rel,
+                                    foco=CENARIOS.foco_de(cen))
         elif motivo != "pedido":
             print(f"[cenario] {pedido} -> {cen} ({motivo})")
 
