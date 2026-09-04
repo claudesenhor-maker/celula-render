@@ -2937,10 +2937,32 @@ def _terco_do_trecho(i, n_atores):
     a composição voltaria a ser sempre a mesma alternância, e o centro no
     meio dá o descanso que faz o deslocamento ser percebido como escolha e
     não como tremor.
+
+    ZERADA EM 03/09, e o motivo é que ela deixou de pagar o próprio custo.
+
+        Queixa do dono do projeto, duas vezes seguidas: *"centralização do
+        personagem, às vezes o personagem fica fora de centro"*. A folha do
+        v003 mostra o caso — três quadros com a personagem no canto de baixo à
+        esquerda e dois terços de parede vazia à direita.
+
+        O deslocamento de um sexto é regra de composição legítima, mas ela
+        supõe que o outro terço tenha o que mostrar. O cenário deste canal é
+        arte panorâmica gerada, e o terço que sobra é parede lisa com muita
+        frequência: o que se vê não é composição, é um personagem empurrado
+        para o canto.
+
+        E o problema que ela veio resolver mudou de tamanho. Em 31/08 (volta
+        15) um monólogo era um plano só, porque o ciclo variava apenas a
+        ESCALA e os degraus do meio são indistinguíveis. Desde então
+        entraram o CLOSE NO FALANTE (1,90) e o gancho fechado, que são cortes
+        de verdade -- a variação existe agora sem precisar deslocar ninguém.
+
+        Fica em zero, e a função fica de pé: no dia em que houver cenário com
+        conteúdo nos dois terços, é um número que se muda de volta.
     """
     if n_atores != 1:
         return 0
-    return (0, 1, 0, -1)[i % 4]
+    return 0
 
 
 def _close_no_falante(i, n_trechos, n_atores):
@@ -4221,6 +4243,22 @@ def render(pasta_partes, spec, saida, tmpdir=None, amostra=0):
                           musica=musica, dur_s=total, bipes=bipes)
 
     # LEGENDA: opcional, mas ligada por padrão. Short se assiste no mudo.
+    # O TÍTULO NO ALTO (03/09, item 1 do dono do projeto). Ver
+    # `legendas.Titulo`: a premissa entregue por escrito enquanto a primeira
+    # fala ainda está saindo, que é a janela em que o feed decide. O spec pode
+    # cravar `titulo`; sem ele, sai da primeira fala por código.
+    titulo = None
+    if spec.get("titulo") is not False:
+        from legendas import Titulo, titulo_da_esquete
+        txt_titulo = spec.get("titulo")
+        if not isinstance(txt_titulo, str) or not txt_titulo.strip():
+            txt_titulo = titulo_da_esquete(
+                [t.get("fala") for t in spec["trechos"]])
+        if txt_titulo:
+            titulo = Titulo(W, H, txt_titulo)
+            print(f"[titulo] \"{txt_titulo}\" nos primeiros "
+                  f"{titulo.ate:.1f}s, em {len(titulo.linhas)} linha(s)")
+
     leg = None
     if spec.get("legenda", True):
         from legendas import Legenda
@@ -4703,6 +4741,10 @@ def render(pasta_partes, spec, saida, tmpdir=None, amostra=0):
                                                if fecha else None),
                                   terco=_terco_do_trecho(i_tr, len(chaves)),
                                   caixa_extra=pecas_falante.get("_objeto"))
+            # O TÍTULO ANTES DA LEGENDA: nos primeiros segundos os dois podem
+            # coexistir, e o de baixo é o que acompanha a boca.
+            if titulo is not None:
+                titulo.desenhar(quadro, n / float(FPS))
             if leg is not None:
                 # por cima de tudo, e no tempo GLOBAL: o índice do frame é
                 # contínuo entre trechos, então n/FPS é o relógio do vídeo
