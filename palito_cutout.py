@@ -2024,6 +2024,31 @@ def _colar_objeto(base, oi, opv, palma, ang, esc):
     base.alpha_composite(camada)
 
 
+def _espalhar(img, r):
+    """Estende as cores da arte para FORA do alfa, r pixels.
+
+    Cada passo empurra o que é opaco um pixel em oito direções e mantém o que
+    já existia por cima, então a cor que sai é a do pixel de arte mais
+    próximo. É isto que diferencia esta função de um desfoque: desfoque
+    MISTURA os vizinhos, e num vão as duas peças vizinhas apresentam uma à
+    outra o próprio contorno preto -- misturar dois pretos com uma fresta no
+    meio dá cinza, que foi a "ponte entre as peças" de 03/09.
+
+    Estender não mistura nada: no pescoço a cor vem da pele, na cintura vem
+    da calça, e o traço preto do desenhista continua sendo o traço.
+    """
+    fora = img
+    for _ in range(int(r)):
+        base = fora.copy()
+        for dx, dy in ((-1, 0), (1, 0), (0, -1), (0, 1),
+                       (-1, -1), (1, -1), (-1, 1), (1, 1)):
+            desl = Image.new("RGBA", fora.size, (0, 0, 0, 0))
+            desl.paste(fora, (dx, dy))
+            base = Image.alpha_composite(desl, base)
+        fora = base
+    return fora
+
+
 # ZERO: O VÃO NÃO SE TAPA. TERCEIRA TENTATIVA, E A ÚLTIMA (03/09, à noite).
 #
 # Queixa do dono do projeto sobre o v001: *"junção de peças, ele simplesmente
@@ -2055,7 +2080,23 @@ def _colar_objeto(base, oi, opv, palma, ang, esc):
 # um dia uma folha nova trouxer vão largo demais e ele aparecer de verdade, o
 # conserto é na SEGMENTAÇÃO (medir melhor o pivô) ou na arte, não aqui: este
 # ponto do código só sabe pintar por cima, e pintar por cima sempre apareceu.
-RAIO_FECHO = int(os.environ.get("RAIO_FECHO", "0"))
+# QUATRO E DE VOLTA (04/09). Zerar em 03/09 tirou a ponte cinza e devolveu o
+# defeito que o fecho existia para resolver -- o dono do projeto viu na volta
+# seguinte: *"cortes em algumas pecas do personagem, linhas irregulares
+# visiveis"*. Sao os vaos do pescoco, do ombro e da cintura deixando o fundo
+# passar.
+#
+# O que estava errado nunca foi FECHAR: era a COR com que se fechava. As tres
+# tentativas pintavam uma cor inventada (contorno, preenchimento, desfoque) e
+# as tres apareceram. Agora o vao e' preenchido com o pixel de ARTE mais
+# proximo (`_espalhar`), que e' o que um cut-out de papel faz quando as pecas
+# se sobrepoem.
+#
+# Quatro em vez de nove: o raio so precisa cobrir metade da fenda, e as
+# fendas medidas vao de 5 a 14 px na escala da folha -- que em cena, com a
+# escala de dois em cena, ficam bem menores. Raio grande alcanca separacoes
+# legitimas (os dedos, o vao entre as pernas).
+RAIO_FECHO = int(os.environ.get("RAIO_FECHO", "4"))
 
 
 def _fechar_vaos_do_corpo(base):
@@ -2112,12 +2153,19 @@ def _fechar_vaos_do_corpo(base):
     fenda = (a1 > 128) & (a0 <= 128)
     if not fenda.any():
         return base
-    # A COR VEM DO ENTORNO. Um desfoque sobre a arte já composta leva a cor
-    # das duas peças vizinhas para dentro da fenda; onde a fenda é estreita
-    # (que é o caso, por construção) o desfoque já a atravessa.
-    borrado = corte.filter(ImageFilter.GaussianBlur(r))
+    # A COR VEM DO PIXEL DE ARTE MAIS PRÓXIMO, E NÃO DE UM DESFOQUE (04/09).
+    #
+    # A primeira versão usava `GaussianBlur` e produziu a queixa de 03/09
+    # (*"criou uma ligação entre as peças"*): desfocar MISTURA os vizinhos, e
+    # no vão as duas peças apresentam uma à outra o próprio contorno preto --
+    # dois pretos com uma fresta no meio dão cinza, e o que se via era uma
+    # ponte pintada entre as peças.
+    #
+    # `_espalhar` estende, não mistura: no pescoço a cor vem da pele, na
+    # cintura vem da calça, e o traço do desenhista continua sendo o traço.
+    espalhado = _espalhar(corte, r)
     tapa = Image.new("RGBA", corte.size, (0, 0, 0, 0))
-    tapa.paste(borrado, (0, 0))
+    tapa.paste(espalhado, (0, 0))
     m = Image.fromarray((fenda * 255).astype(np.uint8))
     tapa.putalpha(m)
     # o tapa entra ATRÁS: a arte original manda no que se vê
@@ -2469,6 +2517,50 @@ def desenhar(pers, rig, fundo, boca_nivel=0.0, piscando=False):
 # =====================================================================
 # CÂMERA — fundo que anda, personagem que vira, zoom
 # =====================================================================
+# QUANTO O CENÁRIO É AVIVADO (04/09, item 5 do dono do projeto: *"no cenário
+# colocar cores mais vibrantes, buscando chamar mais atenção"*).
+#
+# O gerador de imagem devolve arte correta e APAGADA -- pastel, contraste
+# baixo, tudo na mesma faixa de cinza. Num feed isso é o pior lugar para
+# estar: o vídeo compete com miniaturas saturadas, e a primeira coisa que o
+# olho descarta é o que tem pouca diferença de cor.
+#
+# É um pós-processo e não um pedido ao gerador, de propósito: pedir "cores
+# vibrantes" na descrição é loteria (cinco tentativas do `comercio` provaram),
+# e saturação é uma operação exata que se aplica sempre igual.
+#
+# 1,35 de saturação e 1,10 de contraste: o suficiente para a arte ganhar
+# corpo sem estourar em néon. Acima de ~1,5 a pele dos personagens (que NÃO
+# passa por aqui) começa a destoar do fundo, e é aí que se percebe a
+# manipulação. O personagem fica de fora porque a arte dele já foi aprovada
+# no olho, e mexer nela mudaria os oito de uma vez.
+# O PUNCH-IN: quanto o quadro entra mais fechado no corte, e em quanto tempo
+# ele assenta. 7% é perceptível e não desmonta o enquadramento; 0,25 s é a
+# ordem de um corte de montagem -- mais que isso vira zoom, e zoom é o
+# contrário de interrupção. Ver o uso, no laço dos trechos.
+PUNCH_FORCA = float(os.environ.get("PUNCH_FORCA", "0.07"))
+PUNCH_S = 0.25
+
+# O COLD OPEN: quanto o primeiro trecho entra mais fechado, e em quanto tempo
+# ele recua. Ver o uso, no laço dos trechos.
+COLD_OPEN_FORCA = float(os.environ.get("COLD_OPEN_FORCA", "0.18"))
+COLD_OPEN_S = 0.8
+
+SATURACAO_CENARIO = float(os.environ.get("SATURACAO_CENARIO", "1.35"))
+CONTRASTE_CENARIO = float(os.environ.get("CONTRASTE_CENARIO", "1.10"))
+
+
+def _avivar(img):
+    """Sobe saturação e contraste do CENÁRIO. Ver as constantes acima."""
+    if SATURACAO_CENARIO == 1.0 and CONTRASTE_CENARIO == 1.0:
+        return img
+    from PIL import ImageEnhance
+    fora = ImageEnhance.Color(img).enhance(SATURACAO_CENARIO)
+    if CONTRASTE_CENARIO != 1.0:
+        fora = ImageEnhance.Contrast(fora).enhance(CONTRASTE_CENARIO)
+    return fora
+
+
 class Cenario:
     """Um cenário COMPRIDO por onde a câmera passeia.
 
@@ -2519,6 +2611,7 @@ class Cenario:
         # o chão fica embaixo: cortar pelo centro jogaria a linha do chão
         # para fora do quadro
         self.tira = base.crop((0, na - H, nl, na))
+        self.tira = _avivar(self.tira)
         self.faixa = max(0, self.tira.width - W)      # o quanto dá para andar
         self._borrada = None            # a versão fora de foco, sob demanda
 
@@ -4717,6 +4810,53 @@ def render(pasta_partes, spec, saida, tmpdir=None, amostra=0):
             # do push-in e lê como ênfase em vez de tranco.
             z_acao = max(0.96, min(1.04, float(cam.get("zoom", 1.0))))
             cam["zoom"] = z_acao * z_tr
+            # O PUNCH-IN NO CORTE (04/09, item 6 do dono do projeto: *"faça
+            # rápidas alterações na tela -- tipo zooms bruscos -- que quebram
+            # o padrão estático do vídeo e aumentam a retenção"*).
+            #
+            # O ciclo de planos já corta entre trechos, mas o corte é SECO: o
+            # plano novo entra no tamanho final e fica. Um punch-in é o
+            # contrário -- o quadro entra ~7% mais fechado e assenta em ~0,25
+            # s. O olho lê isso como impacto, e é o recurso mais barato que
+            # existe para quebrar a leitura de "imagem parada com áudio".
+            #
+            # NÃO EM TODO TRECHO, e a razão é a mesma da densidade de efeitos:
+            # o que acontece sempre deixa de ser interrupção e vira ritmo, e
+            # ritmo previsível é o que se estava tentando quebrar. Um a cada
+            # três, e nunca no trecho 0 -- ali o quadro já entra fechado pelo
+            # gancho, e um punch por cima disso lê como falha de player.
+            #
+            # `t` é a fração do trecho, não segundo: a janela em fração é
+            # PUNCH_S dividido pela duração da fala. Sem esta conta o punch
+            # duraria um quarto do trecho -- um segundo inteiro numa fala de
+            # quatro --, que é exatamente o zoom lento que ele não pode ser.
+            if i_tr > 0 and i_tr % 3 == 0:
+                jan = PUNCH_S / max(float(tr.get("dur") or 1.0), 0.2)
+                if t < jan:
+                    u = t / max(jan, 1e-6)
+                    cam["zoom"] *= 1.0 + PUNCH_FORCA * (1.0 - u) ** 2
+            # O COLD OPEN (04/09, item 4 do dono do projeto: *"colocar um
+            # elemento muito aleatório, ou uma primeira cena muito aleatória no
+            # começo pode ser suficiente pra manter alguém assistindo"*).
+            #
+            # O vídeo abre MAIS FECHADO do que vai ficar e recua em ~0,8 s. O
+            # que isso faz de diferente do gancho que já existia: o gancho põe
+            # a cara grande e a mantém; o cold open faz o quadro SE MEXER no
+            # primeiro segundo, e movimento de câmera na abertura é o que
+            # separa "começou um vídeo" de "tem uma imagem parada aí".
+            #
+            # É o degrau que faltava entre o título (que informa) e a fala
+            # (que demora): nos primeiros 0,8 s o espectador ainda não ouviu a
+            # premissa inteira, e é a imagem que tem de segurá-lo.
+            #
+            # 18% e recuo, nunca avanço: abrir mais ABERTO e fechar seria um
+            # zoom-in, que lê como lentidão. Recuar é revelar -- o quadro
+            # abre e mostra onde a pessoa está.
+            if i_tr == 0:
+                jan0 = COLD_OPEN_S / max(float(tr.get("dur") or 1.0), 0.2)
+                if t < jan0:
+                    u = t / max(jan0, 1e-6)
+                    cam["zoom"] *= 1.0 + COLD_OPEN_FORCA * (1.0 - u) ** 1.6
             # A MIRA DA AÇÃO É RELATIVA AO CORPO, NÃO À TELA (29/08).
             #
             # Uma ação pode querer olhar mais para cima -- o `susto` pede
