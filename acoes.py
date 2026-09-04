@@ -126,12 +126,83 @@ SOLTURA_MIN, SOLTURA_MAX = 0.20, 0.55
 SEM_ENVELOPE = frozenset(("parado", "gesticular", "escutar", "virar",
                           "segurar"))
 
+# O QUE A FALA PRECISA DIZER PARA O GESTO TER LICENÇA (04/09, ciclo 25).
+#
+# Não é uma lista de sinônimos do gesto: é o que a fala tem de conter para
+# aquele gesto fazer sentido em cima dela. `apontar` quer um alvo; `acenar`
+# quer um cumprimento ou uma despedida. Fora disso o gesto é enfeite, e enfeite
+# é a metade "não condiz com o roteiro" da queixa 2 do dono do projeto.
+#
+# MORA AQUI, E NÃO NA RÉGUA, porque agora as duas pontas a usam:
+# `ferramentas/regua_movimento.py` a importa para MEDIR, e `palito_cutout`
+# para TROCAR o gesto sem licença. Duas cópias divergiriam no primeiro ajuste,
+# e o motor passaria a agir por um critério que a régua não mede.
+LICENCA = {
+    "apontar": ("isso", "isto", "aquilo", "esse", "essa", "aquele", "aquela",
+                "olha", "olhe", "ali", "la", "aqui", "ve", "veja", "esta",
+                "voce", "ce", "teu", "tua", "seu", "sua"),
+    "apontar_para_si": ("eu", "meu", "minha", "mim", "comigo", "me"),
+    # "acen" entra porque a fala do v014 é *"essa camisa rasga só quando eu
+    # levanto o braço pra acenar"*: quando o texto NOMEIA o gesto, ele está
+    # licenciado por definição, e a régua o marcava como enfeite.
+    "acenar": ("oi", "ola", "tchau", "bom dia", "boa tarde", "boa noite",
+               "e ai", "fala", "opa", "ate", "falou", "valeu", "acen"),
+    "negar": ("nao", "nunca", "jamais", "nada", "nenhum", "nenhuma", "sem"),
+    "encolher_ombros": ("sei la", "nao sei", "talvez", "sei nao", "vai saber",
+                        "qualquer", "tanto faz"),
+    "comemorar": ("consegui", "deu certo", "ganhei", "aeee", "boa", "eba",
+                  "finalmente", "graças", "gracas", "ufa"),
+    "mao_no_queixo": ("acho", "pensa", "penso", "sera", "hmm", "duvida",
+                      "estranho", "esquisito"),
+}
+
+# QUANDO O GESTO NÃO TEM LICENÇA, QUAL ENTRA NO LUGAR.
+#
+# Só `acenar` está aqui, e a razão é a lei 37: dos quinze `acenar` do corpus,
+# treze não trazem cumprimento nem despedida -- e o campo `motivo` que o
+# roteirista escreveu ao lado deles diz o que ele queria de verdade:
+#
+#     "acena tentando explicar"   "gesticula empatia"   "acena frustrada"
+#     "gesto de tranquilizacao"   "confirma a suposicao com um gesto"
+#
+# Nenhum é um cumprimento. **Isto não é indisciplina, é falta de palavra:**
+# o modelo usa `acenar` como verbo genérico de "mexe o braço com ênfase",
+# porque é o que o vocabulário oferece. `apresentar` -- a palma aberta para o
+# lado, *"é isso aí", "olha só"* -- é exatamente o gesto pedido, está no
+# catálogo desde 31/08 e foi usado **zero vezes** em 25 voltas.
+#
+# Os outros ficam de fora de propósito. Lendo os casos que a régua marca em
+# `encolher_ombros` (*"tá osso, né?"*, *"que mico"*, *"o valor voltou, mas o
+# ridículo ficou"*), a maioria É um ombro de resignação legítimo: quem está
+# errado ali é a lista de licença, que só conhece "sei lá". Trocar o gesto por
+# uma régua que marca o certo é o erro que produziu as cem primeiras voltas.
+TROCA_SEM_LICENCA = {"acenar": "apresentar"}
+
 # ENTRAR E SAIR MISTURAM OS MEMBROS, NUNCA O LUGAR. A posição no mundo tem
 # de ser exata -- misturá-la faria o corpo aparecer no meio do caminho --,
 # mas os BRAÇOS de quem começa a andar vinham de uma vez: no v019 um trecho
 # aponta para cima e meio segundo depois entra andando, e o braço ia de -8
 # para +80 num frame. Quadril de fora, membros dentro.
 SO_MEMBROS = frozenset(ACOES_DE_ENTRADA + ACOES_DE_SAIDA)
+
+
+def sem_acento(s):
+    """Minúsculas e sem acento. A licença se procura no texto assim."""
+    s = str(s or "").lower()
+    for a, b in (("á", "a"), ("à", "a"), ("ã", "a"), ("â", "a"), ("é", "e"),
+                 ("ê", "e"), ("í", "i"), ("ó", "o"), ("ô", "o"), ("õ", "o"),
+                 ("ú", "u"), ("ç", "c")):
+        s = s.replace(a, b)
+    return s
+
+
+def tem_licenca(nome, fala):
+    """A fala pede este gesto? Gesto fora de `LICENCA` não exige nada."""
+    palavras = LICENCA.get(nome)
+    if not palavras:
+        return True
+    limpa = sem_acento(fala)
+    return any(p in limpa for p in palavras)
 
 
 def _suave(u):
