@@ -464,6 +464,39 @@ class Titulo:
         return quadro
 
 
+# PONTUAÇÃO TIPOGRÁFICA -> ASCII (04/09, ciclo 25).
+#
+# O título do v008 saiu **"SEU E□MAIL PRO CHEFE CAIU"**, com um retângulo vazio
+# no lugar do hífen: o modelo escreveu `e‑mail` com HÍFEN NÃO SEPARÁVEL
+# (U+2011), e a fonte do título não tem esse glifo. O PIL não avisa -- ele
+# desenha a caixa de "glifo ausente" e segue.
+#
+# Não é um caso: é uma família. Todo LLM devolve travessão, aspas curvas e
+# reticências de um caractere, e a fonte condensada/black que o título prefere
+# costuma trazer só o repertório latino básico. A legenda corre o mesmo risco
+# com a mesma fonte.
+#
+# A troca é por ASCII e não por remoção: o hífen tem de continuar existindo em
+# "e-mail". Roda no texto que entra, uma vez por fala, não por frame.
+_TIPOGRAFICO = {
+    "‐": "-", "‑": "-", "‒": "-", "–": "-",
+    "—": "-", "―": "-", "−": "-",
+    "‘": "'", "’": "'", "‚": "'", "‛": "'",
+    "“": '"', "”": '"', "„": '"', "″": '"',
+    "…": "...", " ": " ", " ": " ", " ": " ",
+    "​": "", "﻿": "",
+}
+
+
+def so_ascii_tipografico(texto):
+    """Troca a pontuação tipográfica do LLM pela equivalente em ASCII."""
+    s = str(texto or "")
+    for a, b in _TIPOGRAFICO.items():
+        if a in s:
+            s = s.replace(a, b)
+    return s
+
+
 # PALAVRAS QUE NÃO ENTRAM NO TÍTULO. Interjeição e vocativo são o tempero da
 # fala e ruído no título -- "oxe", "mano", "meu rei" não dizem do que é o
 # vídeo. Tirá-las é o que faz caber a parte concreta nas duas linhas.
@@ -505,7 +538,7 @@ def titulo_da_esquete(falas, max_palavras=9):
     """
     if not falas:
         return ""
-    txt = str(falas[0] or "").strip()
+    txt = so_ascii_tipografico(falas[0]).strip()
     # corta na primeira pontuação forte: a oração principal é o título
     for sep in (". ", "? ", "! ", "; "):
         if sep in txt:
@@ -549,7 +582,9 @@ class Legenda:
         `marcas` sao as do edge-tts (inicio_s/fim_s relativos ao trecho).
         Quem manda no QUE aparece e o texto; as marcas mandam no QUANDO --
         ver `_casar`."""
-        palavras = _casar(texto, marcas, inicio_s, dur_s)
+        # a mesma fonte do título, o mesmo risco de glifo ausente: ver
+        # `so_ascii_tipografico`
+        palavras = _casar(so_ascii_tipografico(texto), marcas, inicio_s, dur_s)
         if not palavras:
             return
         for grupo in _agrupar(palavras, self.por_bloco):
