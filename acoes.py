@@ -196,13 +196,46 @@ def sem_acento(s):
     return s
 
 
-def tem_licenca(nome, fala):
+# O MOTIVO ANCORA O GESTO DÊITICO (04/09, ciclo 25).
+#
+# `apontar` é o gesto mais usado do canal (61 vezes em 25 voltas) e a régua
+# marcava 25 deles como "a fala não pede". Lendo os 25 -- lei 37, ver o que ela
+# marcou antes de obedecer --, o `motivo` que o roteirista escreveu ao lado
+# quase sempre nomeia um alvo que ESTÁ na fala:
+#
+#     "aponta para o aviso"     :: Colocaram um AVISO enorme no meu lugar
+#     "aponta para a porta"     :: O juiz tá batendo na PORTA agora
+#     "aponta para o celular"   :: ... a foto já rodou no grupo
+#
+# Quem está errado é a lista de licença, que só conhece demonstrativo e
+# pronome de segunda pessoa. Apontar precisa é de UM ALVO, e a lei 7 já diz
+# que toda ação carrega a razão dela escrita: se o alvo que o `motivo` nomeia
+# aparece na fala, o gesto está ancorado no texto e não é enfeite.
+#
+# Isto vale só para o dêitico. `acenar` continua exigindo cumprimento -- lá o
+# `motivo` é justamente o que denuncia o erro (*"acena tentando explicar"*), e
+# aceitá-lo como âncora aprovaria o que se quer trocar.
+GESTO_ANCORA_NO_MOTIVO = ("apontar",)
+_VAZIAS = {"para", "pelo", "pela", "ao", "aos", "com", "que", "onde", "esta",
+           "aponta", "apontando", "mostra", "mostrando", "gesto", "mao",
+           "dedo", "indica", "indicando", "enquanto", "quando", "sobre",
+           "imaginario", "imaginaria", "lado", "cima", "baixo", "frente"}
+
+
+def tem_licenca(nome, fala, motivo=None):
     """A fala pede este gesto? Gesto fora de `LICENCA` não exige nada."""
     palavras = LICENCA.get(nome)
     if not palavras:
         return True
     limpa = sem_acento(fala)
-    return any(p in limpa for p in palavras)
+    if any(p in limpa for p in palavras):
+        return True
+    if nome in GESTO_ANCORA_NO_MOTIVO and motivo:
+        for w in sem_acento(motivo).replace(",", " ").split():
+            w = w.strip(".;:!?\"'()")
+            if len(w) >= 4 and w not in _VAZIAS and w[:5] in limpa:
+                return True
+    return False
 
 
 def _suave(u):
