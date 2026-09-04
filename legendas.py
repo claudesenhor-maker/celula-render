@@ -268,6 +268,153 @@ def janelas_censuradas(texto, marcas, inicio_s, dur_s, folga=0.07, minimo=0.30):
     return fora
 
 
+# ============================================================================
+# O TÍTULO — a frase que fica no alto enquanto a história se apresenta
+# ============================================================================
+#
+# Pedido do dono do projeto em 03/09: *"título, frase logo acima do início de
+# contextualização"*, junto com *"o gancho precisa ser melhorado, nada me
+# prende o começo do vídeo"*.
+#
+# POR QUE O TÍTULO É UM RECURSO DE RETENÇÃO, E NÃO ENFEITE
+#     Quem rola o feed decide em dois ou três segundos, e nesses segundos a
+#     fala mal começou -- no v003 a primeira frase termina aos 4,1 s. O texto
+#     no alto entrega a PREMISSA inteira antes de a primeira frase acabar, e é
+#     por isso que praticamente todo Short de comédia tem um. Ele não repete a
+#     legenda: a legenda vai palavra a palavra, embaixo, acompanhando a boca;
+#     o título fica parado, em cima, dizendo do que é o vídeo.
+#
+# ONDE ELE FICA, E POR QUE ALI
+#     No alto -- que é justamente a faixa que a lei 23 proíbe encher de
+#     gráfico flutuando sobre o personagem e que o dono já cobrou não deixar
+#     vazia. A cabeça fica em torno de 15% a 45% da altura, dependendo do
+#     plano; 0,085 põe o título acima disso em todos os planos que o motor
+#     faz. Ele sai antes de a segunda fala começar, então nunca disputa a
+#     tela com a piada.
+TITULO_Y = 0.085
+TITULO_SEGUNDOS = 4.5
+# Duas linhas no máximo: três já é parágrafo, e parágrafo no alto de um Short
+# não se lê -- se lê a boca de quem fala.
+TITULO_LINHAS = 2
+TITULO_COR = (255, 211, 77, 255)          # o mesmo âmbar da palavra ativa
+
+
+class Titulo:
+    """A frase de premissa, no alto, nos primeiros segundos.
+
+    Desenhada com a mesma família de fonte e o mesmo contorno da legenda: é
+    o mesmo canal falando, e duas tipografias diferentes na mesma tela leem
+    como dois vídeos colados."""
+
+    def __init__(self, largura, altura, texto, segundos=TITULO_SEGUNDOS):
+        self.W, self.H = largura, altura
+        self.texto = str(texto or "").strip().upper()
+        self.ate = float(segundos)
+        self.tam = int(altura * 0.043)
+        self.fonte = _fonte(self.tam)
+        self.borda = max(5, self.tam // 7)
+        self.linhas = self._quebrar()
+
+    def _quebrar(self):
+        """Quebra em até duas linhas, o mais equilibradas possível."""
+        if not self.texto:
+            return []
+        larg_max = int(self.W * 0.88)
+        palavras = self.texto.split()
+        linhas, atual = [], ""
+        for p in palavras:
+            tenta = (atual + " " + p).strip()
+            if self.fonte.getlength(tenta) <= larg_max or not atual:
+                atual = tenta
+            else:
+                linhas.append(atual)
+                atual = p
+        if atual:
+            linhas.append(atual)
+        return linhas[:TITULO_LINHAS]
+
+    def desenhar(self, quadro, t):
+        if not self.linhas or t > self.ate:
+            return quadro
+        # some suavemente no último meio segundo, para não piscar
+        alfa = 255
+        if t > self.ate - 0.5:
+            alfa = max(0, int(255 * (self.ate - t) / 0.5))
+        d = ImageDraw.Draw(quadro)
+        y = int(self.H * TITULO_Y)
+        for linha in self.linhas:
+            w = self.fonte.getlength(linha)
+            x = (self.W - w) / 2.0
+            # o mesmo contorno da legenda: em cima de cenário claro ou escuro
+            # o texto tem de continuar legível, e é o contorno que garante
+            d.text((x, y), linha, font=self.fonte,
+                   fill=TITULO_COR[:3] + (alfa,),
+                   stroke_width=self.borda,
+                   stroke_fill=COR_BORDA[:3] + (alfa,))
+            y += int(self.tam * 1.18)
+        return quadro
+
+
+# PALAVRAS QUE NÃO ENTRAM NO TÍTULO. Interjeição e vocativo são o tempero da
+# fala e ruído no título -- "oxe", "mano", "meu rei" não dizem do que é o
+# vídeo. Tirá-las é o que faz caber a parte concreta nas duas linhas.
+_RUIDO_TITULO = {
+    "oxe", "mano", "velho", "bicho", "rapaz", "uai", "vixe", "eita",
+    "né", "ne", "pô", "po", "viu", "ué", "ue", "poxa", "nossa",
+    "firmeza", "beleza", "vacilei", "sério", "serio",
+}
+
+# NÃO ENTRAM NO FIM DO TÍTULO. Um título cortado em "por", "de" ou "com" fica
+# pendurado no ar — é a mesma regra que `_agrupar` já aplica aos blocos de
+# legenda desde a volta 3, e pelo mesmo motivo: o olho lê o fim da linha como
+# fim de ideia.
+_NAO_TERMINA = {
+    "de", "da", "do", "das", "dos", "em", "no", "na", "nos", "nas", "por",
+    "pra", "para", "com", "sem", "que", "e", "o", "a", "os", "as", "um",
+    "uma", "meu", "minha", "seu", "sua", "ao", "aos", "à", "às", "num",
+    "numa", "pelo", "pela", "se", "mas", "ou",
+}
+
+
+def titulo_da_esquete(falas, max_palavras=9):
+    """A premissa, tirada da PRIMEIRA fala.
+
+    POR QUE DA PRIMEIRA, E POR QUE POR CÓDIGO
+        A primeira fala é o setup -- ela diz o que aconteceu, e é isso que um
+        título precisa dizer. O remate seria spoiler.
+
+        E ela é comprimida por CÓDIGO, e não pedida ao roteirista, por uma
+        razão registrada: um campo novo teria de sobreviver a três passadas de
+        LLM (rascunho, reescrita, estruturação), e foi exatamente assim que o
+        rótulo `NOME:` se perdeu e custou vinte voltas ao ciclo. O que o
+        modelo escreve uma vez, o modelo esquece na passada seguinte; o que o
+        código faz, acontece sempre.
+
+    Tira interjeição e vocativo, corta na pontuação forte e limita o tamanho.
+    Devolve '' quando não sobrar coisa que preste -- título ruim é pior que
+    nenhum, porque ele ocupa os segundos que decidem o vídeo.
+    """
+    if not falas:
+        return ""
+    txt = str(falas[0] or "").strip()
+    # corta na primeira pontuação forte: a oração principal é o título
+    for sep in (". ", "? ", "! ", "; "):
+        if sep in txt:
+            txt = txt.split(sep)[0]
+            break
+    txt = txt.rstrip(".?!;:, ")
+    palavras = [p for p in txt.split()
+                if p.strip(".,!?;:").lower() not in _RUIDO_TITULO]
+    palavras = palavras[:max_palavras]
+    # não termina em palavra pendurada (ver `_NAO_TERMINA`)
+    while len(palavras) > 3 and \
+            palavras[-1].strip(".,!?;:").lower() in _NAO_TERMINA:
+        palavras.pop()
+    if len(palavras) < 3:
+        return ""
+    return " ".join(palavras).strip(".,!?;: ")
+
+
 class Legenda:
     """Pre-monta os blocos e desenha o que estiver no ar em cada instante.
 
