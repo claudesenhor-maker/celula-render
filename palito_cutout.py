@@ -2037,7 +2037,21 @@ def _espalhar(img, r):
     Estender não mistura nada: no pescoço a cor vem da pele, na cintura vem
     da calça, e o traço preto do desenhista continua sendo o traço.
     """
-    fora = img
+    # SÓ PIXEL SÓLIDO SERVE DE FONTE (04/09).
+    #
+    # A primeira versão estendia a imagem como veio, e as bordas da arte são
+    # ANTI-SERRILHADAS: a última fileira de pixels tem alfa parcial. Ao
+    # estender, esses pixels meio transparentes viajavam para dentro do vão, e
+    # a máscara do fecho depois os punha em opacidade total -- o que se via era
+    # uma faixa PÁLIDA no cotovelo, no punho e no joelho, mais clara que as
+    # duas peças vizinhas. Foi o que sobrou da queixa de 04/09 depois de a
+    # ponte cinza sair.
+    #
+    # Cortando o alfa em 200, a fonte da extensão passa a ser só o miolo da
+    # arte, e a cor que preenche o vão é a cor de verdade da peça.
+    a = np.asarray(img.convert("RGBA")).copy()
+    a[..., 3] = np.where(a[..., 3] > 200, 255, 0).astype(np.uint8)
+    fora = Image.fromarray(a, "RGBA")
     for _ in range(int(r)):
         base = fora.copy()
         for dx, dy in ((-1, 0), (1, 0), (0, -1), (0, 1),
