@@ -730,6 +730,13 @@ def _tapar_entalhe(img, cor=None, rosto=None):
 # comentário na chamada, em `desenhar_personagem`.
 BOCA_ABERTURA_MAX = float(os.environ.get("BOCA_ABERTURA_MAX", "0.30"))
 
+# QUANTO DA CURVA DE REPOUSO DESENHADA NA FOLHA ENTRA NA BOCA DE CADA
+# EXPRESSÃO. Era 1,0 -- somada inteira --, e como toda folha do elenco é
+# desenhada sorrindo (+0,85 a +1,00), ela empurrava as doze expressões para o
+# sorriso e saturava quatro delas no mesmo desenho. Ver o comentário longo em
+# `desenhar_personagem`, onde a conta é feita.
+PESO_BOCA_DA_ARTE = float(os.environ.get("PESO_BOCA_DA_ARTE", "0.25"))
+
 
 def _boca_desenhada(larg, alt_max, nivel, curva, cor_traco, cor_dentro=None,
                     espessura=None):
@@ -2598,8 +2605,39 @@ def desenhar_personagem(pers, rig, boca_nivel=0.0, piscando=False, objeto=None,
         if nome == "cranio" and getattr(pers, "boca", None):
             bdx, bdy, blarg = pers.boca
             estilo = getattr(pers, "boca_estilo", None) or {}
-            # a curva da emoção SOMA à curva de repouso que o desenhista deu
-            # à boca: a cara neutra continua sendo a que ele desenhou
+            # A CURVA DO DESENHISTA É UM VIÉS, NÃO A LINHA DE BASE (04/09,
+            # ciclo 25).
+            #
+            # A conta era `emocao + estilo`, com a ideia de que *"a cara neutra
+            # continua sendo a que ele desenhou"*. A ideia está certa e a conta
+            # some com onze das doze expressões, porque **as folhas são
+            # desenhadas SORRINDO**: o estilo medido é +0,87 no Pal, +0,85 na
+            # Maya, +0,89 na senhora, +1,00 no preso. Somando:
+            #
+            #     triste     -0,85 + 0,87 =  +0,02   uma linha reta
+            #     bravo      -0,55 + 0,87 =  +0,32   um sorriso
+            #     irritado   -0,40 + 0,87 =  +0,47   um sorriso maior
+            #     confiante  +0,55 + 0,87 =   1,00   saturado
+            #     desdem     +0,35 + 0,87 =   1,00   saturado, igual
+            #     sorrindo   +0,95 + 0,87 =   1,00   saturado, igual
+            #
+            # **A boca deste canal nunca curvou para baixo, e quatro
+            # expressões saíam idênticas por saturação.** A folha de
+            # `ferramentas/caras.py` mostra as doze e só três se distinguem --
+            # surpreso, chocado e desesperado --, e elas se distinguem porque a
+            # boca ABRE, não porque ela curva. Num canal em que a piada é o
+            # sujeito que se ferra, a cara de quem se ferrou não existia.
+            #
+            # O catálogo de `expressao.py` foi calibrado com a base em ZERO
+            # (`triste` pede -0,85, que é uma boca claramente para baixo), então
+            # a curva da emoção é o ALVO e a do desenhista entra como o tempero
+            # que sobra: um quarto dela. `neutro` continua sorrindo de leve, que
+            # é o que a arte diz do personagem, e `triste` vira -0,63, que é uma
+            # boca triste.
+            #
+            # Um quarto e não zero porque a razão original é boa: a boca de
+            # repouso é traço do desenhista, e apagá-la faria todo personagem
+            # do elenco ter a mesma boca neutra.
             # A ABERTURA MÁXIMA DA BOCA (03/09, queixa 2 do dono do projeto:
             # *"a cara foi completamente deformada pelo efeito da boca"*).
             #
@@ -2615,7 +2653,9 @@ def desenhar_personagem(pers, rig, boca_nivel=0.0, piscando=False, objeto=None,
             # perde é o grito permanente.
             bimg, bpiv = _boca_desenhada(
                 blarg * e, blarg * e * BOCA_ABERTURA_MAX, boca_nivel,
-                max(-1.0, min(1.0, ex["boca_curva"] + float(estilo.get("curva", 0.0)))),
+                max(-1.0, min(1.0, ex["boca_curva"]
+                                   + PESO_BOCA_DA_ARTE
+                                   * float(estilo.get("curva", 0.0)))),
                 _cor_da_casca(pers.img["cranio"]),
                 espessura=float(estilo.get("esp", 0.0)) * e or None)
             d = _girar((bdx * e, bdy * e), ang[nome])
