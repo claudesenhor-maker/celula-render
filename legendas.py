@@ -310,17 +310,35 @@ class Titulo:
         self.W, self.H = largura, altura
         self.texto = str(texto or "").strip().upper()
         self.ate = float(segundos)
+        # ENCOLHER ANTES DE CORTAR (03/09). A primeira versão fixava o corpo
+        # em 4,3% da altura e depois tirava palavras até caber em duas linhas
+        # -- e o título perdia justamente o fim, que é onde mora a
+        # desproporção: "O BOLETO DO PLANO DE SAUDE CHEGOU" sem o "COM JUROS".
+        #
+        # A ordem certa é a inversa: **a frase manda, o corpo cede.** Título é
+        # texto de apoio e aguenta ser menor que a legenda (que acompanha a
+        # boca e precisa ser lida no impulso); só quando nem no menor corpo
+        # couber é que se tira palavra.
         self.tam = int(altura * 0.043)
-        self.fonte = _fonte(self.tam)
-        self.borda = max(5, self.tam // 7)
-        self.linhas = self._quebrar()
+        self.linhas = []
+        for frac in (0.043, 0.039, 0.035, 0.032):
+            self.tam = int(altura * frac)
+            self.fonte = _fonte(self.tam)
+            self.borda = max(4, self.tam // 7)
+            linhas = self._linhas_de(self.texto.split()) if self.texto else []
+            if linhas and len(linhas) <= TITULO_LINHAS:
+                self.linhas = linhas
+                break
+        else:
+            # nem no menor corpo coube: aí sim tira palavras
+            self.linhas = self._quebrar()
+        # vírgula pendurada no fim: ela sobra quando o corte tirou o que vinha
+        # depois dela, e no título não separa mais nada
+        if self.linhas:
+            self.linhas[-1] = self.linhas[-1].rstrip(",;:- ")
 
-    def _quebrar(self):
-        """Quebra em até duas linhas, o mais equilibradas possível."""
-        if not self.texto:
-            return []
+    def _linhas_de(self, palavras):
         larg_max = int(self.W * 0.88)
-        palavras = self.texto.split()
         linhas, atual = [], ""
         for p in palavras:
             tenta = (atual + " " + p).strip()
@@ -331,7 +349,34 @@ class Titulo:
                 atual = p
         if atual:
             linhas.append(atual)
-        return linhas[:TITULO_LINHAS]
+        return linhas
+
+    def _quebrar(self):
+        """Quebra em até duas linhas — TIRANDO PALAVRAS, não cortando linhas.
+
+        A primeira versão montava as linhas e ficava com as duas primeiras
+        (`linhas[:2]`). O v004 mostrou o que isso faz: o título saiu
+        **"CHEFE MANDOU TIRAR URGENTE O"**, terminando num artigo solto,
+        porque a terceira linha foi jogada fora no meio da frase.
+
+        Cortar por LINHA corta onde a fonte quis; cortar por PALAVRA corta
+        onde a frase permite. Então tiram-se palavras do fim até caber, e
+        depois aplica-se a mesma regra do fim pendurado que
+        `titulo_da_esquete` já usa -- ela tem de valer aqui também, porque é
+        aqui que o corte final acontece.
+        """
+        if not self.texto:
+            return []
+        palavras = self.texto.split()
+        while palavras:
+            linhas = self._linhas_de(palavras)
+            if len(linhas) <= TITULO_LINHAS:
+                return linhas
+            palavras.pop()
+            while len(palavras) > 3 and \
+                    palavras[-1].strip(".,!?;:").lower() in _NAO_TERMINA:
+                palavras.pop()
+        return []
 
     def desenhar(self, quadro, t):
         if not self.linhas or t > self.ate:
