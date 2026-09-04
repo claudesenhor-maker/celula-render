@@ -4112,6 +4112,49 @@ def _fazer_voltar(por_ator, fora_de_cena):
 INTERVALO_GESTO_S = 3.5
 
 
+def _trocar_gesto_sem_licenca(por_ator, fala):
+    """`acenar` sem cumprimento na fala vira `apresentar`.
+
+    POR QUE (04/09, ciclo 25 -- queixa 2 do dono do projeto, a metade que
+    sobrou)
+        `_ralear_gestos` derrubou o EXCESSO de gesto: de um a cada 1,65 s para
+        um a cada 4,7. O que ele não sabe fazer é ESCOLHER qual gesto a fala
+        pede, e por isso o que restou no corpus foram 75 gestos que a fala não
+        pede em 242 -- *"movimentação do personagem não condiz com roteiro de
+        fala"*, palavra por palavra.
+
+        Nos quinze `acenar` do corpus, treze não trazem cumprimento nem
+        despedida. E o `motivo` escrito ao lado deles diz o que o roteirista
+        queria: *"acena tentando explicar"*, *"gesticula empatia"*, *"acena
+        frustrada"*, *"confirma a suposição com um gesto"*. Nenhum é um oi ou
+        um tchau. Ele não está desobedecendo -- está usando `acenar` como
+        verbo genérico de "mexe o braço com ênfase", porque é o que a lista
+        oferece.
+
+        `apresentar` é esse gesto, existe desde 31/08 (*"a palma aberta para o
+        lado: 'é isso aí', 'olha só'"*) e foi usado ZERO vezes em 25 voltas.
+
+    POR QUE NO CÓDIGO E NÃO NO PROMPT (lei 16, e P5)
+        Ensinar a diferença entre acenar e apresentar custaria regra nova num
+        prompt que já mede 5808 de 6100 tokens, e regra nova vaza para a
+        vizinha (lei 53). Aqui é um `if` sobre a fala que já está escrita.
+
+    POR QUE SÓ `acenar`
+        Ver `acoes.TROCA_SEM_LICENCA`: nos outros gestos que a régua marca, a
+        leitura dos casos mostra que quem erra é a lista de licença, não o
+        roteiro. Obedecer a uma régua que marca o certo é a lei 37 pelo avesso.
+    """
+    for chave, acoes in (por_ator or {}).items():
+        for a in acoes or []:
+            novo = ACOES.TROCA_SEM_LICENCA.get(a.get("nome"))
+            if not novo or ACOES.tem_licenca(a["nome"], fala):
+                continue
+            print(f"[gesto] {chave}: '{a['nome']}' -> '{novo}' -- a fala nao "
+                  f"tem cumprimento nem despedida "
+                  f"(motivo escrito: {str(a.get('motivo'))[:40]})")
+            a["nome"] = novo
+
+
 def _ralear_gestos(por_ator, dur_s, gancho=False):
     """Tira do trecho os gestos DECORATIVOS que passam da conta.
 
@@ -4766,6 +4809,10 @@ def render(pasta_partes, spec, saida, tmpdir=None, amostra=0):
         # O EXCESSO DE GESTO SAI AQUI (03/09, queixa 2). Antes de qualquer
         # outra guarda: as que vêm depois olham a lista de ações, e olhar uma
         # lista que ainda vai encolher é medir o que não vai acontecer.
+        # E O GESTO QUE A FALA NÃO PEDE TROCA DE NOME ANTES DE TUDO: o
+        # raleamento escolhe QUEM FICA pela ordem, e escolher entre gestos que
+        # ainda vão ser trocados é decidir sobre o que não vai acontecer.
+        _trocar_gesto_sem_licenca(por_ator, tr.get("fala"))
         _ralear_gestos(por_ator, float(tr.get("dur") or 0.0), gancho=(i_tr == 0))
         if i_tr == 0 and os.environ.get("GANCHO_ENTRA") != "1":
             _gancho_ja_em_cena(por_ator, falante)
