@@ -656,6 +656,33 @@ def eventos_do_spec(spec):
     #
     # O corte é por ganho, não por ordem: fica o que o roteiro marcou de
     # propósito e o impacto forte, sai o pop de encosto.
+    # O SOM DO CORTE (04/09, item 6 do dono do projeto: *"mudança de áudio
+    # rápida entre cenas quebra o padrão estático"*).
+    #
+    # O vídeo já corta de plano entre trechos e o corte é MUDO -- só a imagem
+    # muda. Um `whoosh` curto no instante do corte é o que faz o ouvido
+    # perceber que houve corte, e é por isso que toda vinheta de canal tem
+    # um: o áudio marca a transição que a imagem sozinha não anuncia.
+    #
+    # NOS MESMOS TRECHOS DO PUNCH-IN (um a cada três, nunca no 0), pela mesma
+    # razão que o punch não é em todos: interrupção que acontece sempre vira
+    # ritmo, e ritmo previsível é o que se está quebrando. Casar os dois faz
+    # o corte ter imagem E som -- separados, cada um seria metade do efeito.
+    #
+    # Ganho baixo (0,35): ele marca, não anuncia. Whoosh alto por cima da
+    # primeira sílaba da fala nova come a fala.
+    # Entra em `limpos` e nao em `fora`: `fora` ja foi consumido pelo
+    # anticolisao acima, e um evento acrescentado la depois simplesmente
+    # sumiria. E marcado com `corte` para o teto de densidade nao o cortar --
+    # ele nao e' um efeito de cena disputando espaco, e' a pontuacao do
+    # proprio corte.
+    cortes_sonoros = []
+    for i, tr in enumerate(trechos):
+        if i > 0 and i % 3 == 0:
+            cortes_sonoros.append({"nome": "whoosh",
+                                   "t": float(tr.get("_inicio_s", 0.0)) - 0.06,
+                                   "ganho": 0.35, "corte": True})
+
     # O SILÊNCIO ANTES DO REMATE (03/09, item 4 do dono do projeto).
     #
     # A trilha já corta antes da última fala (o `breque` de
@@ -697,7 +724,9 @@ def eventos_do_spec(spec):
               f"(teto de {teto} num video de {_duracao_total(trechos):.0f}s)")
     if passos:
         print(f"[sfx] {len(passos)} pisada(s) em cadencia")
-    return sorted(limpos + passos, key=lambda e: e["t"])
+    if cortes_sonoros:
+        print(f"[sfx] {len(cortes_sonoros)} whoosh(es) marcando corte de plano")
+    return sorted(limpos + passos + cortes_sonoros, key=lambda e: e["t"])
 
 
 def _duracao_total(trechos):
