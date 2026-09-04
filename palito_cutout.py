@@ -4288,7 +4288,7 @@ def _trocar_gesto_sem_licenca(por_ator, fala):
     for chave, acoes in (por_ator or {}).items():
         for a in acoes or []:
             novo = ACOES.TROCA_SEM_LICENCA.get(a.get("nome"))
-            if not novo or ACOES.tem_licenca(a["nome"], fala):
+            if not novo or ACOES.tem_licenca(a["nome"], fala, a.get("motivo")):
                 continue
             print(f"[gesto] {chave}: '{a['nome']}' -> '{novo}' -- a fala nao "
                   f"tem cumprimento nem despedida "
