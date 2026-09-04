@@ -2823,6 +2823,7 @@ class Cenario:
         self.tira = _avivar(self.tira)
         self.faixa = max(0, self.tira.width - W)      # o quanto dá para andar
         self._borrada = None            # a versão fora de foco, sob demanda
+        self._leve = None               # e a de foco brando do plano aberto
 
     def ponto_do_trecho(self, i):
         """Onde a câmera fica DURANTE o trecho `i`, em pixels da tira.
@@ -2842,9 +2843,39 @@ class Cenario:
 
     def quadro(self, dx, borrado=False):
         x = self._posicao(dx)
-        if borrado:
-            return self._tira_borrada().crop((x, 0, x + W, H))
-        return self.tira.crop((x, 0, x + W, H))
+        return self._tira(borrado).crop((x, 0, x + W, H))
+
+    def _tira(self, borrado):
+        """A tira no grau de foco pedido. Custa UM borrão por grau, por cenário.
+
+        SÃO DOIS GRAUS, E NÃO UM (04/09, ciclo 25)
+            O foco era binário: nítido abaixo de 1,35 de zoom, 9 px de borrão
+            acima. Os planos deste formato são 1,20, 1,45 e 1,90, então o
+            **plano aberto — o mais usado — sai com o cenário em foco total**.
+
+            É justamente onde a arte pesa mais: quanto mais aberto o plano,
+            mais cenário no quadro. A folha de rostos do v026 mostra a Vovó a
+            um sexto da altura, com dois terços de tela ocupados por um
+            `escritorio` que é **cidade e móveis em puro contorno preto sobre
+            branco** — a mesma espessura de traço do personagem, e nenhuma cor
+            para separar os dois. É a razão que a lei 72 já dá para o close, e
+            ela não deixa de valer a 1,20: o que a decide é o peso do traço no
+            quadro, não o número do zoom.
+
+            `sala` e `escritorio` são 68% do corpus e os dois têm região grande
+            em contorno branco (`ferramentas/regiao_sem_cor.py`, aberto desde
+            02/09). Redesenhar a arte é o item 4 de `GUIA 0.3` e não está na
+            mão de ninguém hoje; tirar o fundo de foco é profundidade de campo,
+            que é a resposta de sempre e não inventa arte nenhuma.
+
+            Três pixels, e não nove: no plano aberto o cenário ainda tem de
+            dizer ONDE a cena acontece. Nove tira o lugar junto com o traço.
+        """
+        if not borrado:
+            if self._leve is None:
+                self._leve = self.tira.filter(ImageFilter.GaussianBlur(3))
+            return self._leve
+        return self._tira_borrada()
 
     def _tira_borrada(self):
         """A mesma tira, fora de foco. Custa UM borrão por cenário.
