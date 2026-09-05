@@ -1337,9 +1337,15 @@ def _cor_da_pele(img):
 # engrossá-la: ela CONTINUA por baixo da vizinha, que é o que um cut-out de
 # papel faz. Ver lá.
 #
-# 1,0 é a lei 73 (o vão INTEIRO de cada lado, não a metade) e continua sendo
-# um número que vem do desenho, medido pelo segmentador, peça a peça.
-FECHO_DO_VAO = float(os.environ.get("FECHO_DO_VAO", "1.0"))
+# ZERO POR DECISÃO DE ESTILO (04/09, do dono do projeto). Ver o bloco de
+# `RAIO_FECHO`: o vão entre as peças é o traço do canal e não se tapa -- nem
+# por anel, nem por extensão, nem por fechamento. As seis tentativas ficam
+# documentadas aqui porque a numeração delas explica por que a queixa voltava
+# sempre: **nenhuma estava errada na técnica, todas estavam erradas na
+# premissa.**
+#
+# Qualquer valor > 0 devolve o fecho por peça, e existe para o A/B.
+FECHO_DO_VAO = float(os.environ.get("FECHO_DO_VAO", "0"))
 
 # Qual dos dois fechos por peça está no ar. `estender` é o de 04/09 (a peça
 # continua na direção do osso); `anel` é o `MaxFilter` das quatro tentativas
@@ -2396,7 +2402,32 @@ def _sem_traco(img, r=6):
 # aparecia debaixo do queixo, na prévia do v022 -- custa um quarto do que o
 # raio antigo custava. O A/B: com 4 sobra um quadrado de fundo sob o queixo;
 # com 8 o pescoço fecha e lê como sombra, que é o que um cut-out faz.
-RAIO_FECHO = int(os.environ.get("RAIO_FECHO", "8"))
+# ZERO, E DESTA VEZ POR DECISÃO DE ESTILO (04/09, do dono do projeto).
+#
+#   *"vi um video e novamente foi feito algo para tentar 'tampar os vãos',
+#    isso é parte do estilo do canal, desfaça isso"*
+#
+# **O vão entre as peças não é defeito: é o traço do canal.** Ele é o que faz
+# a coisa ler como recorte de papel, e é por isso que a queixa voltou toda vez
+# que alguém o fechou -- seis vezes, por seis caminhos diferentes:
+#
+#   · anel da cor do CONTORNO (até 02/09)   -> faixa preta de boneco articulado
+#   · anel da cor de DENTRO   (02 a 03/09)  -> esparadrapo rosa e azul na junta
+#   · fechamento por desfoque (03/09)       -> ponte cinza entre as peças
+#   · anel por `_espalhar`    (04/09)       -> cotoveleiras e joelheiras pretas
+#   · extensão da peça na direção da junta  -> traço duplicado, serrilhado
+#   · fechamento do corpo montado com a cor do miolo -> a emenda some, e com
+#                                              ela o estilo
+#
+# As seis foram lidas como "cor errada", "direção errada", "fonte errada".
+# Nenhuma dessas leituras estava certa: **a premissa é que estava errada.** O
+# vão devia ficar. As réguas que mediam isso (`junta.py`, `tinta_junta.py`)
+# medem bem o que medem e não sabem disto -- nenhuma régua deste projeto pode
+# dizer que uma escolha de estilo é um defeito.
+#
+# `RAIO_FECHO=8` reproduz o fechamento antigo para um A/B, e é só para isso
+# que a variável continua existindo.
+RAIO_FECHO = int(os.environ.get("RAIO_FECHO", "0"))
 
 
 def _fechar_vaos_do_corpo(base):
