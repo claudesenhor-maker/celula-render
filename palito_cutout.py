@@ -4335,8 +4335,66 @@ def _objeto_na_mao(acoes_do_ator, t, objetos, atual):
         nome = a.get("objeto")
         if nome in objetos:
             atual = {"img": objetos[nome], "mao": a.get("mao", "d"),
-                     "escala": float(a.get("escala_objeto", 1.0))}
+                     "escala": float(a.get("escala_objeto", 1.0)),
+                     "nome": nome}
     return atual
+
+
+# QUANTOS TRECHOS UMA COISA FICA NA MÃO SEM SER USADA (04/09, v035).
+#
+# A lei 35 -- quem pega, segura -- resolveu o objeto que sumia no meio da
+# fala, e ela continua certa. Mas ela não tinha fim: no v035 um
+# `mostrar_objeto` de MEIO SEGUNDO no trecho 0 deixou o celular na mão da
+# Maya pelos **78 segundos seguintes**, em quinze trechos que não falam de
+# celular nenhum. O braço volta ao repouso entre um gesto e outro, e o que
+# se vê é a queixa de 02/09 e de 04/09 do dono do projeto: *"adesivo colado
+# à coxa"*.
+#
+# `acoes.segurar` (04/09) atacou a POSTURA -- levantou o antebraço de quem
+# tem algo na mão -- e melhorou a leitura sem tocar na causa: o objeto não
+# devia estar lá. Ninguém anda com o celular na mão por um minuto inteiro
+# depois de guardar o assunto.
+#
+# Dois trechos é a folga que a lei 35 precisa: ela existe para o objeto
+# atravessar a fala em que foi pego e a resposta do outro. Passou disso sem
+# ninguém usar nem CITAR a coisa, ela foi guardada -- e o corte de plano
+# entre trechos é o lugar onde isso acontece sem ninguém ver, do mesmo jeito
+# que um corte justifica trocar de plano.
+TRECHOS_COM_OBJETO_PARADO = int(os.environ.get("TRECHOS_OBJETO", "2"))
+
+
+def _guardar_objeto_esquecido(na_mao, sem_uso, por_ator, fala, seg):
+    """Quem está com uma coisa na mão e não a usa há dois trechos, guarda.
+
+    "Usar" é qualquer ação de objeto no trecho, ou a fala CITAR a coisa --
+    uma esquete sobre o boleto continua com o boleto na mão enquanto se fala
+    dele, que é o que a lei 35 quer. Ver `TRECHOS_COM_OBJETO_PARADO`.
+    """
+    dito = ACOES.sem_acento(str(fala or "").lower())
+    for chave, coisa in list(na_mao.items()):
+        if not coisa:
+            sem_uso[chave] = 0
+            continue
+        nome = str(coisa.get("nome") or "")
+        usada = any(a.get("objeto")
+                    or a.get("nome") in ACOES.ACOES_PEGAM_OBJETO
+                    or a.get("nome") in ACOES.ACOES_LARGAM_OBJETO
+                    for a in (por_ator.get(chave) or []))
+        # `xicara_de_cafe` cita quem falar em "xicara" ou em "cafe": as
+        # palavras de quatro letras ou mais do nome da arte. As de três
+        # ("de", "do") não dizem nada.
+        if not usada:
+            usada = any(p in dito for p in nome.split("_") if len(p) >= 4)
+        if usada:
+            sem_uso[chave] = 0
+            continue
+        sem_uso[chave] = sem_uso.get(chave, 0) + 1
+        if sem_uso[chave] > TRECHOS_COM_OBJETO_PARADO:
+            na_mao[chave] = None
+            sem_uso[chave] = 0
+            print(f"[objeto] {chave} guarda o {nome} em {seg:.1f}s: "
+                  f"{TRECHOS_COM_OBJETO_PARADO} trecho(s) sem usar nem citar "
+                  f"-- na mao ele viraria adesivo na coxa")
 
 
 def _quem_saiu(por_ator):
@@ -4942,6 +5000,7 @@ def render(pasta_partes, spec, saida, tmpdir=None, amostra=0):
     fora_de_cena = set()          # quem saiu andando no trecho anterior
     dupla_avisada = False         # o aviso de objeto duplicado sai uma vez
     largou_avisado = set()        # quem já teve o objeto tomado da mão
+    objeto_parado = {c: 0 for c in chaves}   # trechos sem usar o que tem na mão
     # OS FRAMES QUE A AMOSTRA QUER, em índice global. `total` já é a
     # duração real da voz, então dá para escolher antes de desenhar.
     quero, colhidos = None, []
@@ -5114,6 +5173,12 @@ def render(pasta_partes, spec, saida, tmpdir=None, amostra=0):
                   f"nele mostraria cenario vazio ate ele chegar")
         _fazer_voltar(por_ator, [c for c in fora_de_cena if c in chaves])
         fora_de_cena = _quem_saiu(por_ator)
+        # O QUE NINGUÉM USA NEM CITA VOLTA PARA O BOLSO. Uma vez por trecho,
+        # e antes dos frames: dentro do trecho o objeto é estado contínuo, e
+        # trocá-lo no meio faria a coisa sumir da mão durante a fala -- que é
+        # justamente o defeito que a lei 35 consertou.
+        _guardar_objeto_esquecido(na_mao, objeto_parado, por_ator,
+                                  tr.get("fala"), n / float(FPS))
         nf = max(1, int(tr["dur"] * FPS))
         cam = dict(ACOES.CAM_NEUTRA)
         for f in range(nf):
