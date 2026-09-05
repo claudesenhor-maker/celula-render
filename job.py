@@ -430,6 +430,33 @@ def main():
     fila_id = spec.get("fila_id", "sem-id")
     print(f"[job] fila_id={fila_id}  trechos={len(spec['trechos'])}")
 
+    # O ELEVENLABS E EXCLUSIVO DO CANAL (05/09, decisao do dono do projeto)
+    #
+    #   *"para testes nunca use o elevenlabs para a voz, deixe exclusivo para
+    #    o canal, e ele sempre deve tentar primeiro usar a voz do elevenlabs
+    #    no canal antes de ir para o plano b"*
+    #
+    # A conta tem 40.000 creditos por mes, e o ciclo de video gastava deles
+    # como se fossem de graca: cada volta sao 10 a 16 falas, e o ciclo roda
+    # dezenas de voltas por dia. Sao os creditos do CANAL sendo queimados
+    # para ninguem ouvir -- as voltas do ciclo existem para julgar imagem e
+    # texto, e o Edge-TTS fala igual para esse fim.
+    #
+    # A GUARDA FICA AQUI, e nao no `montar_spec`, porque aqui e' o funil: todo
+    # render passa por este ponto, venha ele do ciclo, do painel ou de um
+    # disparo a mao. `fila_id` que nao e' uuid E render de teste, por
+    # definicao (ver `UUID_RE` e `atualizar_fila`) -- a mesma regra que ja
+    # decide nao gravar na fila e nao publicar.
+    if not UUID_RE.match(str(fila_id)):
+        trocadas = 0
+        for _perfil, cfg in (spec.get("vozes") or {}).items():
+            if isinstance(cfg, dict) and str(cfg.get("motor", "")).lower() in ("eleven", "elevenlabs"):
+                cfg["motor"] = "edge"
+                trocadas += 1
+        if trocadas:
+            print(f"[voz] render de TESTE: {trocadas} perfil(is) de eleven -> edge. "
+                  f"Os creditos do ElevenLabs sao exclusivos do canal.")
+
     baixar_musica(spec)
 
     out = "/tmp/final.mp4"
