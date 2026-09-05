@@ -137,23 +137,58 @@ SEM_ENVELOPE = frozenset(("parado", "gesticular", "escutar", "virar",
 # `ferramentas/regua_movimento.py` a importa para MEDIR, e `palito_cutout`
 # para TROCAR o gesto sem licença. Duas cópias divergiriam no primeiro ajuste,
 # e o motor passaria a agir por um critério que a régua não mede.
+#
+# A LISTA CRESCEU EM 05/09, E A RAZAO ESTA MEDIDA. Nas 25 primeiras voltas a
+# regua marcou 75 de 242 gestos como "sem licenca", e lendo os casos um por
+# um a maioria era ERRO DELA, nao do roteiro:
+#
+#     mao_no_queixo    16 usos, 16 sem licenca   (100%)
+#     encolher_ombros  13 usos, 13 sem licenca   (100%)
+#
+# Cem por cento nao e' um modelo indisciplinado: e' uma lista curta demais.
+# `encolher_ombros` so' conhecia "sei la", e o ombro de resignacao deste
+# canal fala "ne?", "fazer o que", "deu ruim", "azar". `apontar` so' conhecia
+# PRONOME, e "assina antes de provar" e' um imperativo dirigido ao outro --
+# aponta-se para quem recebe a ordem.
+#
+# Isto importa alem da regua: `TROCA_SEM_LICENCA` faz o motor TROCAR o gesto
+# que a lista nao reconhece, entao lista curta nao so' mede errado -- ela
+# manda trocar gesto que estava certo.
 LICENCA = {
     "apontar": ("isso", "isto", "aquilo", "esse", "essa", "aquele", "aquela",
                 "olha", "olhe", "ali", "la", "aqui", "ve", "veja", "esta",
-                "voce", "ce", "teu", "tua", "seu", "sua"),
-    "apontar_para_si": ("eu", "meu", "minha", "mim", "comigo", "me"),
+                "voce", "ce", "teu", "tua", "seu", "sua",
+                # imperativo dirigido ao outro: quem manda, aponta
+                "assina", "paga", "pega", "leva", "traz", "devolve", "explica",
+                "responde", "escuta", "repete", "confere", "vai la", "senta"),
+    "apontar_para_si": ("eu", "meu", "minha", "mim", "comigo", "me", "sou",
+                        "fui", "faco", "fiz", "tenho", "to ", "estou"),
     # "acen" entra porque a fala do v014 é *"essa camisa rasga só quando eu
     # levanto o braço pra acenar"*: quando o texto NOMEIA o gesto, ele está
     # licenciado por definição, e a régua o marcava como enfeite.
     "acenar": ("oi", "ola", "tchau", "bom dia", "boa tarde", "boa noite",
                "e ai", "fala", "opa", "ate", "falou", "valeu", "acen"),
-    "negar": ("nao", "nunca", "jamais", "nada", "nenhum", "nenhuma", "sem"),
+    "negar": ("nao", "nunca", "jamais", "nada", "nenhum", "nenhuma", "sem",
+              "que nada", "de jeito nenhum", "nem ", "esquece", "para com"),
     "encolher_ombros": ("sei la", "nao sei", "talvez", "sei nao", "vai saber",
-                        "qualquer", "tanto faz"),
+                        "qualquer", "tanto faz", " ne", "fazer o que",
+                        "fazer o quê", "azar", "paciencia", "deu ruim",
+                        "que mico", "acabou", "e isso", "ja era", "foi mal"),
     "comemorar": ("consegui", "deu certo", "ganhei", "aeee", "boa", "eba",
                   "finalmente", "graças", "gracas", "ufa"),
     "mao_no_queixo": ("acho", "pensa", "penso", "sera", "hmm", "duvida",
-                      "estranho", "esquisito"),
+                      "estranho", "esquisito", "como assim", "nao entendi",
+                      "espera", "perai", "pera", "deixa eu ver", "faz sentido",
+                      "sei nao hein", "juro"),
+    # --- os tres gestos novos de 05/09 (ver as funcoes) ---
+    "conferir_relogio": ("hora", "horas", "atras", "atrasado", "prazo", "ja e",
+                         "minuto", "minutos", "hoje", "amanha", "cedo",
+                         "tarde", "meia hora", "cinco minuto", "vence"),
+    "bater_no_bolso": ("cade", "sumiu", "perdi", "esqueci", "achei", "carteira",
+                       "chave", "celular", "documento", "onde ta", "onde esta"),
+    "esfregar_o_rosto": ("cansado", "cansada", "nao aguento", "de novo",
+                         "outra vez", "socorro", "meu deus", "que saco",
+                         "ta osso", "desisto", "cansei"),
 }
 
 # QUANDO O GESTO NÃO TEM LICENÇA, QUAL ENTRA NO LUGAR.
@@ -177,6 +212,59 @@ LICENCA = {
 # errado ali é a lista de licença, que só conhece "sei lá". Trocar o gesto por
 # uma régua que marca o certo é o erro que produziu as cem primeiras voltas.
 TROCA_SEM_LICENCA = {"acenar": "apresentar"}
+
+# E QUANDO O GESTO SEM LICENCA NAO E' `acenar` (05/09)
+#
+# A lista de licenca foi ampliada nesta data e o efeito foi medido no corpus:
+# dos 205 gestos marcados, 13 eram erro dela -- e os 192 restantes NAO sao.
+# Lidos um a um, sao gesto decorativo de verdade:
+#
+#     mao_no_queixo   "Tela travou em loop infinito, nao consegui cancelar."
+#     apontar         "Sistema bloqueou tudo, cartao antigo nao serviu."
+#
+# Nao ha reflexao na primeira nem alvo na segunda. O modelo pede gesto
+# porque a forma pede movimento, e escolhe o primeiro da lista.
+#
+# A CORRECAO NAO E' PROIBIR, E' SUBSTITUIR PELO QUE A CENA JA DIZ. O motor
+# conhece a EXPRESSAO do trecho -- ela vem do roteiro e e' obrigatoria --, e
+# expressao e' informacao de estado: quem esta `desesperado` esfrega o rosto,
+# quem esta `bravo` poe a mao na cintura, quem esta `pensando` leva a mao ao
+# queixo (e ai o gesto do modelo estava certo o tempo todo).
+#
+# Assim o gesto sem licenca deixa de ser enfeite e passa a dizer a MESMA
+# coisa que a cara: e' mais informacao na movimentacao, sem custar uma linha
+# de prompt.
+GESTO_DA_EMOCAO = {
+    "desesperado": "esfregar_o_rosto",
+    "triste": "esfregar_o_rosto",
+    "cansado": "esfregar_o_rosto",
+    "bravo": "maos_na_cintura",
+    "irritado": "maos_na_cintura",
+    "desdem": "bracos_cruzados",
+    "duvida": "mao_no_queixo",
+    "pensando": "mao_no_queixo",
+    # SURPRESA NAO APONTA (05/09). O primeiro mapa mandava `apontar` nas
+    # duas, e a simulacao sobre o corpus mostrou o efeito: `apontar` ja e' 44%
+    # de todos os gestos e SUBIRIA de 151 para 161. Trocar enfeite por mais do
+    # mesmo enfeite nao e' variedade. Quem se espanta leva a mao a cabeca ou
+    # aponta para SI ("eu?"), que e' a reacao de quem acabou de ser incluido
+    # no problema -- e e' o que este canal faz o tempo todo.
+    "surpreso": "apontar_para_si",
+    "chocado": "maos_na_cabeca",
+    "confiante": "apresentar",
+    "sorrindo": "apresentar",
+    "neutro": "apresentar",
+}
+
+
+def gesto_para(expressao, atual=None):
+    """O gesto que a EMOCAO do trecho pede, quando a fala nao pede nenhum.
+
+    Devolve None quando o gesto atual ja e' o da emocao -- trocar por ele
+    mesmo so' encheria o log.
+    """
+    novo = GESTO_DA_EMOCAO.get(sem_acento(str(expressao or "").lower()).strip())
+    return None if (not novo or novo == atual) else novo
 
 # ENTRAR E SAIR MISTURAM OS MEMBROS, NUNCA O LUGAR. A posição no mundo tem
 # de ser exata -- misturá-la faria o corpo aparecer no meio do caminho --,
@@ -954,6 +1042,68 @@ def apontar_para_si(u, rig, dur, a):
     return {}
 
 
+# =====================================================================
+# TRES GESTOS QUE O FORMATO PEDIA E O VOCABULARIO NAO TINHA (05/09)
+#
+# Pedido do dono do projeto: *"tente melhorar a movimentacao dos
+# personagens, adicionando mais informacoes"*. Informacao, aqui, e'
+# vocabulario: o modelo so' pode pedir o gesto que existe, e quando o gesto
+# certo falta ele usa o mais parecido -- foi assim que `acenar` virou verbo
+# generico de "mexe o braco" em treze de quinze usos.
+#
+# Os tres abaixo nao sao enfeite: cada um cobre uma coisa que as REGRAS
+# do canal exigem e que nao tinha como sair na tela.
+# =====================================================================
+def conferir_relogio(u, rig, dur, a):
+    """Olha a hora no pulso: o RELOGIO da esquete, visivel.
+
+    O prompt exige que toda esquete tenha um relogio correndo -- um prazo,
+    uma comida esfriando, a paciencia do outro -- e dizia isso so' em FALA.
+    Este e' o gesto que mostra a mesma coisa, e ele e' o unico do catalogo
+    que expressa PRESSA sem ninguem precisar dizer "estou com pressa".
+
+    O antebraco sobe cruzando o corpo e a cabeca desce um pouco: o olhar
+    tem de ir para o pulso, senao le como bracos cruzados pela metade.
+    """
+    k = _suave(min(1.0, u * 2.4))
+    _braco(rig, "e", 58.0, 126.0, 16.0, k)
+    _braco(rig, "d", 96.0, 96.0, -4.0, k * 0.4)
+    rig["cabeca"] = rig.get("cabeca", 0.0) + 7.0 * k
+    return {}
+
+
+def bater_no_bolso(u, rig, dur, a):
+    """Tapa no bolso procurando o que sumiu: chave, carteira, celular.
+
+    E' o gesto de *"cade..."* -- e a esquete deste canal gira em torno de UM
+    objeto concreto por regra. Antes disto, procurar um objeto so' existia
+    como fala; agora o corpo procura junto.
+
+    Duas batidas dentro da janela, e nao uma: uma so' le como coceira.
+    """
+    batida = abs(math.sin(2 * math.pi * 1.6 * u * max(dur, 0.4)))
+    k = _suave(min(1.0, u * 3.0))
+    _braco(rig, "d", 74.0, 128.0 + 16.0 * batida, -8.0, k)
+    rig["tronco"] = -90.0 - 3.0 * k * batida
+    return {}
+
+
+def esfregar_o_rosto(u, rig, dur, a):
+    """A mao passa no rosto: cansaco, vergonha, "de novo nao".
+
+    O canal inteiro e' sobre gente que se ferra, e o catalogo tinha `susto`,
+    `maos_na_cabeca` e `desesperado` -- todos PICOS. Faltava o gesto de
+    quem ja desistiu, que e' o estado mais frequente destas esquetes e o
+    unico que combina com fala baixa.
+    """
+    k = _suave(min(1.0, u * 1.8))
+    desce = _suave(max(0.0, (u - 0.45) / 0.55))
+    _braco(rig, "d", 30.0, -96.0 + 40.0 * desce, -12.0, k)
+    rig["cabeca"] = rig.get("cabeca", 0.0) + 5.0 * k
+    rig["tronco"] = -90.0 - 4.0 * k
+    return {}
+
+
 def comemorar(u, rig, dur, a):
     """Os dois braços para cima, com um quique. Fim feliz, ou ironia."""
     # O QUIQUE NÃO PODE SER UM CORTE (31/08). Os dois ramos não se
@@ -1288,6 +1438,10 @@ CATALOGO = {
     "mao_no_queixo": mao_no_queixo,
     "apresentar": apresentar,
     "apontar_para_si": apontar_para_si,
+    # os tres de 05/09: o relogio, a procura e o cansaco
+    "conferir_relogio": conferir_relogio,
+    "bater_no_bolso": bater_no_bolso,
+    "esfregar_o_rosto": esfregar_o_rosto,
     "comemorar": comemorar,
     "negar": negar,
     "susto": susto,
