@@ -191,11 +191,31 @@ def _fonte(tamanho):
 # decimo fora do lugar, o que se ouve por baixo dele e uma silaba.
 SUFIXO_CENSURA = "—"
 MASCARA = "#@%&!"
+# Quanto da sílaba se ouve antes de o bipe entrar. Ver `janelas_censuradas`.
+FRACAO_SILABA = 0.60
 
 
 def censurada(txt):
     """A palavra foi cortada pela censura? (termina em travessao)"""
     return str(txt or "").rstrip(".,!?;:").endswith(SUFIXO_CENSURA)
+
+
+def mascarar(txt):
+    """A PRIMEIRA LETRA fica; o resto vira símbolo (05/09).
+
+    Pedido do dono do projeto: *"deve ser caracteres especiais na legenda,
+    mostrando apenas a primeira letra"*. Até aqui a legenda trocava a palavra
+    inteira por `#@%&!`, e a diferença não é de estilo: com a inicial, o
+    espectador SABE qual palavrão foi dito e a piada continua de pé; sem
+    ela, a censura apaga também a informação e o remate perde a graça.
+
+    É a convenção do quadrinho e a do jornal impresso ("p***"), e continua
+    segura para a monetização: o que está escrito na tela é uma letra e
+    quatro símbolos, e o que se ouve é sílaba mais bipe.
+    """
+    s = str(txt or "").rstrip(".,!?;:").rstrip(SUFIXO_CENSURA)
+    pontos = str(txt or "")[len(str(txt or "").rstrip(".,!?;:")):]
+    return (s[:1].upper() if s else "") + MASCARA[:4] + pontos
 
 
 def _reparto(texto, inicio, dur):
@@ -287,15 +307,33 @@ def janelas_censuradas(texto, marcas, inicio_s, dur_s, folga=0.07, minimo=0.30):
     fossem duas contas diferentes, elas divergiriam justamente na fala em
     que o TTS perdeu uma palavra.
 
-    `folga` cobre a imprecisão do alinhamento nas duas pontas e `minimo`
-    garante um bipe audível: uma sílaba dura ~0,15s, e um bipe de 0,15s
-    lê como clique, não como censura."""
+    A PRIMEIRA SÍLABA SE OUVE, E O BIPE VEM DEPOIS DELA (05/09)
+        Pedido do dono do projeto: *"a primeira sílaba e o piiiiiii no
+        áudio"*. Até aqui a janela cobria a palavra inteira -- e a palavra,
+        neste ponto, já É a sílaba (o n8n cortou antes do TTS). O resultado
+        era bipe puro: o espectador não ouvia nem o começo, e a censura
+        deixava de ser uma piada de TV para virar um apagão.
+
+        Agora o bipe entra em `FRACAO_SILABA` da palavra: ouve-se "por",
+        entra o "piiii" e o resto some. É a convenção da televisão aberta, e
+        é o que faz a censura ser engraçada em vez de só esconder.
+
+        Não dá para ouvir a sílaba INTEIRA e ainda bipar dentro do mesmo
+        tempo: a fala já foi sintetizada e esticá-la desalinharia a legenda,
+        a boca e todos os efeitos do trecho. Sessenta por cento é o que sobra
+        para o bipe cumprir os 0,30 s do `minimo` sem invadir a palavra
+        seguinte.
+
+    `folga` cobre a imprecisão do alinhamento no fim e `minimo` garante um
+    bipe audível: uma sílaba dura ~0,15s, e um bipe de 0,15s lê como clique,
+    não como censura."""
     fora = []
     for p in _casar(texto, marcas, inicio_s, dur_s):
         if not censurada(p["txt"]):
             continue
-        t0 = max(0.0, float(p["inicio"]) - folga)
-        t1 = max(float(p["fim"]) + folga, t0 + minimo)
+        ini, fim = float(p["inicio"]), float(p["fim"])
+        t0 = max(0.0, ini + (fim - ini) * FRACAO_SILABA)
+        t1 = max(fim + folga, t0 + minimo)
         fora.append((t0, t1))
     return fora
 
@@ -608,10 +646,11 @@ class Legenda:
             return quadro
 
         d = ImageDraw.Draw(quadro)
-        # palavra censurada vira os símbolos da história em quadrinhos: no
-        # áudio ela está atrás do bipe, e escrever "CA—" na tela entregaria
-        # de volta o que o bipe acabou de esconder
-        textos = [MASCARA if censurada(p["txt"]) else p["txt"].upper()
+        # palavra censurada vira INICIAL + símbolos de quadrinho ("P#@%&"):
+        # escrever "PORNO" na tela entregaria de volta o que o bipe acabou de
+        # esconder, e escrever só os símbolos apagaria a piada junto com a
+        # palavra. Ver `mascarar`.
+        textos = [mascarar(p["txt"]) if censurada(p["txt"]) else p["txt"].upper()
                   for p in bloco["palavras"]]
         ativas = [p["inicio"] - 0.02 <= t <= p["fim"] + 0.12 for p in bloco["palavras"]]
 
