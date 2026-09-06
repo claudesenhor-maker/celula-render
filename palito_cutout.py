@@ -1,4 +1,4 @@
-﻿#!/usr/bin/env python3
+#!/usr/bin/env python3
 """
 palito_cutout â€” animaÃ§Ã£o CUT-OUT: arte de IA, movimento por rig.
 
@@ -4214,15 +4214,6 @@ def caixa_do_nucleo(img, bb=None):
     if not len(linhas):
         return bb
     return (int(xs[0]), int(linhas[0]), int(xs[-1]) + 1, int(linhas[-1]) + 1)
-
-
-def _unir(a, b):
-    """A caixa que contÃ©m as duas. `None` de um lado devolve o outro."""
-    if a is None:
-        return b
-    if b is None:
-        return a
-    return (min(a[0], b[0]), min(a[1], b[1]), max(a[2], b[2]), max(a[3], b[3]))
 
 
 def _transladar(img, dx):
