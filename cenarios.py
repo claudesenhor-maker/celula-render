@@ -298,13 +298,11 @@ def resolver(pedido, disponiveis, fala=None):
     return qualquer, f"'{pedido}' nao existe; usando o unico que ha ('{qualquer}')"
 
 
-def url_padrao(chave, bucket=None):
-    """URL do cenário no bucket público, para o job.py baixar quando o spec
-    citar o nome e não a URL. O caminho é o BRUTO de propósito: o rembg
-    destrói cenário (ver HANDOFF §6.2), e fundo não precisa de alfa."""
-    base = bucket or ("https://fejivjwyadbawjdhldbj.supabase.co"
-                      "/storage/v1/object/public/toonzueira")
-    return f"{base}/assets_bruto/cenario/geral/{normalizar(chave)}.jpg"
+# `url_padrao` SAIU DAQUI (05/09). Ela montava a URL do cenario no bucket
+# para o job.py baixar pelo nome -- e o job.py nunca a chamou: quem monta
+# essa URL e' o no `Montar Spec do Palito`, no n8n, que ja escreve o
+# `spec.cenarios` com a URL inteira. Duas versoes da mesma regra de
+# caminho, uma viva no n8n e uma morta aqui.
 
 
 if __name__ == "__main__":
