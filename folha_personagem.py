@@ -275,10 +275,6 @@ ESPEC_ROSTO = (
 # =====================================================================
 # Prompts montados A PARTIR da estrutura
 # =====================================================================
-def _biblia(identidade=None):
-    b = dict(BIBLIA_PADRAO)
-    b.update(identidade or {})
-    return b
 
 
 # OS PROMPTS DA FOLHA MORAM NO n8n (05/09). `prompt_folha_corpo` e
