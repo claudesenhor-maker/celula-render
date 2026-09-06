@@ -2,8 +2,8 @@
 """
 folha_personagem — o que o personagem DEVE ser, e de que peças ele é feito.
 
-A geometria mora em segmentar.py (leitura da folha em peças) e em
-fatiar.py (o recorte antigo, mantido como plano B). Aqui está o
+A geometria mora em segmentar.py (leitura da folha em peças, com o pivô
+medido) e em fatiar.py (só o recorte da tira de rosto). Aqui está o
 vocabulário: a bíblia visual, o esqueleto, a ordem de desenho e o que cada
 peça significa. Trocar de personagem mexe só na bíblia; trocar de rig mexe
 só no esqueleto.
@@ -281,60 +281,38 @@ def _biblia(identidade=None):
     return b
 
 
-def prompt_folha_corpo(identidade=None):
-    """Folha do corpo em pose T, desenhada como boneco de papel.
-
-    A pose T continua sendo requisito, agora por outro motivo: com os
-    braços na horizontal nenhuma peça encosta na vizinha por acidente, e
-    os vãos ficam todos visíveis para o segmentador."""
-    b = _biblia(identidade)
-    return ". ".join([
-        # NÃO escrever "character reference sheet": esse termo É o nome do
-        # turnaround, e foi o que voltou na primeira folha real.
-        "ONE single cartoon man in a strict T-POSE",
-        "arms stretched perfectly horizontal to the sides, hands open",
-        "legs straight and apart, feet flat and pointing sideways",
-        "front view, symmetrical, whole body inside the frame",
-        *[b[k] for k in ORDEM_BIBLIA if b.get(k)],
-        # sem esta frase o modelo entende "peças separadas" como diagrama
-        # explodido e espalha os membros pela folha, o que não dá para rigar
-        "the pieces stay assembled in place as one standing figure, "
-        "not exploded, not scattered, not a diagram",
-        "the face is drawn as flat shapes: hair, eyes, eyebrows, nose and "
-        "mouth each a distinct shape",
-        "plain pure white background",
-        "only one figure, no turnaround, no model sheet, no side view, "
-        "no back view, no second person",
-        "arms must NOT hang down, no relaxed pose, no arms at the sides",
-        "no shadow, no floor, no scenery, no props, no text",
-    ])
-
-
-def prompt_folha_rosto(identidade=None):
-    """Tira de rosto: uma fileira de peças pequenas, bem separadas."""
-    b = _biblia(identidade)
-    itens = ", then ".join(d for _, d in ESPEC_ROSTO)
-    return ". ".join([
-        f"a single horizontal row of {len(ESPEC_ROSTO)} small separate "
-        f"cartoon face parts, evenly spaced, with clear empty white gaps "
-        f"between them",
-        f"from left to right: {itens}",
-        "each item is a floating detached facial feature only",
-        "NO face, NO head, NO skin, NO circle, NO person, NO body around them",
-        b["traco"], b["sombreado"], b["paleta"],
-        "plain flat pure white background",
-        "no text, no labels, no numbers, no frames, no boxes",
-    ])
+# OS PROMPTS DA FOLHA MORAM NO n8n (05/09). `prompt_folha_corpo` e
+# `prompt_folha_rosto` viviam aqui e nao eram chamados por ninguem -- nem
+# pela producao, nem pelo painel, nem pelo lab. O texto que de fato gera a
+# folha esta no no `Montar Pedidos` do workflow `Celula IA - Gerar Assets
+# (Cloudflare)`, junto com o registro de por que se pede UMA folha em pose
+# T em vez de treze pecas soltas.
+#
+# Duas copias do mesmo prompt, uma viva e uma morta, e' pior que nenhuma:
+# quem editasse a daqui acharia que mudou a geracao e nao mudaria nada. A
+# copia morta saiu; a especificacao que este arquivo guarda de verdade --
+# ESPEC_ROSTO, ESPEC_PARTES, BIBLIA_PADRAO, ESQUELETO -- continua aqui, e e'
+# dela que o no do n8n foi escrito.
 
 
 # =====================================================================
 # Ligação com a geometria
 # =====================================================================
-# Caminho principal: segmentar.py lê a folha já em peças. Plano B:
-# fatiar.py, o recorte por geometria, para folha que veio grudada. Quem
-# decide entre os dois é o preparar_assets.py -- e ele avisa no log qual
-# caminho rodou, porque a diferença de qualidade entre os dois é grande
-# demais para ficar invisível.
+# CAMINHO ÚNICO: segmentar.py lê a folha já desenhada em peças e MEDE o
+# pivô de cada uma.
+#
+# Até 05/09 este comentário anunciava um plano B -- "fatiar.py recorta por
+# geometria a folha que veio grudada, e preparar_assets.py escolhe entre os
+# dois". Ele nunca escolheu: diante de uma folha grudada, `segmentar_corpo`
+# levanta `FolhaGrudada`, o `preparar_assets` recusa a arte e mantém as
+# peças anteriores. O fatiador de corpo estava escrito, testado e nunca
+# chamado, e a documentação descrevia um sistema que não era este.
+#
+# A recusa é a decisão certa e continua: folha grudada cortada por
+# proporção fixa renderiza o ombro no lugar do cotovelo, e isso só
+# apareceria treze minutos depois, no vídeo pronto. O que saiu foi o plano
+# B morto (ver lab/morto-0509/fatiar-completo.py); o que fica de fatiar.py
+# é só o recorte da tira de rosto, que é usado de verdade.
 from segmentar import segmentar_corpo as _segmentar, FolhaGrudada   # noqa: F401
 from fatiar import fatiar_rosto as _fatiar_rosto                    # noqa: F401
 
