@@ -44,3 +44,21 @@ jobs:
           else
             python preparar_assets.py
           fi
+
+      # O DESENHO DENUNCIA O QUE O NUMERO NAO DENUNCIA (05/09). `esboco.py`
+      # imprime a silhueta em ASCII da folha e de cada peca recortada. Ele
+      # existe desde 20/08 -- escrito depois de dois videos em que as
+      # "pecas" eram treze desenhos de um homem inteiro, erro que so
+      # apareceu no video pronto, 13 minutos depois -- e nunca tinha sido
+      # ligado a lugar nenhum: estava no repo sem ser chamado por ninguem.
+      #
+      # Agora roda aqui, que e' onde o dono ja olha depois de apertar
+      # "fatiar" no painel. `continue-on-error` porque diagnostico que
+      # derruba o job e' pior que diagnostico nenhum.
+      - name: Esboco das pecas (diagnostico)
+        continue-on-error: true
+        env:
+          SUPABASE_URL:         ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
+          SUPABASE_BUCKET:      toonzueira
+        run: python esboco.py
