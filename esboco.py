@@ -30,10 +30,14 @@ KEY = os.environ["SUPABASE_SERVICE_KEY"]
 BUCKET = os.environ.get("SUPABASE_BUCKET", "toonzueira")
 H = {"apikey": KEY, "Authorization": f"Bearer {KEY}"}
 
-# ordem de leitura: como o corpo se monta, de cima para baixo
-ORDEM = ("cabeca", "tronco", "braco_sup", "braco_inf", "perna_sup", "perna_inf",
-         "boca_0", "boca_1", "boca_2", "boca_3",
-         "olho_aberto", "olho_fechado", "sobrancelha")
+# A ORDEM VEM DO RIG, E NAO DE UMA COPIA (05/09). Ate aqui esta lista era
+# escrita a mao com o vocabulario do rig de julho -- "cabeca", "tronco",
+# "braco_sup", "boca_0" -- e o rig virou 24 pecas com outros nomes em
+# 21/08. O resultado: nenhuma peca casava, TODAS caiam em "pecas fora do
+# vocabulario do rig", e o diagnostico escrito para denunciar folha errada
+# passou a denunciar a folha certa. Lista duplicada e' lista que apodrece;
+# importando do proprio esqueleto ela nao tem como divergir de novo.
+from folha_personagem import ORDEM_Z as ORDEM                   # noqa: E402
 
 
 def listar(prefixo):
