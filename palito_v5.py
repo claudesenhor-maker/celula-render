@@ -236,8 +236,32 @@ def _palavras_do_alinhamento(texto, chars, ini, fim):
     return marcas
 
 
-def _eleven(texto, cfg, out_mp3):
-    """ElevenLabs. So entra se ELEVEN_API_KEY existir no ambiente.
+def _chaves_eleven():
+    """As contas ElevenLabs, NA ORDEM EM QUE DEVEM SER GASTAS (07/09).
+
+    Ordem definida pelo dono: primeiro a conta 1, depois a 2, e por ultimo o
+    Edge (que nao e' conta -- e' a queda gratuita, ja implementada abaixo).
+
+    POR QUE A ORDEM IMPORTA E NAO E' ARBITRARIA: os creditos da ElevenLabs
+    nao acumulam de um mes para o outro. Gastar sempre a mesma conta primeiro
+    esvazia uma enquanto a outra expira sem uso; gastar a 1 ate secar e so
+    entao a 2 aproveita as duas dentro do mes. Por isso a lista e' ordenada, e
+    nao um rodizio -- rodizio deixaria as duas pela metade.
+
+    A conta 1 esta sem credito desde 04/09, entao na pratica a 2 e' quem
+    trabalha hoje; a 1 continua primeiro na fila porque ela volta a ter
+    credito na virada do ciclo de cobranca dela.
+    """
+    chaves = []
+    for var in ("ELEVEN_API_KEY", "ELEVEN_API_KEY_2"):
+        v = (os.environ.get(var) or "").strip()
+        if v and v not in chaves:
+            chaves.append(v)
+    return chaves
+
+
+def _eleven(texto, cfg, out_mp3, chave):
+    """ElevenLabs, com a chave que o chamador escolheu da fila.
 
     Por que ele existe: o Edge-TTS e o servico de leitura do navegador Edge,
     nao uma API publica -- os termos da Microsoft nao autorizam este uso.
@@ -255,7 +279,8 @@ def _eleven(texto, cfg, out_mp3):
     O endpoint /with-timestamps devolve o mesmo audio (em base64) mais o
     alinhamento por caractere, e sai pelo mesmo preco."""
     import base64, urllib.request, urllib.error
-    chave = os.environ["ELEVEN_API_KEY"]
+    if not chave:
+        raise RuntimeError("sem chave ElevenLabs")
     voz = cfg.get("eleven_voice_id") or os.environ.get("ELEVEN_VOICE_ID")
     if not voz:
         raise RuntimeError("defina ELEVEN_VOICE_ID ou eleven_voice_id no perfil de voz")
@@ -367,14 +392,41 @@ def sintetizar(texto, cfg, destino, modo):
         marcas = None
         if motor in ("eleven", "elevenlabs"):
             tem_voz = cfg.get("eleven_voice_id") or os.environ.get("ELEVEN_VOICE_ID")
-            if os.environ.get("ELEVEN_API_KEY") and tem_voz:
-                try:
-                    marcas = _eleven(texto, cfg, mp3)
-                except Exception as e:
-                    print(f"[voz] ElevenLabs falhou ({e}); caindo para o Edge")
+            chaves = _chaves_eleven()
+            # A VOZ PAGA E' SO DE PRODUCAO (07/09, ordem do dono: "garanta que
+            # nao sera usada para testes, apenas producao").
+            #
+            # `PRODUCAO` e' escrito pelo `job.py` a partir do fila_id: render
+            # de teste tem id que nao e' uuid, e ali a voz cai no Edge. Sem
+            # esta guarda, cada disparo de `disparar_render.py` -- que existe
+            # para conferir movimento, junta e enquadramento, coisas que a voz
+            # nao muda -- gastaria credito de uma conta que nao acumula mes a
+            # mes. O teste continua saindo com voz; so nao com a voz cara.
+            if os.environ.get("PRODUCAO") != "1":
+                print("[voz] render de TESTE: a voz paga fica de fora, "
+                      "usando o Edge (ver PRODUCAO no job.py)")
+            elif not chaves:
+                print("[voz] motor 'eleven' pedido mas nao ha ELEVEN_API_KEY "
+                      "nem ELEVEN_API_KEY_2; usando o Edge")
+            elif not tem_voz:
+                print("[voz] motor 'eleven' pedido mas falta voice_id; usando o Edge")
             else:
-                falta = "ELEVEN_API_KEY" if not os.environ.get("ELEVEN_API_KEY") else "voice_id"
-                print(f"[voz] motor 'eleven' pedido mas falta {falta}; usando o Edge")
+                # A FILA DE CONTAS, NA ORDEM. Cada uma so e' abandonada depois
+                # de responder erro -- e o motivo vai no log, porque "401" da
+                # ElevenLabs quer dizer cota estourada e nao permissao (ver o
+                # comentario dentro de `_eleven`).
+                for i, ch in enumerate(chaves, 1):
+                    try:
+                        marcas = _eleven(texto, cfg, mp3, ch)
+                        if i > 1:
+                            print(f"[voz] conta ElevenLabs {i} atendeu "
+                                  f"(a {i - 1} recusou)")
+                        break
+                    except Exception as e:                     # noqa: BLE001
+                        resta = len(chaves) - i
+                        print(f"[voz] conta ElevenLabs {i} falhou ({e})"
+                              + (f"; tentando a {i + 1}" if resta
+                                 else "; caindo para o Edge"))
         usou = "eleven" if marcas is not None else "edge"
         USOU_MOTOR[f"pedido_{motor}"] = USOU_MOTOR.get(f"pedido_{motor}", 0) + 1
         USOU_MOTOR[f"usou_{usou}"] = USOU_MOTOR.get(f"usou_{usou}", 0) + 1
