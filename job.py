@@ -144,6 +144,49 @@ def _baixar_para(url, pasta, nome):
 MAX_EM_CENA = 2
 
 
+def baixar_zip(url, tentativas=4):
+    """Baixa um `personagem.zip` e devolve os bytes, COM TENTATIVAS.
+
+    POR QUE (06/09, o video das 21:30)
+        O download era `requests.get(url).content` cru, sem conferir o
+        status. O Storage teve um solucos, a resposta nao era um zip, e o
+        `zipfile` estourou com **"File is not a zip file"** -- uma mensagem
+        que nao diz nem o codigo HTTP nem o que veio no corpo. O zip do
+        `zeca` estava intacto no bucket o tempo todo; UMA repeticao teria
+        salvado o video.
+
+        E o estrago nao parou ali, porque a queda em cascata e silenciosa:
+        sem as pecas, o motor cut-out cedeu lugar ao rig vetorial, que
+        produziu um MP4 de **65 MB** -- acima do teto do bucket --, e o
+        upload morreu com 413 depois de nove minutos de Action. Um
+        `raise_for_status()` que faltava custou o video inteiro por dois
+        caminhos diferentes.
+
+    E' a mesma rede de seguranca do `subir()`, do outro lado do pipeline:
+    5xx e timeout sao transitorios, 4xx e permanente. E quando falha, ela
+    DIZ o que veio (lei 65) -- status e os primeiros bytes -- em vez de
+    deixar o `zipfile` adivinhar.
+    """
+    espera = 3
+    for k in range(tentativas):
+        try:
+            r = requests.get(url, timeout=120)
+            if r.status_code < 400 and r.content[:2] == b"PK":
+                if k:
+                    print(f"[elenco] baixou na tentativa {k + 1}")
+                return r.content
+            motivo = (f"HTTP {r.status_code}" if r.status_code >= 400
+                      else f"nao e zip (comeca com {r.content[:16]!r})")
+            permanente = 400 <= r.status_code < 500 and r.status_code != 429
+        except requests.RequestException as e:
+            motivo, permanente = f"{type(e).__name__}: {e}", False
+        if permanente or k == tentativas - 1:
+            raise RuntimeError(f"{url.rsplit('/', 3)[-2]}: {motivo}")
+        print(f"[elenco] {motivo}; tentativa {k + 2} de {tentativas} em {espera}s")
+        time.sleep(espera)
+        espera *= 2
+
+
 def baixar_elenco(spec, pecas_url):
     """Poe a arte de cada personagem no disco e devolve (pasta_base, KB).
 
@@ -166,7 +209,11 @@ def baixar_elenco(spec, pecas_url):
     if not elenco:
         pasta = "/tmp/personagem"
         os.makedirs(pasta, exist_ok=True)
-        dados = requests.get(pecas_url, timeout=120).content
+        # UM PERSONAGEM SO TAMBEM PRECISA DE REDE (06/09). Este ramo ficou
+        # de fora quando o ramo do `elenco` ganhou tolerancia em 30/08 --
+        # e e' justamente ele que nao tem para quem passar a fala, entao
+        # aqui a repeticao e o unico recurso que existe.
+        dados = baixar_zip(pecas_url)
         zipfile.ZipFile(io.BytesIO(dados)).extractall(pasta)
         if not os.path.exists(os.path.join(pasta, "partes.json")):
             raise RuntimeError("o zip nao tem partes.json na raiz")
@@ -212,7 +259,7 @@ def baixar_elenco(spec, pecas_url):
             # regra ja aplicada a personagem citado e nao desenhado: fala na
             # boca errada e melhor que video nenhum.
             try:
-                dados = requests.get(url, timeout=120).content
+                dados = baixar_zip(url)
                 zipfile.ZipFile(io.BytesIO(dados)).extractall(pasta)
                 if not os.path.exists(os.path.join(pasta, "partes.json")):
                     raise RuntimeError("o zip nao tem partes.json na raiz")
