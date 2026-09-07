@@ -494,7 +494,18 @@ def main():
     # disparo a mao. `fila_id` que nao e' uuid E render de teste, por
     # definicao (ver `UUID_RE` e `atualizar_fila`) -- a mesma regra que ja
     # decide nao gravar na fila e nao publicar.
-    if not UUID_RE.match(str(fila_id)):
+    # E A MESMA REGRA VAI PARA O AMBIENTE (07/09, ordem do dono: a voz paga e'
+    # "apenas producao, nunca testes"). Sao duas camadas de proposito:
+    #   · aqui, o spec tem os perfis trocados para `edge` -- resolve o caminho
+    #     normal, em que o motor le o spec;
+    #   · `PRODUCAO` fecha o caminho de quem NAO passa por aqui.
+    #     `render_local.py` e `disparar_render.py` montam spec proprio e
+    #     chamam `palito_v5.sintetizar` direto; sem a variavel, um teste local
+    #     com `motor: eleven` no spec gastaria credito de uma conta que nao
+    #     acumula de um mes para o outro.
+    eh_producao = bool(UUID_RE.match(str(fila_id)))
+    os.environ["PRODUCAO"] = "1" if eh_producao else "0"
+    if not eh_producao:
         trocadas = 0
         for _perfil, cfg in (spec.get("vozes") or {}).items():
             if isinstance(cfg, dict) and str(cfg.get("motor", "")).lower() in ("eleven", "elevenlabs"):
