@@ -60,6 +60,11 @@ jobs:
           # nao e segredo e muda por canal. Este e so a rede de seguranca
           # para quando a identidade nao trouxer nenhum.
           ELEVEN_API_KEY:  ${{ secrets.ELEVEN_API_KEY }}
+          # SEGUNDA CONTA (07/09). A ordem de gasto e 1 -> 2 -> Edge, e ela
+          # vive em `palito_v5._chaves_eleven`. Os creditos da ElevenLabs nao
+          # acumulam de um mes para o outro: gastar sempre a mesma conta
+          # primeiro esvazia uma enquanto a outra expira sem uso.
+          ELEVEN_API_KEY_2: ${{ secrets.ELEVEN_API_KEY_2 }}
           ELEVEN_VOICE_ID: ${{ secrets.ELEVEN_VOICE_ID }}
           # ARTE SOB DEMANDA (28/08). O cenario que o roteiro pediu e que
           # ninguem desenhou e gerado aqui mesmo, durante o render: ele vai
