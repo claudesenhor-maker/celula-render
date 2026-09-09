@@ -5477,11 +5477,22 @@ def render(pasta_partes, spec, saida, tmpdir=None, amostra=0):
             # PUNCH_S dividido pela duraÃ§Ã£o da fala. Sem esta conta o punch
             # duraria um quarto do trecho -- um segundo inteiro numa fala de
             # quatro --, que Ã© exatamente o zoom lento que ele nÃ£o pode ser.
-            if i_tr > 0 and i_tr % 3 == 0:
+            #
+            # A EXCEÇÃO É O CORTE DE VOLTA DA ABERTURA FRIA (09/09). Quando o
+            # trecho 0 é o recorte do auge da cena (`flash`), o trecho 1 não é
+            # a continuação dele: é o vídeo voltando no tempo, para o começo.
+            # Corte que muda de MOMENTO precisa ser sentido, senão ele lê como
+            # continuidade e a esquete parece recomeçar do nada. Aqui ele
+            # ganha um punch DOBRADO -- o mesmo recurso, com o dobro da força,
+            # no único corte do vídeo que tem essa carga.
+            _volta_do_flash = (i_tr == 1
+                               and bool(spec["trechos"][0].get("flash")))
+            if (i_tr > 0 and i_tr % 3 == 0) or _volta_do_flash:
                 jan = PUNCH_S / max(float(tr.get("dur") or 1.0), 0.2)
                 if t < jan:
                     u = t / max(jan, 1e-6)
-                    cam["zoom"] *= 1.0 + PUNCH_FORCA * (1.0 - u) ** 2
+                    forca = PUNCH_FORCA * (2.0 if _volta_do_flash else 1.0)
+                    cam["zoom"] *= 1.0 + forca * (1.0 - u) ** 2
             # O COLD OPEN (04/09, item 4 do dono do projeto: *"colocar um
             # elemento muito aleatÃ³rio, ou uma primeira cena muito aleatÃ³ria no
             # comeÃ§o pode ser suficiente pra manter alguÃ©m assistindo"*).
