@@ -15,3 +15,13 @@ Pillow>=10.0
 # job.py cai calado no rig vetorial -- foi o que matou o render do run #11.
 # assets.yml nunca sentiu falta porque o rembg ja traz numpy junto.
 numpy>=1.24
+# azure-cognitiveservices-speech: o degrau PAGO do meio da cadeia de voz
+# (ElevenLabs -> Azure -> Edge, 09/09). Ele so entra quando AZURE_SPEECH_KEY
+# existe no ambiente; sem a chave, o pacote fica instalado e nunca e' chamado.
+#
+# E' o SDK e nao o REST porque a marca por PALAVRA so vem pelo evento
+# `WordBoundary` -- o endpoint REST devolve audio e mais nada, e TTS sem marca
+# desliga a legenda palavra a palavra e as janelas do bipe de palavrao
+# (lei 17). `palito_v5._azure` importa dentro da funcao e trata ImportError,
+# entao a falta deste pacote derruba o degrau, nunca o render.
+azure-cognitiveservices-speech>=1.40
