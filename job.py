@@ -399,19 +399,38 @@ def buscar_cenarios_e_objetos(spec):
 
     objetos = spec.get("objetos") or {}
     locais = {}
+    gerados = 0
     for nome, ref in objetos.items():
         alvo = (ref if isinstance(ref, str) and ref.startswith("http")
                 else f"{publico}/assets/objeto/geral/{ref or nome}.png")
         if _baixar_para(alvo, pasta_obj, nome):
             locais[nome] = nome
             continue
-        # OBJETO SOB DEMANDA E ENCOMENDA, NAO GERACAO NA HORA: ele precisa
-        # de alfa, alfa vem do rembg e o rembg so roda no Action `assets`
-        # (5 a 20 min). Prender a esteira nisso trocaria um defeito pequeno
-        # -- o gesto com a mao vazia numa esquete -- por um grande, que e a
-        # fila parada. Decisao do dono do projeto em 28/08.
+        # OBJETO SOB DEMANDA PASSOU A SER GERADO AQUI (11/09).
+        #
+        # Ate hoje ele era ENCOMENDADO: o video de hoje usava um substituto e
+        # o de amanha tinha a arte, porque objeto precisa de alfa e alfa vinha
+        # do rembg, que so roda no Action `assets`. A decisao era de 28/08 e
+        # era defensavel.
+        #
+        # Duas coisas a derrubaram. A primeira e' que a encomenda NUNCA foi
+        # feita: `assets_pendentes` esta vazia, porque o vocabulario de objeto
+        # era fechado em dez nomes e nada fora deles chegava ao spec para dar
+        # falta -- a engrenagem girava no vacuo. A segunda e' que o rembg
+        # deixou de ser necessario: a arte deste canal e vetorial chapada
+        # sobre fundo branco liso, e recortar isso e uma conta de cor (ver
+        # `sob_demanda._recortar_fundo`), nao um modelo de rede neural.
+        #
+        # Custa ~15 s, roda com numpy e Pillow que o render ja tem, e poe na
+        # tela a coisa que a esquete inteira discute -- que e' a queixa do
+        # dono. Falhando, a encomenda continua sendo o plano B.
+        if gerados < SD.MAX_POR_VIDEO and SD.gerar_objeto(nome, pasta_obj):
+            gerados += 1
+            locais[nome] = nome
+            continue
         locais[nome] = ref
-        SD.encomendar("objeto", nome, "pedido por um roteiro e sem arte")
+        SD.encomendar("objeto", nome, "pedido por um roteiro, sem arte, e a "
+                                      "geracao na hora nao deu resultado")
     if objetos:
         spec["objetos"] = locais
     spec["pasta_objetos"] = pasta_obj
