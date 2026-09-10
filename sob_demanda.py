@@ -51,6 +51,13 @@ CF_TOKEN = os.environ.get("CF_API_TOKEN", "")
 MODELO_CENARIO = "@cf/bytedance/stable-diffusion-xl-lightning"
 LARGURA, ALTURA = 2048, 1152
 
+# O objeto vai pelo FLUX, e não pelo SDXL: ele desenha coisa isolada muito
+# melhor e devolve base64 num JSON em vez de imagem binária -- os dois
+# formatos já são tratados em `_cloudflare`. É a mesma escolha que o
+# `Montar Pedidos` do `Gerar Assets` faz, e ela tem de ser a mesma nos dois
+# lugares, senão metade dos objetos do canal sai num traço e metade noutro.
+MODELO_OBJETO = "@cf/black-forest-labs/flux-1-schnell"
+
 # Teto por vídeo. Um roteiro que pede três cenários novos trocou de lugar
 # duas vezes numa esquete de vinte segundos -- o defeito está no roteiro, e
 # gerar arte para ele só o esconderia.
@@ -156,15 +163,25 @@ def _descricao_en(chave):
     return f"a simple everyday brazilian {chave.replace('_', ' ')}, seen from inside"
 
 
-def _cloudflare(prompt, negativa):
-    """Uma imagem da Workers AI, em bytes. Erro devolve None e avisa."""
+def _cloudflare(prompt, negativa, quadrado=False):
+    """Uma imagem da Workers AI, em bytes. Erro devolve None e avisa.
+
+    `quadrado=True` é o caminho do OBJETO, e ele usa outro modelo de
+    propósito: o FLUX desenha objeto isolado muito melhor que o SDXL e
+    devolve sempre 1024x1024, que é o enquadramento que menos desperdiça
+    para uma coisa que cabe na mão. Ele não aceita largura, altura nem
+    prompt negativo -- é a mesma divisão que o `Montar Pedidos` do workflow
+    `Gerar Assets` faz, e pelo mesmo motivo (ver lá o bloco QUAL MODELO
+    ATENDE CADA PEDIDO)."""
     if not CF_TOKEN:
         print("[sob-demanda] sem CF_API_TOKEN no ambiente; nao da para gerar")
         return None
+    modelo = MODELO_OBJETO if quadrado else MODELO_CENARIO
     url = (f"https://api.cloudflare.com/client/v4/accounts/{CF_CONTA}"
-           f"/ai/run/{MODELO_CENARIO}")
-    corpo = {"prompt": prompt[:2040], "negative_prompt": negativa,
-             "width": LARGURA, "height": ALTURA, "num_steps": 8}
+           f"/ai/run/{modelo}")
+    corpo = ({"prompt": prompt[:2040], "steps": 8} if quadrado else
+             {"prompt": prompt[:2040], "negative_prompt": negativa,
+              "width": LARGURA, "height": ALTURA, "num_steps": 8})
     for tentativa in range(3):
         try:
             r = requests.post(url, json=corpo, timeout=180,
@@ -233,8 +250,203 @@ def gerar_cenario(chave, pasta_destino):
 
 
 # ---------------------------------------------------------------------
-# OBJETO: encomendado, usado a partir do próximo vídeo
+# OBJETO: gerado AGORA, e usado neste vídeo (11/09)
 # ---------------------------------------------------------------------
+# Queixa do dono: *"o roteiro fala sobre objetos que não aparecem na cena;
+# quando o vídeo falar muito de um objeto ou ele for o ponto central do
+# vídeo, ele precisa ser gerado"*.
+#
+# ATÉ AQUI OBJETO ERA ENCOMENDA, e a docstring lá em cima explica por quê:
+# objeto precisa de ALFA, alfa vinha do rembg, e o rembg só roda no Action
+# `assets` (5 a 20 min, e um modelo de 200 MB). A decisão de 28/08 era
+# defensável — o vídeo de hoje usava um substituto e o de amanhã tinha a
+# arte.
+#
+# SÓ QUE A ENCOMENDA NUNCA FOI FEITA UMA ÚNICA VEZ. `assets_pendentes` está
+# **vazia**, e o motivo é que ninguém podia PEDIR: o vocabulário de objeto
+# era uma lista fechada de dez, então um objeto fora dela nem chegava ao
+# spec para dar falta. A engrenagem inteira girava no vácuo.
+#
+# E A PREMISSA TÉCNICA TAMBÉM CAIU. O rembg é segmentador de objeto
+# saliente — necessário para foto, e caro demais para o que este canal
+# gera: o prompt de objeto deste projeto pede, desde agosto, *"ISOLATED
+# single object centred on a plain flat white background"*, em arte vetorial
+# chapada com contorno preto grosso. Recortar isso é uma **conta de cor**,
+# não um modelo de rede neural: parte-se das quatro quinas, que são fundo
+# por construção, e derrama-se por vizinhança enquanto a cor for a do fundo.
+# Custa milissegundos, roda com numpy e Pillow — que o render já tem — e
+# não acrescenta uma linha ao `requirements.txt`.
+#
+# O QUE ISSO MUDA NA TELA: o objeto que a esquete inteira discute entra no
+# vídeo de HOJE, na mão de quem fala dele. `MAX_POR_VIDEO` continua valendo,
+# e a encomenda continua existindo como reserva — para quando a geração
+# falhar, e para o dia em que alguém quiser refazer a arte com calma.
+
+# Tolerância de cor do fundo, em 0..255 por canal. 28 é folgado o bastante
+# para o "branco" que o gerador devolve (que nunca é 255,255,255 exato) e
+# apertado o bastante para não comer o miolo claro de um objeto branco --
+# e o que protege esse miolo é a busca por VIZINHANÇA: cor de fundo que não
+# encosta na borda não é fundo, é desenho.
+_TOLERANCIA_FUNDO = 28
+# O contorno fica com meio pixel de fundo grudado quando o corte é binário.
+# Uma erosão de um pixel na máscara tira a franja clara sem comer a linha
+# preta, que tem 6 a 10 px nesta arte.
+_FRANJA_PX = 1
+
+
+def _descricao_objeto_en(chave):
+    """Uma frase em inglês para o gerador, a partir da chave.
+
+    As três exceções vêm do `Montar Pedidos` do workflow `Gerar Assets`, e
+    ficam aqui pelo mesmo motivo que o prompt de cenário: se os dois
+    divergirem, metade dos objetos do canal sai num estilo e metade noutro.
+    Cada uma delas foi escrita depois de um desenho errado -- *"a tv remote
+    control"* fez o modelo desenhar a TELEVISÃO com o controle na frente,
+    porque o substantivo que ancora o desenho é o maior da frase."""
+    d = {
+        "boleto": "a brazilian payment slip, a long paper bill with a barcode",
+        "carteira": "a folded leather wallet",
+        "controle_remoto": "a small black handheld remote control with rubber "
+                           "buttons, alone",
+        "caixa_de_papelao": "a closed cardboard box",
+        "marmita": "a plastic lunch box with a lid",
+        "guarda_chuva_quebrado": "a broken umbrella with bent ribs",
+    }
+    return d.get(chave, "a " + chave.replace("_", " "))
+
+
+def _recortar_fundo(dados):
+    """PNG com alfa, a partir da imagem opaca do gerador.
+
+    O fundo é achado pelas QUATRO QUINAS e derramado por vizinhança (BFS em
+    quatro direções). Duas propriedades disso importam, e nenhuma delas vale
+    para um corte por cor simples:
+
+      * **buraco branco no meio do objeto continua opaco** -- a folha de um
+        boleto, o mostrador de um relógio. Cor de fundo que não encosta na
+        borda não é fundo;
+      * **o objeto não precisa estar centrado.** Se ele toca uma borda, só o
+        que estiver do lado de fora do contorno some.
+
+    Devolve None quando o corte não faz sentido -- fundo que come mais de
+    99% ou menos de 20% da imagem é sinal de que o gerador não devolveu um
+    objeto isolado, e arte assim é pior que arte nenhuma: ela entra na mão
+    do personagem como um borrão e ninguém descobre por quê."""
+    import io
+    import numpy as np
+    from PIL import Image
+
+    img = Image.open(io.BytesIO(dados)).convert("RGB")
+    a = np.asarray(img).astype(np.int16)
+    h, w, _ = a.shape
+
+    quinas = [a[0, 0], a[0, w - 1], a[h - 1, 0], a[h - 1, w - 1]]
+    fundo = np.median(np.stack(quinas), axis=0)
+    parecido = (np.abs(a - fundo).max(axis=2) <= _TOLERANCIA_FUNDO)
+
+    # derrame a partir da moldura, por vizinhança, sem recursão: uma pilha de
+    # índices e uma varredura. `scipy.ndimage.label` faria isto em uma linha
+    # e o render não tem scipy -- e não vale um pacote a mais por 30 linhas.
+    visto = np.zeros((h, w), dtype=bool)
+    pilha = []
+    for x in range(w):
+        for y in (0, h - 1):
+            if parecido[y, x]:
+                pilha.append((y, x))
+    for y in range(h):
+        for x in (0, w - 1):
+            if parecido[y, x]:
+                pilha.append((y, x))
+    while pilha:
+        y, x = pilha.pop()
+        if visto[y, x] or not parecido[y, x]:
+            continue
+        visto[y, x] = True
+        if y > 0:
+            pilha.append((y - 1, x))
+        if y < h - 1:
+            pilha.append((y + 1, x))
+        if x > 0:
+            pilha.append((y, x - 1))
+        if x < w - 1:
+            pilha.append((y, x + 1))
+
+    corpo = ~visto
+    frac = float(corpo.mean())
+    if frac < 0.01 or frac > 0.80:
+        print(f"[sob-demanda] o recorte deixaria {frac * 100:.0f}% da imagem; "
+              f"o gerador nao devolveu um objeto isolado")
+        return None
+
+    # a franja: um pixel de erosão, feito com deslocamentos (sem scipy)
+    for _ in range(_FRANJA_PX):
+        e = corpo.copy()
+        e[1:, :] &= corpo[:-1, :]
+        e[:-1, :] &= corpo[1:, :]
+        e[:, 1:] &= corpo[:, :-1]
+        e[:, :-1] &= corpo[:, 1:]
+        corpo = e
+
+    rgba = np.dstack([np.asarray(img), (corpo * 255).astype(np.uint8)])
+    saida = Image.fromarray(rgba, "RGBA")
+    # SEM MARGEM MORTA. O motor escala o objeto pela altura do ator e o
+    # ancora pela base da arte (`preparar_assets._pivo_base`): 400px de
+    # branco em volta viram 400px de nada colados na mão.
+    caixa = saida.getbbox()
+    if caixa:
+        saida = saida.crop(caixa)
+    buf = io.BytesIO()
+    saida.save(buf, format="PNG")
+    return buf.getvalue()
+
+
+def gerar_objeto(chave, pasta_destino):
+    """Gera o objeto `chave` com alfa, grava em `pasta_destino` e sobe.
+
+    Devolve o caminho local, ou None -- e None aqui não é falha de esteira:
+    o vídeo segue sem o objeto, exatamente como seguia antes de 11/09.
+    Quem chama decide se encomenda no lugar."""
+    chave = chave_valida(chave)
+    if not chave:
+        return None
+    prompt = ". ".join([
+        _descricao_objeto_en(chave),
+        "ISOLATED single object centred on a plain flat pure white background",
+        # o rig gruda o objeto no osso da mão por um ponto de pega; objeto sem
+        # cabo ou alça legível fica flutuando ao lado do corpo
+        "seen from the side, with a clear handle or graspable part pointing "
+        "to the lower left",
+        "no scenery, no shadow, no ground line, no hands holding it, no person",
+        "no other object next to it, nothing else in the picture",
+        "thick uniform black outline",
+        "100% flat colours, no shading, no gradient, no texture",
+        "limited high-contrast palette",
+    ])
+    print(f"[sob-demanda] gerando objeto '{chave}'...")
+    dados = _cloudflare(prompt, "photo, 3d render, realistic, gradient, "
+                                "shading, text, letters, watermark, frame, "
+                                "border, hands, person, background scenery, "
+                                "multiple objects", quadrado=True)
+    if not dados:
+        return None
+    try:
+        recortado = _recortar_fundo(dados)
+    except Exception as e:
+        print(f"[sob-demanda] o recorte de '{chave}' falhou ({e})")
+        recortado = None
+    if not recortado:
+        return None
+    os.makedirs(pasta_destino, exist_ok=True)
+    local = os.path.join(pasta_destino, chave + ".png")
+    with open(local, "wb") as f:
+        f.write(recortado)
+    ok = _subir(f"assets/objeto/geral/{chave}.png", recortado, "image/png")
+    print(f"[sob-demanda] objeto '{chave}': {len(recortado) / 1024:.0f} KB"
+          + ("  (no bucket, ja vale para os proximos videos)" if ok
+             else "  (so local)"))
+    return local
+
+
 def encomendar(tipo, chave, motivo=""):
     """Grava um pedido de arte em `assets_pendentes`.
 
