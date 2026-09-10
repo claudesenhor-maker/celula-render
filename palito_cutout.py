@@ -1972,50 +1972,78 @@ class Personagem:
         reajustar constante nenhuma."""
         return float(self.tam.get("cranio", (1, 120))[1])
 
-    def fracao_da_palma(self, nome):
-        """Onde fica a PALMA dentro da peÃ§a da mÃ£o, em fraÃ§Ã£o do osso.
+    def vetor_da_palma(self, nome):
+        """Do PUNHO ate a PALMA, em pixels da ARTE, como VETOR.
 
-        POR QUE (02/09, item 4 do dono do projeto: *"personagem segurando
-        celular pelo pulso"*)
-            O motor colava o objeto a **0,30** do comprimento da mÃ£o a
-            partir do pivÃ´, e o pivÃ´ Ã© o PUNHO. Medido nas quatro folhas
-            disponÃ­veis, o centro de massa da mÃ£o estÃ¡ a **0,42 a 0,47**:
+        POR QUE ELE E' UM VETOR E NAO UMA FRACAO (10/09, queixa do dono do
+        projeto: *"o personagem da esquerda pega o celular com o pulso, nao
+        com a mao; o da direita pega corretamente"*)
+            A ASSIMETRIA ERA A PISTA, e ela so podia vir de uma coisa: os
+            dois personagens nao usam a mesma mao. `ACOES.mao_de_fora` da a
+            quem esta a esquerda do quadro uma mao e a quem esta a direita a
+            outra, e as duas pecas sao desenhadas em sentidos OPOSTOS -- a
+            folha e' em pose T, entao o braco `_d` aponta para +x e o `_e`
+            para -x. E' isso que `CORRECAO_POSE_T` registra como +90 e -90.
 
-                pal      0,47 / 0,46      maria    0,43 / 0,42
-                senhora  0,46 / 0,44      soldado  0,44 / 0,43
+            A conta antiga era
 
-            Ou seja, a fraÃ§Ã£o cravada punha o objeto a um terÃ§o do caminho
-            entre o punho e a ponta dos dedos -- que Ã©, literalmente,
-            segurar pelo pulso.
+                palma = pivo + (cos(ang), sin(ang)) * comp * fracao
 
-        A fraÃ§Ã£o passa a ser MEDIDA na arte, como o pivÃ´, a linha do chÃ£o e
-        a altura do ator: ela sai do desenho e vale para qualquer folha
-        nova, sem ninguÃ©m recalibrar (Ã© a exigÃªncia do dono do projeto de
-        que nada seja calibrado Ã  mÃ£o por personagem).
+            ou seja: ela deslocava a palma sempre no sentido +x DA ARTE,
+            girado pelo angulo de cena. Para a mao `_d` isso acerta, porque
+            +x e' mesmo do punho para os dedos. Para a mao `_e` o osso vai
+            para -x, e o deslocamento saia AO CONTRARIO -- do punho para
+            dentro do antebraco.
 
-        O limite existe para arte estranha: uma mÃ£o desenhada como um
-        risco daria um centro de massa colado no pivÃ´ ou alÃ©m da ponta, e
-        os dois extremos sÃ£o piores que o palpite.
+            Com o braco baixo o erro e' de 180 graus: o objeto sobe do pulso
+            na direcao do cotovelo, que e' exatamente o que se ve no video.
+            NENHUM AJUSTE DE FRACAO CONSERTARIA ISSO. O numero estava certo;
+            o SENTIDO estava errado, e `math.hypot` era quem o jogava fora.
+
+        A CORRECAO E' MEDIR O SENTIDO JUNTO COM A DISTANCIA, e por isso um
+        vetor. O centro de massa da peca sempre disse as duas coisas -- a
+        versao antiga colapsava as duas num escalar e perdia a que
+        importava. Agora a arte responde tambem PARA QUE LADO, e isso vale
+        para qualquer folha nova, qualquer mao e qualquer pose sem ninguem
+        calibrar nada, que e' a exigencia do dono do projeto.
+
+        A DISTANCIA CONTINUA LIMITADA a 0,30-0,60 do osso, pelo motivo de
+        sempre: uma mao desenhada como um risco daria centro de massa colado
+        no pivo ou alem da ponta dos dedos, e os dois extremos sao piores que
+        o palpite. Medido nas quatro folhas, o centro de massa cai em
+        0,42-0,47 (pal 0,47/0,46, maria 0,43/0,42, senhora 0,46/0,44,
+        soldado 0,44/0,43) -- o limite quase nunca morde, e existe para a
+        folha estranha que ainda vai aparecer.
         """
-        f = getattr(self, "_frac_palma", None)
-        if f is None:
-            f = self._frac_palma = {}
-        if nome in f:
-            return f[nome]
-        valor = 0.44
+        cache = getattr(self, "_vet_palma", None)
+        if cache is None:
+            cache = self._vet_palma = {}
+        if nome in cache:
+            return cache[nome]
+        comp = float(self.comp.get(nome, 0.0))
+        # O PADRAO SEGUE O SENTIDO DA ARTE, E NAO +x. Sem medida, a unica
+        # coisa que ainda se sabe do osso e' para que lado ele foi desenhado,
+        # e `CORRECAO_POSE_T` guarda isso (+90 no lado `_d`, -90 no `_e`).
+        # Errar a distancia deixa o objeto perto da mao; errar o sentido o
+        # joga no antebraco, que e' o defeito que esta funcao existe para
+        # corrigir -- entao ate o palpite respeita o lado.
+        sentido = -1.0 if float(getattr(self, "corr", {}).get(nome, 0.0)) < 0 else 1.0
+        vetor = (sentido * comp * 0.44, 0.0)
         try:
             img, piv = self.p(nome)
             a = np.asarray(img)[..., 3] > 128
             ys, xs = np.nonzero(a)
-            comp = float(self.comp.get(nome, 0.0))
             if len(ys) and comp > 1.0:
-                d = math.hypot(float(xs.mean()) - piv[0],
-                               float(ys.mean()) - piv[1])
-                valor = max(0.30, min(0.60, d / comp))
+                vx = float(xs.mean()) - piv[0]
+                vy = float(ys.mean()) - piv[1]
+                d = math.hypot(vx, vy)
+                if d > 1e-6:
+                    alvo = max(0.30, min(0.60, d / comp)) * comp
+                    vetor = (vx / d * alvo, vy / d * alvo)
         except Exception:                                     # noqa: BLE001
             pass
-        f[nome] = valor
-        return valor
+        cache[nome] = vetor
+        return vetor
 
     def variar(self, nome, sx, sy):
         """A peÃ§a reescalada em x e y, com o pivÃ´ acompanhando.
@@ -2586,36 +2614,21 @@ def _pivo_de_pega(img):
     return (img.width * 0.5, img.height * 0.5)
 
 
-def desenhar_personagem(pers, rig, boca_nivel=0.0, piscando=False, objeto=None,
-                        expr=None, saida_pos=None):
-    """Monta o personagem numa CAMADA transparente do tamanho do quadro.
+def pose_na_tela(pers, rig, boca_nivel=0.0):
+    """Onde cada peca cai na tela, e com que angulo. A travessia do esqueleto.
 
-    O corpo Ã© percorrido como ÃRVORE, do quadril para fora: a posiÃ§Ã£o de
-    cada peÃ§a sai da posiÃ§Ã£o do pai mais o ponto de saÃ­da que o pai guarda
-    para ela, girado pelo Ã¢ngulo do pai. NÃ£o hÃ¡ mais medida cravada, nÃ£o
-    hÃ¡ mais `meio_ombro` nem `queda_ombro`, e acrescentar uma peÃ§a ao
-    esqueleto nÃ£o mexe em uma linha deste arquivo.
+    SAIU DE DENTRO DE `desenhar_personagem` EM 10/09, e o motivo e' o de
+    sempre neste projeto: uma REGUA precisava da mesma conta, e a alternativa
+    era uma segunda copia dela. `ferramentas/palma.py` mede se o objeto cai na
+    palma ou no pulso, e para isso tem de saber onde a mao esta -- se ela
+    recalculasse a pose por conta propria, mediria a pose DELA e nao a do
+    motor, que e' a forma classica de uma regua aprovar um defeito.
 
-    Camada separada (e nÃ£o direto no fundo) Ã© o que permite espelhar o
-    personagem inteiro, achatÃ¡-lo na virada, dar zoom e pÃ´r DOIS
-    personagens no mesmo quadro sem um apagar o outro."""
-    base = Image.new("RGBA", (W, H), (0, 0, 0, 0))
+    Nada mudou de comportamento: o bloco e' o mesmo, na mesma ordem, e
+    `desenhar_personagem` passou a chamar isto no lugar dele.
+    """
     e = pers.escala
-
-    # --- EXPRESSÃƒO FACIAL (ver expressao.py) --------------------------
-    # Entra ANTES de propagar os Ã¢ngulos porque `cabeca_rot` Ã© giro de
-    # cabeÃ§a de verdade: ele arrasta o crÃ¢nio, o cabelo, os olhos, o nariz
-    # e a mandÃ­bula juntos, que Ã© o que faz inclinar a cabeÃ§a ler como
-    # emoÃ§Ã£o e nÃ£o como peÃ§a solta torta.
-    ex = dict(EXPR_ZERO)
-    if expr:
-        ex.update(expr)
-        if abs(ex["cabeca_rot"]) > 0.01:
-            rig = dict(rig)
-            rig["cabeca"] = rig.get("cabeca", 0.0) + ex["cabeca_rot"]
-    boca_nivel = max(float(boca_nivel), float(ex["boca_min"]))
-    hc = pers.altura_cranio()          # rÃ©gua do rosto, em pixels da arte
-
+    hc = pers.altura_cranio()
     # --- posiÃ§Ã£o e Ã¢ngulo de cada peÃ§a, do quadril para fora
     pos, ang = {}, {}
     raiz = next((n for n, p in ESQUELETO.items() if p is None), "abdomen")
@@ -2683,6 +2696,44 @@ def desenhar_personagem(pers, rig, boca_nivel=0.0, piscando=False, objeto=None,
                 pos[f] = (pos[f][0] + s[0], pos[f][1] + s[1])
             ang[f] = _angulo(f, rig, boca_nivel) + corr.get(f, 0.0)
             fila.append(f)
+
+    return pos, ang
+
+
+def desenhar_personagem(pers, rig, boca_nivel=0.0, piscando=False, objeto=None,
+                        expr=None, saida_pos=None):
+    """Monta o personagem numa CAMADA transparente do tamanho do quadro.
+
+    O corpo Ã© percorrido como ÃRVORE, do quadril para fora: a posiÃ§Ã£o de
+    cada peÃ§a sai da posiÃ§Ã£o do pai mais o ponto de saÃ­da que o pai guarda
+    para ela, girado pelo Ã¢ngulo do pai. NÃ£o hÃ¡ mais medida cravada, nÃ£o
+    hÃ¡ mais `meio_ombro` nem `queda_ombro`, e acrescentar uma peÃ§a ao
+    esqueleto nÃ£o mexe em uma linha deste arquivo.
+
+    Camada separada (e nÃ£o direto no fundo) Ã© o que permite espelhar o
+    personagem inteiro, achatÃ¡-lo na virada, dar zoom e pÃ´r DOIS
+    personagens no mesmo quadro sem um apagar o outro."""
+    base = Image.new("RGBA", (W, H), (0, 0, 0, 0))
+    e = pers.escala
+
+    # --- EXPRESSÃƒO FACIAL (ver expressao.py) --------------------------
+    # Entra ANTES de propagar os Ã¢ngulos porque `cabeca_rot` Ã© giro de
+    # cabeÃ§a de verdade: ele arrasta o crÃ¢nio, o cabelo, os olhos, o nariz
+    # e a mandÃ­bula juntos, que Ã© o que faz inclinar a cabeÃ§a ler como
+    # emoÃ§Ã£o e nÃ£o como peÃ§a solta torta.
+    ex = dict(EXPR_ZERO)
+    if expr:
+        ex.update(expr)
+        if abs(ex["cabeca_rot"]) > 0.01:
+            rig = dict(rig)
+            rig["cabeca"] = rig.get("cabeca", 0.0) + ex["cabeca_rot"]
+    boca_nivel = max(float(boca_nivel), float(ex["boca_min"]))
+    hc = pers.altura_cranio()          # rÃ©gua do rosto, em pixels da arte
+
+    # --- posicao e angulo de cada peca, do quadril para fora.
+    # A travessia mora em `pose_na_tela` desde 10/09, porque a
+    # regua da palma precisa da MESMA conta -- ver la o porque.
+    pos, ang = pose_na_tela(pers, rig, boca_nivel)
 
     # --- as feiÃ§Ãµes se mexem DENTRO do rosto ---------------------------
     # Deslocamento no referencial da CABEÃ‡A: se a cabeÃ§a estÃ¡ inclinada, a
@@ -2847,16 +2898,21 @@ def desenhar_personagem(pers, rig, boca_nivel=0.0, piscando=False, objeto=None,
             # baixo, isso pÃµe o objeto abaixo da mÃ£o, encostado na coxa. O
             # meio da peÃ§a Ã© onde a palma estÃ¡ de verdade, e Ã© ali que o
             # objeto tem que se sobrepor Ã  mÃ£o para ler como segurado.
-            # A FRAÃ‡ÃƒO Ã‰ MEDIDA NA ARTE (02/09) -- ver
-            # `Personagem.fracao_da_palma`. Era 0,30 cravado, e o centro de
-            # massa da mÃ£o estÃ¡ a 0,42-0,47 em todas as folhas: o objeto
-            # ficava a um terÃ§o do caminho entre o punho e os dedos, que Ã©
-            # o "segurando pelo pulso" que o dono do projeto viu.
-            comp = pers.comp.get(nome, 0.0) * pers.escala
-            rad = math.radians(ang[nome])
-            fp = pers.fracao_da_palma(nome)
-            palma = (pos[nome][0] + math.cos(rad) * comp * fp,
-                     pos[nome][1] + math.sin(rad) * comp * fp)
+            # O DESLOCAMENTO E' UM VETOR MEDIDO NA ARTE (10/09) -- ver
+            # `Personagem.vetor_da_palma`. Ele sai do punho e aponta para a
+            # palma NO SENTIDO EM QUE A PECA FOI DESENHADA, e e' girado pelo
+            # angulo de cena como qualquer outro deslocamento deste motor
+            # (a mesma conta que poe o pivo de um filho a partir do pai).
+            #
+            # A conta anterior usava so a DISTANCIA e assumia o sentido +x da
+            # arte. Isso acerta a mao `_d` e erra a `_e` por 180 graus,
+            # porque a folha e' em pose T e os dois bracos apontam para lados
+            # opostos -- era o "personagem da esquerda pega o celular com o
+            # pulso" que o dono viu, e a razao de so acontecer com um dos dois
+            # e' que `mao_de_fora` da uma mao diferente a cada lado do quadro.
+            vx, vy = pers.vetor_da_palma(nome)
+            d_palma = _girar((vx * pers.escala, vy * pers.escala), ang[nome])
+            palma = (pos[nome][0] + d_palma[0], pos[nome][1] + d_palma[1])
             # GUARDADO PARA COLAR NO FIM, e nÃ£o aqui.
             #
             # POR QUE (01/09, volta 36 do ciclo). `ORDEM_Z` desenha o braÃ§o
