@@ -67,6 +67,7 @@ import acoes as ACOES
 import expressao as EXPR
 import cenarios as CENARIOS
 import sfx as SFX
+import efeitos as EFEITOS_GAG
 from folha_personagem import (ESQUELETO, ORDEM_Z, FONTE_ANGULO,
                               CORRECAO_POSE_T, SEGUE,
                               ENCAIXE_OMBRO, SUBIR_BRACO_HC)
@@ -2701,7 +2702,7 @@ def pose_na_tela(pers, rig, boca_nivel=0.0):
 
 
 def desenhar_personagem(pers, rig, boca_nivel=0.0, piscando=False, objeto=None,
-                        expr=None, saida_pos=None):
+                        expr=None, saida_pos=None, efeito=None):
     """Monta o personagem numa CAMADA transparente do tamanho do quadro.
 
     O corpo Ã© percorrido como ÃRVORE, do quadril para fora: a posiÃ§Ã£o de
@@ -2734,6 +2735,37 @@ def desenhar_personagem(pers, rig, boca_nivel=0.0, piscando=False, objeto=None,
     # A travessia mora em `pose_na_tela` desde 10/09, porque a
     # regua da palma precisa da MESMA conta -- ver la o porque.
     pos, ang = pose_na_tela(pers, rig, boca_nivel)
+
+    # A GAG DE DESENHO ANIMADO (10/09) -- explodir, voar, perder um braco.
+    #
+    # Ela entra AQUI, entre a pose e o desenho, e essa posicao e' a coisa toda:
+    # o efeito monta EM CIMA da atuacao que o roteiro pediu, e nao no lugar
+    # dela. O personagem continua com a cara e o gesto do trecho enquanto as
+    # pecas voam -- que e' o que separa uma gag de um glitch.
+    #
+    # `efeito` e' `(nome, p)`, com `p` de 0 a 1. Quem calcula `p` e' o laco de
+    # quadros, que e' o unico que sabe o tempo; aqui nao ha estado nenhum.
+    alfa_efeito = 1.0
+    nome_efeito = None
+    if efeito:
+        nome_efeito, _p = efeito[0], efeito[1]
+        # A ESCALA DO EFEITO SAI DO CORPO, E E' MEDIDA (lei 38).
+        #
+        # A primeira versao era `altura_cranio * escala * 6,5`, uma proporcao
+        # tipica cabeca/corpo -- e ela deu 1.673 px para um corpo que mede 844.
+        # O dobro. A tira de previa mostrou o efeito de voar levando o corpo
+        # para fora do quadro na metade da gag.
+        #
+        # O `pos` que acabou de ser calculado JA E' a resposta: a distancia do
+        # pivo mais alto ao mais baixo e' a altura do corpo, em pixels de tela,
+        # nesta pose e nesta escala. Nao ha proporcao para supor, nao ha
+        # constante para envelhecer, e nao custa um bbox por quadro.
+        _ys = [y for _x, y in pos.values()]
+        _alt = (max(_ys) - min(_ys)) if len(_ys) > 1 else (pers.altura_cranio() * e)
+        _alt = max(_alt, 1.0)
+        pos, ang, alfa_efeito = EFEITOS_GAG.aplicar(
+            nome_efeito, _p, pos, ang, tuple(rig["quadril"]), _alt,
+            (efeito[2] if len(efeito) > 2 else "d"))
 
     # --- as feiÃ§Ãµes se mexem DENTRO do rosto ---------------------------
     # Deslocamento no referencial da CABEÃ‡A: se a cabeÃ§a estÃ¡ inclinada, a
@@ -2967,7 +2999,13 @@ def desenhar_personagem(pers, rig, boca_nivel=0.0, piscando=False, objeto=None,
     # AS FENDAS ENTRE AS PEÃ‡AS, TAPADAS NO CORPO MONTADO (03/09). Vem DEPOIS
     # de todas as peÃ§as e ANTES do objeto: o objeto nÃ£o Ã© parte do corpo, e
     # deixÃ¡-lo entrar na conta faria o fechamento tentar emendÃ¡-lo Ã  mÃ£o.
-    _fechar_vaos_do_corpo(base)
+    # O FECHAMENTO DE VAO NAO RODA EM CORPO DESMONTADO. Ele emenda pecas
+    # vizinhas, e num corpo explodido as vizinhas estao a meio metro uma da
+    # outra -- emendar ali desenharia faixas ligando pecas que deveriam estar
+    # voando. Fora do efeito nada muda, e isso importa: o vao entre as pecas
+    # e' assinatura do canal e nunca se tapa por conta propria (GUIA §0.5).
+    if not (nome_efeito and EFEITOS_GAG.destrutivo(nome_efeito)):
+        _fechar_vaos_do_corpo(base)
 
     if objeto_colar is not None:
         oi, opv, palma, ang_mao, esc = objeto_colar
@@ -2975,6 +3013,14 @@ def desenhar_personagem(pers, rig, boca_nivel=0.0, piscando=False, objeto=None,
         # separaÃ§Ã£o do objeto contra o que ficou ATRÃS dele -- ver lÃ¡ o
         # porquÃª (o celular lendo como adesivo na coxa, voltas 088 e 091).
         _colar_objeto(base, oi, opv, palma, ang_mao, esc)
+
+    # O SUMICO NO FIM DA GAG. Ele e' do corpo INTEIRO e nao peca por peca:
+    # peca sumindo sozinha leria como falha de render, e o que se quer e' a
+    # explosao se dissolvendo antes do corte -- senao a ultima peca fica
+    # parada na borda do quadro quando o trecho seguinte comeca.
+    if alfa_efeito < 0.999:
+        a = base.split()[3].point(lambda v: int(v * alfa_efeito))
+        base.putalpha(a)
 
     return base
 
@@ -5368,10 +5414,40 @@ def render(pasta_partes, spec, saida, tmpdir=None, amostra=0):
                                       if chave == falante else "neutro")
                 # SÃ“ QUEM FALA MEXE A BOCA. Sem isto os dois abrem o
                 # maxilar na mesma envoltÃ³ria e ninguÃ©m sabe quem falou.
+                # O EFEITO ESPECIAL DESTE TRECHO, se houver (10/09).
+                #
+                # `p` e' o progresso dentro da janela do efeito, e ele e'
+                # calculado AQUI porque este e' o unico lugar que conhece o
+                # tempo -- `efeitos.py` nao guarda estado nenhum de proposito,
+                # para que o quadro 137 seja sempre o mesmo quadro 137 entre
+                # dois renders.
+                #
+                # O EFEITO E' DE UM ATOR SO: `de_quem` diz de quem, e o padrao
+                # e' quem fala. Explodir os dois de uma vez existe em desenho
+                # animado, mas nao neste roteiro -- e efeito sem dono seria
+                # mais uma coisa para o roteirista errar em silencio.
+                _ef = None
+                _efd = tr.get("efeito") or None
+                if _efd and (_efd.get("de_quem") or falante) == chave:
+                    # `de` e `ate` sao FRACAO DO TRECHO (0 a 1), a mesma
+                    # unidade das acoes -- e `t` aqui ja e' essa fracao, e nao
+                    # segundos. Multiplicar por `dur` seria comparar fracao com
+                    # segundo, e o efeito so apareceria em trechos de 1 s.
+                    _e0 = float(_efd.get("de", 0.0))
+                    _e1 = float(_efd.get("ate", 1.0))
+                    if _e1 > _e0 and _e0 <= t <= _e1:
+                        _ef = (_efd.get("nome"), (t - _e0) / (_e1 - _e0),
+                               _efd.get("lado", "d"))
+                    elif t > _e1:
+                        # DEPOIS DA GAG, ELE FICA COMO FICOU. Voltar ao normal
+                        # no quadro seguinte desfaria a piada: quem explodiu
+                        # nao se remonta sozinho no meio do trecho.
+                        _ef = (_efd.get("nome"), 1.0, _efd.get("lado", "d"))
                 so_dele[chave] = desenhar_personagem(
                     pers, rig, nivel if chave == falante else 0.0,
                     pisca, na_mao[chave], cara,
-                    saida_pos=pecas_falante if chave == falante else None)
+                    saida_pos=pecas_falante if chave == falante else None,
+                    efeito=_ef)
             # CADA UM SE DEFORMA SOZINHO. Espelhar, achatar e o squash da
             # passada sÃ£o do corpo de quem fez a aÃ§Ã£o, nÃ£o do quadro (ver
             # `deformar_ator`). Vem ANTES da guarda de colisÃ£o porque
