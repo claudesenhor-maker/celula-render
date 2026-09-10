@@ -4843,6 +4843,143 @@ def _acoes_por_ator(tr, chaves, falante):
     return por
 
 
+# =====================================================================
+# A LOCOMOÃ‡ÃƒO, RESOLVIDA COM AS DUAS POSIÃ‡Ã•ES NA MÃƒO (11/09)
+# =====================================================================
+#
+# Queixa do dono, sobre os dois vÃ­deos do mÃ©todo novo: *"a Ãºnica falha
+# continua sendo a locomoÃ§Ã£o do personagem: um tem a aÃ§Ã£o de andar e o
+# outro nÃ£o, e os dois 'andam juntos'; os dois continuam Ã  mostra na tela.
+# Ou o que nÃ£o andou deveria ficar para trÃ¡s, ou um iria sair da tela."*
+#
+# Ele estÃ¡ certo, e o defeito tinha TRÃŠS causas somadas -- nenhuma delas
+# no cÃ³digo de travelling em si, que estÃ¡ certo desde 30/08:
+#
+#   1. **o passeio rebobinava.** `ACOES.aplicar` jogava fora `pan_camera` no
+#      instante em que a janela da aÃ§Ã£o fechava, e o parceiro que jÃ¡ tinha
+#      deslizado para trÃ¡s voltava ao lugar no mesmo frame. Corrigido lÃ¡,
+#      em `DESLOCA_O_MUNDO`;
+#   2. **o sentido era cego.** `andar` sem `sentido` anda sempre para a
+#      direita da arte, e isso arrasta o parceiro ATRAVÃ‰S de quem anda em
+#      metade dos casos. AÃ­ `_separar` entra para desfazer a invasÃ£o -- e
+#      `_separar` prende os dois DENTRO do quadro. O resultado Ã© o que ele
+#      descreve: os dois grudados, andando juntos;
+#   3. **a distÃ¢ncia nÃ£o dava.** 150px de passada a 1,7 passos/s Ã© 255px por
+#      segundo, e as janelas de `andar` que o roteirista escreve tÃªm 0,3 a
+#      1,2 s. Sao 76 a 306px num quadro de 1080: o parceiro desliza um
+#      palmo e para. Ninguem "sai da tela" andando um palmo.
+#
+# E hÃ¡ uma quarta coisa, que Ã© de dramaturgia e nÃ£o de motor: o roteirista
+# escreve `andar` querendo dizer APROXIMAR. Ver `ACOES.aproximar`.
+_TRAVELLING_PASSOS_MAX = 3.2      # acima disto Ã© corrida, nÃ£o caminhada
+_FOLGA_SAIDA_PX = 60.0            # o quanto o parceiro passa da borda
+
+
+def _resolver_locomocao(por_ator, posto, chaves, dur_s, i_tr):
+    """Fecha os nÃºmeros que sÃ³ o motor conhece: para que lado o travelling
+    corre, com que rapidez, e quanto anda quem se aproxima do outro.
+
+    Mexe nas aÃ§Ãµes DESTE trecho, uma vez sÃ³, antes dos frames -- a mesma
+    disciplina de `mao_de_fora` e `lado_alvo`, e pelo mesmo motivo: se o
+    valor mudasse por frame, a passada mudaria de ideia no meio do passo.
+    """
+    if dur_s <= 0:
+        return
+    for chave in chaves:
+        acoes = por_ator.get(chave) or []
+        if not acoes:
+            continue
+        x_eu = posto[chave][1]
+        outros = [c for c in chaves if c != chave]
+        outro = outros[0] if outros else None
+        for a in acoes:
+            nome = a.get("nome")
+            janela = max(0.0, float(a.get("ate", 1.0)) - float(a.get("de", 0.0)))
+            if nome in ("aproximar", "afastar"):
+                a["dx"] = _dx_de_aproximacao(nome, chave, outro, posto)
+                continue
+            if nome != "andar" or outro is None or janela <= 0:
+                continue
+            # --- 2. O SENTIDO: o parceiro sai PELO LADO DELE ---------------
+            #
+            # `andar` devolve `fundo_dx = -sentido * ...`, e Ã© esse mesmo
+            # nÃºmero que translada quem estÃ¡ parado. EntÃ£o para empurrar o
+            # parceiro que estÃ¡ Ã  DIREITA ainda mais para a direita Ã©
+            # preciso `sentido = -1`, e o contrÃ¡rio para o da esquerda.
+            #
+            # Escolhido pela geometria e nÃ£o pelo spec, mesmo quando o spec
+            # traz `sentido`: o `sentido` que `montar_spec` alterna existe
+            # para a arte panorÃ¢mica nÃ£o acabar, e isso Ã© uma preocupaÃ§Ã£o
+            # de FUNDO. Arrastar uma pessoa por dentro de outra Ã© uma
+            # preocupaÃ§Ã£o de CENA, e cena ganha de fundo.
+            x_out = posto[outro][1]
+            sentido = -1 if x_out > x_eu else 1
+            if a.get("sentido") is not None and int(a["sentido"]) != sentido:
+                print(f"[locomocao] trecho {i_tr}: {chave} anda para o outro "
+                      f"lado do que o spec pediu -- assim {outro} fica para "
+                      f"tras pelo lado dele, em vez de ser arrastado por "
+                      f"dentro de {chave}")
+            a["sentido"] = sentido
+            # --- 3. A DISTÃ‚NCIA: o bastante para ele sumir do quadro -------
+            pers_out = posto[outro][0]
+            if sentido < 0:                    # o mundo corre para a direita
+                borda = x_out - getattr(pers_out, "meia_esq", 130.0)
+                preciso = (W - borda) + _FOLGA_SAIDA_PX
+            else:                              # o mundo corre para a esquerda
+                borda = x_out + getattr(pers_out, "meia_dir", 130.0)
+                preciso = borda + _FOLGA_SAIDA_PX
+            passada = float(a.get("passada_px", 150.0))
+            seg = janela * dur_s
+            # a velocidade sobe ATÃ‰ o teto de caminhada; o que faltar depois
+            # dele vira TEMPO, esticando a janela atÃ© o fim do trecho. Nesta
+            # ordem porque andar mais rÃ¡pido continua sendo andar, e andar
+            # por mais tempo Ã© o Ãºnico jeito de cobrir o resto sem virar
+            # patinaÃ§Ã£o (o fundo anda exatamente o que o pÃ© anda).
+            passos = preciso / max(passada * seg, 1.0)
+            passos = max(float(a.get("passos_por_s", 1.7)),
+                         min(_TRAVELLING_PASSOS_MAX, passos))
+            a["passos_por_s"] = round(passos, 2)
+            alcanca = passada * passos * seg
+            if alcanca < preciso:
+                sobra = (preciso - alcanca) / max(passada * passos, 1.0)
+                novo_ate = min(1.0, float(a.get("ate", 1.0)) + sobra / dur_s)
+                if novo_ate > float(a.get("ate", 1.0)):
+                    a["ate"] = round(novo_ate, 3)
+            print(f"[locomocao] trecho {i_tr}: {chave} anda "
+                  f"{'<-' if sentido > 0 else '->'} "
+                  f"{passada * passos * (float(a['ate']) - float(a.get('de', 0.0))) * dur_s:.0f}px "
+                  f"em {(float(a['ate']) - float(a.get('de', 0.0))) * dur_s:.1f}s; "
+                  f"{outro} precisa de {preciso:.0f}px para sair do quadro")
+
+
+def _dx_de_aproximacao(nome, chave, outro, posto):
+    """Quanto `aproximar`/`afastar` andam, em pixels de tela.
+
+    Aproximar PARA a uma folga do outro -- o alvo Ã© chegar perto, nÃ£o
+    ocupar o mesmo lugar --, e afastar recua sem sair do quadro. Sozinho em
+    cena, os dois valem meio passo para dentro ou para fora do centro: a
+    aÃ§Ã£o continua legÃ­vel e nÃ£o precisa de um segundo corpo para existir."""
+    pers, x_eu, _ = posto[chave]
+    meia_e = getattr(pers, "meia_esq", 130.0)
+    meia_d = getattr(pers, "meia_dir", 130.0)
+    if outro is None:
+        alvo = W / 2.0
+        d = (alvo - x_eu) if nome == "aproximar" else -(alvo - x_eu)
+        d = max(-160.0, min(160.0, d)) or (120.0 if x_eu < W / 2 else -120.0)
+    else:
+        pers_o, x_out, _ = posto[outro]
+        para = 1 if x_out > x_eu else -1
+        vao = abs(x_out - x_eu)
+        perto = (meia_d if para > 0 else meia_e) \
+            + (getattr(pers_o, "meia_esq", 130.0) if para > 0
+               else getattr(pers_o, "meia_dir", 130.0)) + FOLGA_ENTRE_ATORES
+        d = para * max(0.0, vao - perto) if nome == "aproximar" \
+            else -para * 150.0
+    # ninguÃ©m se aproxima para fora do quadro
+    x = max(meia_e, min(W - meia_d, x_eu + d))
+    return round(x - x_eu, 1)
+
+
 def _folha(colhidos, saida, larg=300):
     """Os quadros da amostra numa grade, com o segundo de cada um."""
     if not colhidos:
@@ -5318,6 +5455,12 @@ def render(pasta_partes, spec, saida, tmpdir=None, amostra=0):
         # justamente o defeito que a lei 35 consertou.
         _guardar_objeto_esquecido(na_mao, objeto_parado, por_ator,
                                   tr.get("fala"), n / float(FPS))
+        # A LOCOMOÃ‡ÃƒO SÃ“ FECHA COM AS DUAS POSIÃ‡Ã•ES NA MÃƒO (11/09). Ver
+        # `_resolver_locomocao`: para que lado o travelling corre, e quanto
+        # anda quem se aproxima. Uma vez por trecho, como a mÃ£o de fora e o
+        # lado do alvo -- decidir por frame Ã© o tremor do v018.
+        _resolver_locomocao(por_ator, posto, chaves, float(tr.get("dur") or 0.0),
+                            i_tr)
         nf = max(1, int(tr["dur"] * FPS))
         cam = dict(ACOES.CAM_NEUTRA)
         for f in range(nf):
@@ -5494,7 +5637,16 @@ def render(pasta_partes, spec, saida, tmpdir=None, amostra=0):
                         rigs[chave]["quadril"][0] += dx_tela
             # NINGUÃ‰M ATRAVESSA NINGUÃ‰M: medido no frame pronto, corrigido
             # transladando a camada (ver `_separar`)
-            ceder = _separar(so_dele, ordem_x)
+            #
+            # MENOS DURANTE UM TRAVELLING (11/09). `_separar` empurra os dois
+            # de volta para DENTRO do quadro -- "cada um cede metade, e nenhum
+            # dos dois sai" --, e num travelling sair do quadro Ã© exatamente o
+            # que tem de acontecer com quem ficou para trÃ¡s. Enquanto a cÃ¢mera
+            # panoramiza, quem garante que ninguÃ©m atravessa ninguÃ©m Ã©
+            # `_resolver_locomocao`, que escolhe o sentido para o parceiro sair
+            # pelo lado DELE. Deixar as duas guardas ligadas ao mesmo tempo Ã©
+            # o que fazia a segunda desfazer o trabalho da primeira.
+            ceder = None if dx_camera else _separar(so_dele, ordem_x)
             if ceder:
                 for chave, dx in ceder.items():
                     so_dele[chave] = _transladar(so_dele[chave], dx)
