@@ -260,7 +260,30 @@ def _chaves_eleven():
     return chaves
 
 
-def _eleven(texto, cfg, out_mp3, chave):
+class PlanoNaoPermiteVoz(RuntimeError):
+    """A conta autentica e tem credito -- a VOZ e' que e' de plano pago.
+
+    ISTO NAO E' FALTA DE CREDITO, E CONFUNDIR OS DOIS CUSTOU 10/09 INTEIRO.
+    O dono trocou a chave, o video continuou saindo no Edge, e a mensagem que
+    o log mostrava falava de cota. A resposta de verdade era:
+
+        HTTP 402  code: paid_plan_required
+        "Free users cannot use library voices via the API."
+
+    As onze vozes deste elenco sao BRASILEIRAS e vieram da BIBLIOTECA da
+    ElevenLabs (voz compartilhada por outra pessoa). Conta Free enxerga essas
+    vozes na lista -- conferido: `/v1/voices` devolve as 22, com a `Jerri` do
+    `pal` entre elas -- e recusa sintetizar com elas. So as 21 `premade`
+    funcionam, e todas sao americanas, britanicas ou australianas.
+
+    POR QUE ISSO MERECE UMA EXCECAO PROPRIA E NAO SO UM `except`: o conserto e
+    outro. Cota estourada espera o mes virar ou troca de conta; plano
+    insuficiente NAO passa sozinho e nenhuma chave nova da mesma conta
+    resolve. Sao US$ 6 (Starter) ou trocar de voz.
+    """
+
+
+def _eleven(texto, cfg, out_mp3, chave, voz=None):
     """ElevenLabs, com a chave que o chamador escolheu da fila.
 
     Por que ele existe: o Edge-TTS e o servico de leitura do navegador Edge,
@@ -281,7 +304,7 @@ def _eleven(texto, cfg, out_mp3, chave):
     import base64, urllib.request, urllib.error
     if not chave:
         raise RuntimeError("sem chave ElevenLabs")
-    voz = cfg.get("eleven_voice_id") or os.environ.get("ELEVEN_VOICE_ID")
+    voz = voz or cfg.get("eleven_voice_id") or os.environ.get("ELEVEN_VOICE_ID")
     if not voz:
         raise RuntimeError("defina ELEVEN_VOICE_ID ou eleven_voice_id no perfil de voz")
     corpo = json.dumps({
@@ -323,15 +346,29 @@ def _eleven(texto, cfg, out_mp3, chave):
             resp = json.loads(r.read().decode())
     except urllib.error.HTTPError as e:
         detalhe = ""
+        codigo = ""
         try:
             corpo_erro = json.loads(e.read().decode("utf-8", "replace"))
             d = corpo_erro.get("detail") or corpo_erro
             if isinstance(d, dict):
+                codigo = str(d.get("code") or "")
                 detalhe = f"{d.get('status') or d.get('code')}: {d.get('message')}"
             else:
                 detalhe = str(d)[:200]
         except Exception:                                  # noqa: BLE001
             pass
+        # DUAS RECUSAS QUE PARECEM UMA SO (10/09). Ver `PlanoNaoPermiteVoz`:
+        # cota estourada e plano insuficiente chegam as duas como recusa da
+        # conta, e o conserto de cada uma e' diferente. Separar aqui e' o que
+        # permite a quem chama tentar OUTRA VOZ na mesma chave, em vez de
+        # desistir da conta inteira e cair no Edge.
+        if codigo == "paid_plan_required" or "library voices" in detalhe:
+            raise PlanoNaoPermiteVoz(
+                f"a voz {voz} e' da BIBLIOTECA e esta conta e' Free "
+                f"({detalhe}). A conta esta viva e tem credito -- o que falta "
+                f"e' plano. Saidas: assinar o Starter (US$ 6) para as vozes "
+                f"brasileiras do elenco, ou pôr um `eleven_voice_id_free` "
+                f"(voz `premade`) no perfil deste personagem.")
         raise RuntimeError(f"HTTP {e.code} -- {detalhe or 'sem detalhe no corpo'}")
     audio = base64.b64decode(resp.get("audio_base64") or "")
     if not audio:
@@ -561,6 +598,31 @@ def sintetizar(texto, cfg, destino, modo):
                             print(f"[voz] conta ElevenLabs {i} atendeu "
                                   f"(a {i - 1} recusou)")
                         break
+                    except PlanoNaoPermiteVoz as e:
+                        # A CONTA SERVE, A VOZ E' QUE NAO (10/09). Desistir
+                        # dela aqui seria jogar fora uma conta VIVA por causa
+                        # de um voice_id -- e foi assim que 10/09 leu "Free
+                        # users cannot use library voices" como falta de
+                        # credito e caiu no Edge com credito na mao.
+                        alt = cfg.get("eleven_voice_id_free")
+                        if not alt:
+                            print(f"[voz] conta ElevenLabs {i}: {e}")
+                            print(f"[voz] sem `eleven_voice_id_free` no perfil "
+                                  f"deste personagem; nao ha voz alternativa "
+                                  f"para tentar nesta conta")
+                        else:
+                            try:
+                                marcas = _eleven(texto, cfg, mp3, ch, voz=alt)
+                                print(f"[voz] conta {i}: a voz do elenco e' de "
+                                      f"plano pago; gravado com a voz "
+                                      f"alternativa {alt}")
+                                break
+                            except Exception as e2:            # noqa: BLE001
+                                print(f"[voz] conta {i}: a voz alternativa "
+                                      f"{alt} tambem recusou ({e2})")
+                        resta = len(chaves) - i
+                        if resta:
+                            print(f"[voz] tentando a conta {i + 1}")
                     except Exception as e:                     # noqa: BLE001
                         resta = len(chaves) - i
                         print(f"[voz] conta ElevenLabs {i} falhou ({e})"
