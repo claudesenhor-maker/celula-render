@@ -271,7 +271,29 @@ def gesto_para(expressao, atual=None):
 # mas os BRAÇOS de quem começa a andar vinham de uma vez: no v019 um trecho
 # aponta para cima e meio segundo depois entra andando, e o braço ia de -8
 # para +80 num frame. Quadril de fora, membros dentro.
-SO_MEMBROS = frozenset(ACOES_DE_ENTRADA + ACOES_DE_SAIDA)
+SO_MEMBROS = frozenset(ACOES_DE_ENTRADA + ACOES_DE_SAIDA
+                       + ("aproximar", "afastar"))
+
+# LOCOMOÇÃO QUE MOVE O MUNDO, e não o corpo (11/09).
+#
+# `andar` devolve `fundo_dx` e `pan_camera`: o cenário corre e a câmera
+# acompanha quem anda. O que `aplicar` fazia com isso era JOGAR FORA no
+# instante em que a janela fechava -- ver o `if passou: continue` lá
+# embaixo --, e o efeito na tela é o defeito que o dono descreveu:
+#
+#     "um tem a ação de andar e o outro não, e os dois andam juntos;
+#      os dois continuam à mostra na tela"
+#
+# Durante a janela o parceiro parado desliza para trás, como manda o
+# travelling. Terminada a janela o deslocamento sumia e ele VOLTAVA, no
+# mesmo frame, para o lugar de antes. Somando os dois movimentos, ninguém
+# nunca fica para trás e ninguém nunca sai do quadro -- o passeio inteiro
+# rebobina.
+#
+# Andar é POSIÇÃO NO MUNDO, e posição no mundo não rebobina. Quem andou
+# andou: o chão que passou continua passado até o corte. É a mesma lei que
+# `ACOES_QUE_FICAM` aplica à pose (lei 35), agora aplicada ao lugar.
+DESLOCA_O_MUNDO = frozenset(("andar",))
 
 
 def sem_acento(s):
@@ -513,6 +535,53 @@ def andar(u, rig, dur, a):
     # Fica FORA de `entrar_andando`/`sair_andando` de propósito: ali a
     # câmera NÃO segue, senão quem sai de cena nunca sai do quadro.
     return {"fundo_dx": dx, "pan_camera": dx, "escala_y": esc_y}
+
+
+def aproximar(u, rig, dur, a):
+    """Anda ATÉ O OUTRO (ou para longe dele) SEM mexer no mundo.
+
+    POR QUE ELA EXISTE (11/09, queixa do dono sobre a locomoção)
+        `andar` tem UM significado só: travelling -- o ator fica parado na
+        tela, o cenário corre e a câmera o acompanha. Só que o roteirista
+        escreve `andar` para outra coisa quase sempre; os motivos que ele
+        mesmo grava dizem qual:
+
+            "se aproxima de Joao querendo examinar de perto"
+            "avança pra ver de perto ja que ele nao solta a cabeca"
+
+        Isso é APROXIMAÇÃO, não viagem. Encenar aproximação como travelling
+        põe o ônibus inteiro correndo porque alguém deu dois passos para o
+        lado -- e é meia explicação de *"os dois andam juntos"*: a cena
+        escorrega quando ninguém saiu do lugar.
+
+        A diferença é de mundo, não de perna: aqui quem se move é o CORPO
+        (o quadril muda de x) e o cenário fica parado. É o oposto exato de
+        `andar`, e por isso não dá para ser a mesma função com um
+        parâmetro.
+
+    `dx` é quanto andar, em pixels de tela, e quem o calcula é o motor --
+    ele é o único que conhece as duas posições. Sem `dx` a ação não faz
+    nada, e não fazer nada é melhor que adivinhar uma distância."""
+    dx = float(a.get("dx", 0.0))
+    if abs(dx) < 1.0:
+        return {}
+    sentido = 1 if dx >= 0 else -1
+    passos = float(a.get("passos_por_s", 1.9))
+    x0 = rig["quadril"][0]
+    esc_y = _ciclo_passo_lateral(rig, 2 * math.pi * passos * u * dur,
+                                 amp=min(float(a.get("amplitude", 22.0)), 30.0),
+                                 sentido=sentido)
+    rig["quadril"] = [x0 + dx * _suave(u), rig["quadril"][1]]
+    # NEM `fundo_dx` NEM `pan_camera`: o mundo não se mexe, a câmera não
+    # segue. É a única coisa que separa esta ação de `andar`.
+    return {"escala_y": esc_y}
+
+
+def afastar(u, rig, dur, a):
+    """O espelho de `aproximar`: recua do outro. Mesma mecânica, e existe
+    com nome próprio porque o roteirista precisa poder pedir as duas -- um
+    `aproximar` com `dx` negativo seria uma ação que mente no nome."""
+    return aproximar(u, rig, dur, a)
 
 
 def entrar_andando(u, rig, dur, a):
@@ -1425,6 +1494,9 @@ ACOES_ENTREGAM_OBJETO = ("entregar_objeto",)
 
 CATALOGO = {
     "andar": andar,
+    # As duas de 11/09: locomoção que NÃO é viagem. Ver `aproximar`.
+    "aproximar": aproximar,
+    "afastar": afastar,
     "entrar_andando": entrar_andando,
     "sair_andando": sair_andando,
     "entrar_correndo": entrar_correndo,
@@ -1581,6 +1653,11 @@ def aplicar_postura(rig, expressao, intensidade=1.0):
 ACOES_QUE_FICAM = frozenset((
     "maos_na_cintura", "bracos_cruzados", "mao_no_queixo", "maos_na_cabeca",
     "apontar", "apresentar", "cair",
+    # QUEM CHEGOU PERTO FICA PERTO (11/09). `aproximar` muda o x do quadril;
+    # largá-la ao fim da janela devolvia o corpo ao lugar de partida no frame
+    # seguinte -- o mesmo teletransporte que `sair_andando` já tinha ensinado
+    # a não fazer. Onde o corpo ESTÁ é estado.
+    "aproximar", "afastar",
 ))
 
 # E O QUE FICA NEM SEMPRE FICA INTEIRO (04/09, ciclo 25).
@@ -1685,6 +1762,29 @@ def aplicar(acoes, t_rel, rig, dur_trecho):
         fala. Ordenado pelo começo, nada troca de dono com o tempo.
     """
     cam = dict(CAM_NEUTRA)
+
+    # O CHÃO QUE PASSOU CONTINUA PASSADO (11/09). Ver `DESLOCA_O_MUNDO`.
+    #
+    # A locomoção já terminada não entra na pilha de POSE -- ninguém segue
+    # com a perna no ar depois de parar de andar --, mas o deslocamento que
+    # ela produziu é estado do mundo e vale até o fim do trecho. Por isso
+    # ela é somada aqui, à parte, e sobre uma CÓPIA do rig: `andar` escreve
+    # nas pernas para calcular a passada, e essas pernas têm de ser jogadas
+    # fora.
+    for a in (acoes or []):
+        nome = a.get("nome")
+        if nome not in DESLOCA_O_MUNDO:
+            continue
+        de, ate = float(a.get("de", 0.0)), float(a.get("ate", 1.0))
+        if ate <= de or t_rel <= ate:
+            continue
+        descartavel = {o: (list(v) if isinstance(v, list) else v)
+                       for o, v in rig.items()}
+        d = CATALOGO[nome](1.0, descartavel, dur_trecho * (ate - de), a) or {}
+        for k in ("fundo_dx", "pan_camera"):
+            if k in d:
+                cam[k] = cam.get(k, 0.0) + d[k]
+
     pilha = []                              # (ordem, aplicação)
     # SOLTURA E ATAQUE CORREM JUNTOS quando um gesto emenda no outro, e as
     # duas rampas se somam -- o braço volta ao repouso em três frames em vez
