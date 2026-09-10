@@ -35,8 +35,19 @@ jobs:
           cache: 'pip'
 
       - name: Dependencias do sistema
+        # `apt-get update` QUE FALHA NAO PODE DERRUBAR O RENDER (09/09).
+        #
+        # O runner vem com repositorios de terceiros que nao sao deste
+        # projeto -- o do Chrome, entre outros. Em 09/09 o indice do
+        # dl.google.com voltou com "Hash Sum mismatch", o `bash -e` matou o
+        # job em 20 segundos, antes de instalar nada, e o video morreu por
+        # causa de um repositorio que ele nao usa.
+        #
+        # Com o `|| true` o update avisa e segue. Quem tem de dar erro e o
+        # `install`: se os indices do Ubuntu de verdade nao vierem, e ele que
+        # falha, e ai a falha e sobre o que falta.
         run: |
-          sudo apt-get update -qq
+          sudo apt-get update -qq || true
           sudo apt-get install -y -qq ffmpeg libcairo2
 
       - name: Dependencias Python
