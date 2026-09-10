@@ -347,6 +347,145 @@ def _eleven(texto, cfg, out_mp3, chave):
     print(f"[voz] eleven: {len(audio)/1024:.0f} KB, {len(marcas)} palavras alinhadas")
     return marcas
 
+def _azure(texto, cfg, out_mp3):
+    """Azure AI Speech -- o degrau PAGO entre a ElevenLabs e o Edge (09/09).
+
+    ORDEM DO DONO, na sessao de custos: *"para as vozes mantenha o elevenlabs,
+    e use o outro caso acabe"*. Ate aqui a cadeia tinha dois degraus e um
+    buraco entre eles: ElevenLabs -> Edge. Quando o credito acabava -- e ele
+    acabou em 04/09 e continua acabando -- o video caia direto na voz que o
+    dono ja mandou corrigir duas vezes.
+
+    POR QUE O AZURE, E NAO OUTRO
+        Ele e o unico do levantamento que atende as tres exigencias ao mesmo
+        tempo: tem MARCA POR PALAVRA nativa (`WordBoundary`), cobra POR
+        CARACTERE em vez de assinatura, e tem vozes pt-BR de verdade. O
+        volume deste canal e ridiculo para uma API de caractere -- 424
+        caracteres por video, 38.160/mes a 3 videos/dia --, e isso cabe
+        inteiro no free tier de 500 mil/mes. No pago seria ~US$ 0,84.
+
+    A ARMADILHA QUE ESTA FUNCAO EXISTE PARA NAO CAIR
+        O Edge-TTS **ja e** o Azure: sao as mesmas vozes neurais, pela porta
+        lateral do navegador. Apontar para o Azure com o MESMO nome de voz
+        nao melhora nada -- paga-se pelo que ja se tinha. Por isso:
+
+          · sem `azure_voice` no perfil, esta funcao usa `cfg["voice"]` (a voz
+            do Edge) e o ganho e de LICENCA, nao de qualidade: os termos da
+            Microsoft nao autorizam o uso do endpoint do navegador, e isso
+            precisa sair antes de monetizar;
+          · com `azure_voice` apontando para uma voz HD/Multilingual, o ganho
+            e de qualidade tambem.
+
+        Qual voz HD existe na conta E DECISAO DE QUEM TEM A CONTA, e este
+        codigo nao supoe nenhuma (lei 12): sem `azure_voice` nem `voice` no
+        perfil, ele recusa e a cadeia segue para o Edge.
+
+    O SDK E OPCIONAL DE PROPOSITO
+        A marca por palavra so vem pelo evento `WordBoundary` do SDK -- o
+        endpoint REST devolve audio e mais nada, e um TTS sem marca DESLIGA a
+        legenda palavra a palavra e as `janelas_censuradas` do bipe (lei 17).
+        Como o SDK e uma dependencia a mais no runner, a falta dele nao pode
+        derrubar render nenhum: sem o pacote, isto levanta e a cadeia cai para
+        o Edge, com o motivo no log.
+    """
+    chave = (os.environ.get("AZURE_SPEECH_KEY") or "").strip()
+    regiao = (os.environ.get("AZURE_SPEECH_REGION") or "").strip()
+    if not chave or not regiao:
+        raise RuntimeError("sem AZURE_SPEECH_KEY/AZURE_SPEECH_REGION")
+    voz = cfg.get("azure_voice") or cfg.get("voice")
+    if not voz:
+        raise RuntimeError("sem azure_voice nem voice no perfil")
+    try:
+        import azure.cognitiveservices.speech as fala
+    except ImportError as e:                                   # noqa: BLE001
+        raise RuntimeError(
+            f"azure-cognitiveservices-speech nao esta instalado ({e}); "
+            f"sem o SDK nao ha marca por palavra") from e
+
+    sc = fala.SpeechConfig(subscription=chave, region=regiao)
+    sc.set_speech_synthesis_output_format(
+        fala.SpeechSynthesisOutputFormat.Audio24Khz96KBitRateMonoMp3)
+    # `rate` e `pitch` ja existem no perfil por causa do Edge, e a sintaxe e a
+    # mesma -- o Edge-TTS os repassa para este mesmo motor.
+    rate = cfg.get("rate") or "+0%"
+    pitch = cfg.get("pitch") or "+0Hz"
+    estilo = cfg.get("azure_estilo")
+    miolo = (f"<prosody rate='{rate}' pitch='{pitch}'>"
+             f"{_escapar_ssml(texto)}</prosody>")
+    if estilo:
+        miolo = (f"<mstts:express-as style='{estilo}'>{miolo}"
+                 f"</mstts:express-as>")
+    ssml = (
+        "<speak version='1.0' xmlns='http://www.w3.org/2001/10/synthesis' "
+        "xmlns:mstts='http://www.w3.org/2001/mstts' xml:lang='pt-BR'>"
+        f"<voice name='{voz}'>{miolo}</voice></speak>")
+
+    marcas_cruas = []
+
+    def _palavra(evt):
+        # `audio_offset` vem em ticks de 100 ns. `duration` e timedelta nas
+        # versoes novas do SDK e nao existe nas antigas -- por isso o fim e
+        # opcional aqui e se fecha embaixo, com o inicio do vizinho.
+        dur = None
+        try:
+            d = getattr(evt, "duration", None)
+            dur = d.total_seconds() if hasattr(d, "total_seconds") else (
+                float(d) / 1e7 if d else None)
+        except Exception:                                      # noqa: BLE001
+            dur = None
+        marcas_cruas.append({"palavra": evt.text,
+                             "inicio_s": evt.audio_offset / 1e7,
+                             "dur_s": dur})
+
+    saida = fala.audio.AudioOutputConfig(filename=out_mp3)
+    sintetizador = fala.SpeechSynthesizer(speech_config=sc, audio_config=saida)
+    sintetizador.synthesis_word_boundary.connect(_palavra)
+    r = sintetizador.speak_ssml_async(ssml).get()
+
+    if r.reason != fala.ResultReason.SynthesizingAudioCompleted:
+        # O MOTIVO DE VERDADE, E NAO SO O ENUM -- a mesma licao que o `_eleven`
+        # aprendeu com o 401 que queria dizer "sem credito" (04/09).
+        detalhe = ""
+        try:
+            c = r.cancellation_details
+            detalhe = f"{c.reason}: {c.error_details}"
+        except Exception:                                      # noqa: BLE001
+            pass
+        raise RuntimeError(f"Azure recusou -- {detalhe or r.reason}")
+    if not os.path.exists(out_mp3) or os.path.getsize(out_mp3) < 512:
+        raise RuntimeError("Azure devolveu audio vazio")
+
+    # O FIM DE CADA PALAVRA: a duracao do SDK quando ela existe, senao o inicio
+    # da proxima. A ultima fecha com a propria duracao ou com o inicio + 0,3 s,
+    # que e chute -- mas chute na ULTIMA palavra so desloca o fim da legenda
+    # do trecho, e o respiro cobre isso.
+    marcas = []
+    for i, m in enumerate(marcas_cruas):
+        if m["dur_s"]:
+            fim = m["inicio_s"] + m["dur_s"]
+        elif i + 1 < len(marcas_cruas):
+            fim = marcas_cruas[i + 1]["inicio_s"]
+        else:
+            fim = m["inicio_s"] + 0.3
+        marcas.append({"palavra": m["palavra"], "inicio_s": m["inicio_s"],
+                       "fim_s": fim})
+    kb = os.path.getsize(out_mp3) / 1024
+    print(f"[voz] azure ({voz}): {kb:.0f} KB, {len(marcas)} palavras alinhadas")
+    return marcas
+
+
+def _escapar_ssml(t):
+    """SSML e XML: `&`, `<` e `>` no texto quebram a sintese inteira.
+
+    A esquete deste canal e falada e cheia de `&` nao -- mas ela tem aspas,
+    reticencias e, depois da lei 17, o texto passa por corte de palavrao. Uma
+    fala com `<` derrubaria a chamada com um erro de parse que nao diz que o
+    problema e o texto.
+    """
+    return (str(t).replace("&", "&amp;").replace("<", "&lt;")
+            .replace(">", "&gt;").replace('"', "&quot;"))
+
+
 # QUEM FALOU COM QUAL MOTOR, CONTADO (03/09, item 6 do dono do projeto:
 # *"garanta que estamos usando as vozes do ElevenLabs na producao"*).
 #
@@ -426,12 +565,49 @@ def sintetizar(texto, cfg, destino, modo):
                         resta = len(chaves) - i
                         print(f"[voz] conta ElevenLabs {i} falhou ({e})"
                               + (f"; tentando a {i + 1}" if resta
-                                 else "; caindo para o Edge"))
-        usou = "eleven" if marcas is not None else "edge"
+                                 else "; caindo para o degrau seguinte"))
+
+        # O DEGRAU DO MEIO: AZURE (09/09, ordem do dono -- *"para as vozes
+        # mantenha o elevenlabs, e use o outro caso acabe"*).
+        #
+        # Ate aqui a cadeia era ElevenLabs -> Edge, e a queda ia direto da voz
+        # cara para a voz que o dono ja mandou corrigir duas vezes. O Azure
+        # entra ENTRE as duas: cobra por caractere (e os 38 mil/mes deste
+        # canal cabem no free tier), tem marca por palavra nativa, e nao e
+        # assinatura -- que e o que tornava a ElevenLabs cara neste volume.
+        #
+        # Ele nao substitui a ElevenLabs: ela continua sendo a primeira, por
+        # ordem do dono e porque a voz dela e' o maior ganho de qualidade por
+        # dolar da stack. O Azure existe para o dia em que o credito acaba, e
+        # esse dia ja aconteceu.
+        #
+        # E' OPT-IN pelo mesmo motivo de todo o resto deste bloco: sem chave,
+        # sem regiao ou sem SDK, ele levanta e a cadeia segue -- ninguem
+        # descobre num domingo que a producao parou porque um degrau novo
+        # apareceu.
+        # QUEM ATENDEU SE GUARDA NUMA VARIAVEL, e nao se deduz de `marcas`.
+        # Com dois motores dava para inferir ("tem marca? entao foi o caro");
+        # com tres a inferencia deixa de existir, e placar errado e pior que
+        # placar nenhum -- ele foi feito justamente para o dono saber com que
+        # voz o video saiu (03/09).
+        usou = "eleven" if marcas is not None else None
+
+        if marcas is None and motor != "edge" and os.environ.get("AZURE_SPEECH_KEY"):
+            if os.environ.get("PRODUCAO") != "1":
+                print("[voz] render de TESTE: o Azure tambem fica de fora")
+            else:
+                try:
+                    marcas = _azure(texto, cfg, mp3)
+                    usou = "azure"
+                    print("[voz] o Azure atendeu (a ElevenLabs nao)")
+                except Exception as e:                         # noqa: BLE001
+                    print(f"[voz] Azure falhou ({e}); caindo para o Edge")
+
+        if marcas is None:
+            usou = "edge"
+            marcas, _ = asyncio.run(_edge(texto, cfg, mp3))
         USOU_MOTOR[f"pedido_{motor}"] = USOU_MOTOR.get(f"pedido_{motor}", 0) + 1
         USOU_MOTOR[f"usou_{usou}"] = USOU_MOTOR.get(f"usou_{usou}", 0) + 1
-        if marcas is None:
-            marcas, _ = asyncio.run(_edge(texto, cfg, mp3))
         subprocess.run(["ffmpeg", "-y", "-v", "error", "-i", mp3,
                         "-ar", str(SR), "-ac", "1", destino], check=True)
         # A duracao vem do ARQUIVO, nao das marcas de palavra.
