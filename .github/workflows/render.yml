@@ -35,19 +35,8 @@ jobs:
           cache: 'pip'
 
       - name: Dependencias do sistema
-        # `apt-get update` QUE FALHA NAO PODE DERRUBAR O RENDER (09/09).
-        #
-        # O runner vem com repositorios de terceiros que nao sao deste
-        # projeto -- o do Chrome, entre outros. Em 09/09 o indice do
-        # dl.google.com voltou com "Hash Sum mismatch", o `bash -e` matou o
-        # job em 20 segundos, antes de instalar nada, e o video morreu por
-        # causa de um repositorio que ele nao usa.
-        #
-        # Com o `|| true` o update avisa e segue. Quem tem de dar erro e o
-        # `install`: se os indices do Ubuntu de verdade nao vierem, e ele que
-        # falha, e ai a falha e sobre o que falta.
         run: |
-          sudo apt-get update -qq || true
+          sudo apt-get update -qq
           sudo apt-get install -y -qq ffmpeg libcairo2
 
       - name: Dependencias Python
@@ -76,7 +65,41 @@ jobs:
           # acumulam de um mes para o outro: gastar sempre a mesma conta
           # primeiro esvazia uma enquanto a outra expira sem uso.
           ELEVEN_API_KEY_2: ${{ secrets.ELEVEN_API_KEY_2 }}
+          # TERCEIRA VAGA (10/09). Ela existe porque o secret que nao chega e
+          # invisivel: em 10/09 o dono escreveu *"adicionei a chave do
+          # elevenlabs no GitHub, porem video continua com a voz free"*, e o
+          # log do run 243 mostrou `ELEVEN_API_KEY_2:` VAZIO -- a chave nova
+          # nao estava em nenhuma das duas vagas que este arquivo encaminha.
+          #
+          # Secret que o `render.yml` nao cita nao existe para o runner, por
+          # mais certa que a chave esteja no cofre do GitHub. Tres vagas cobrem
+          # a conta que renova, a segunda conta e a chave de emergencia sem que
+          # o dono precise de um PAT com escopo `workflow` para acrescentar uma
+          # linha aqui -- que e' exatamente o que ele NAO tem (§5.1).
+          ELEVEN_API_KEY_3: ${{ secrets.ELEVEN_API_KEY_3 }}
           ELEVEN_VOICE_ID: ${{ secrets.ELEVEN_VOICE_ID }}
+          # O DEGRAU DO MEIO (09/09, ordem do dono: "mantenha o elevenlabs, e
+          # use o outro caso acabe"). A cadeia agora e
+          # ElevenLabs -> Azure -> Edge, e ela vive em `palito_v5.sintetizar`.
+          #
+          # Ate aqui, quando o credito da ElevenLabs acabava -- e ele acabou em
+          # 04/09 -- o video caia direto no Edge, que e a voz que o dono ja
+          # mandou corrigir duas vezes. O Azure cobra por CARACTERE em vez de
+          # assinatura, e os 38.160 caracteres de um mes a 3 videos/dia cabem
+          # inteiros no free tier de 500 mil.
+          #
+          # Sem estes dois secrets o degrau nao existe e a cadeia volta a ser
+          # ElevenLabs -> Edge, como era: e opt-in, igual a todo o resto do
+          # bloco de voz.
+          #
+          # A VOZ NAO FICA AQUI, pelo mesmo motivo do ELEVEN_VOICE_ID: ela vem
+          # do perfil em `identidade_json.audio.vozes` (`azure_voice`), porque
+          # nao e segredo e muda por personagem. Sem `azure_voice`, o degrau
+          # usa a voz do Edge (`voice`) -- o que conserta a LICENCA, ja que o
+          # endpoint do Edge-TTS e o do navegador e nao uma API publica, mas
+          # nao muda a qualidade: sao as mesmas vozes neurais.
+          AZURE_SPEECH_KEY:    ${{ secrets.AZURE_SPEECH_KEY }}
+          AZURE_SPEECH_REGION: ${{ secrets.AZURE_SPEECH_REGION }}
           # ARTE SOB DEMANDA (28/08). O cenario que o roteiro pediu e que
           # ninguem desenhou e gerado aqui mesmo, durante o render: ele vai
           # para assets_bruto e nao passa por rembg (rembg destroi cenario),
