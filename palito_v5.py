@@ -64,16 +64,21 @@ async def _resolver_voz(desejada):
     disp = await _catalogo_vozes()
     if desejada in disp:
         return desejada
-    # preferencia: as duas pt-BR que existem desde sempre; depois qualquer pt-BR
-    for alt in ("pt-BR-AntonioNeural", "pt-BR-FranciscaNeural"):
+    # A RESERVA E' DO MESMO LOCALE DA VOZ PEDIDA (12/09, segundo canal em
+    # ingles): uma voz en-US que sumir do catalogo cai em outra en-US, nunca
+    # em pt-BR -- video em ingles com voz de portugues e' pior que sem voz.
+    locale = "-".join(str(desejada).split("-")[:2]) or "pt-BR"
+    preferidas = {"pt-BR": ("pt-BR-AntonioNeural", "pt-BR-FranciscaNeural"),
+                  "en-US": ("en-US-GuyNeural", "en-US-JennyNeural")}.get(locale, ())
+    for alt in preferidas:
         if alt in disp:
             print(f"[voz] {desejada} indisponivel -> usando {alt}")
             return alt
-    ptbr = sorted(v for v in disp if v.startswith("pt-BR"))
-    if ptbr:
-        print(f"[voz] {desejada} indisponivel -> usando {ptbr[0]}")
-        return ptbr[0]
-    raise RuntimeError("nenhuma voz pt-BR disponivel no servico")
+    mesmo = sorted(v for v in disp if v.startswith(locale))
+    if mesmo:
+        print(f"[voz] {desejada} indisponivel -> usando {mesmo[0]}")
+        return mesmo[0]
+    raise RuntimeError(f"nenhuma voz {locale} disponivel no servico")
 
 
 def _falar(edge_tts, texto, voz, cfg):
@@ -452,9 +457,13 @@ def _azure(texto, cfg, out_mp3):
     if estilo:
         miolo = (f"<mstts:express-as style='{estilo}'>{miolo}"
                  f"</mstts:express-as>")
+    # o `xml:lang` e' o locale da VOZ (12/09): "en-US-GuyNeural" -> en-US.
+    # Era pt-BR fixo, e uma voz inglesa num documento pt-BR sai com prosodia
+    # de portugues.
+    lang = "-".join(str(voz).split("-")[:2]) or "pt-BR"
     ssml = (
         "<speak version='1.0' xmlns='http://www.w3.org/2001/10/synthesis' "
-        "xmlns:mstts='http://www.w3.org/2001/mstts' xml:lang='pt-BR'>"
+        f"xmlns:mstts='http://www.w3.org/2001/mstts' xml:lang='{lang}'>"
         f"<voice name='{voz}'>{miolo}</voice></speak>")
 
     marcas_cruas = []
