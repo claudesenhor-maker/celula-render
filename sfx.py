@@ -199,6 +199,25 @@ def _erro():
     return _fade(_passa_baixa(x, 1800) * env * 0.5)
 
 
+def _assinatura():
+    """A ASSINATURA SONORA DO CANAL (11/09, T4 do PLANO-TRILHA): duas notas
+    de marimba, sol e dó, uma quarta acima -- meio segundo que é o mesmo em
+    todo vídeo. É o que faz alguém reconhecer o canal no feed antes de ler o
+    nome, e é o único som deste catálogo que existe para ser REPETIDO.
+
+    Ela vale meio segundo e nunca mais que isso: repetição é o que a política
+    do YouTube chama de "mass-produced" (PLANO-RETENCAO §3.1), e a assinatura
+    é um carimbo, não a trilha."""
+    total = int(0.62 * SR)
+    x = np.zeros(total)
+    for f, em, g in ((783.99, 0.0, 0.9), (1046.5, 0.21, 1.0)):
+        nota = _nota(f, 0.42, brilho=0.36) * g
+        i = int(em * SR)
+        n = min(len(nota), total - i)
+        x[i:i + n] += nota[:n]
+    return _fade(x * 0.75)
+
+
 def _rimshot():
     """Ba-dum-tss. O carimbo de piada -- e o motivo pelo qual ele existe
     aqui: o punchline precisa de uma marca sonora, senão a última fala soa
@@ -401,6 +420,8 @@ CATALOGO = {
     "louca": _louca, "xicara": _louca,
     "rangido": _rangido, "porta": _rangido,
     "caixa": _caixa, "dinheiro": _caixa, "registradora": _caixa,
+    # a marca do canal (T4): só o motor a dispara, nunca o roteirista
+    "assinatura": _assinatura,
 }
 
 # Peso de cada efeito na mistura, depois de todos serem levados ao mesmo
@@ -417,6 +438,7 @@ GANHO_BASE = {
     "caixa": 0.85, "notificacao": 0.62, "chaves": 0.55, "louca": 0.55,
     "gole": 0.50, "digitar": 0.45, "papel": 0.45, "rangido": 0.45,
     "clique": 0.42,
+    "assinatura": 0.62,
 }
 
 _CACHE = {}
@@ -722,11 +744,79 @@ def eventos_do_spec(spec):
         limpos = sorted(fortes, key=lambda e: e["t"])
         print(f"[sfx] {cortados} efeito(s) cortado(s) por densidade "
               f"(teto de {teto} num video de {_duracao_total(trechos):.0f}s)")
+    # O STINGER DO REMATE -- o "segundo punchline" (11/09, T1 do PLANO-TRILHA).
+    #
+    # O canal já cria o silêncio antes da tirada (o breque) e não punha NADA
+    # dentro dele: o `rimshot` está no catálogo com ganho 0,95 e nunca foi
+    # disparado por ninguém, porque `DA_ACAO` só dá som a evento físico (e
+    # está certo) e nada dizia "a tirada acabou de acontecer". Silêncio sem
+    # resolução lê como falha de áudio, não como piada.
+    #
+    # O TEMPO É O QUE IMPORTA, e ele veio de medida (SFX Engine, "Perfecting
+    # Sound Effects Timing in Comedy Videos"): a ficha caindo é +20 a +40
+    # quadros DEPOIS do beat -- 0,8 a 1,7 s. Junto com a fala vira pontuação
+    # de locutor de rádio. Por isso `RESPIRO_FINAL` subiu para 1,9 s
+    # (`expressao.py`): o quadro segura o rosto da virada enquanto o som cai.
+    #
+    # QUAL som sai do TEXTO do remate, que já está no spec: dinheiro é a
+    # registradora, derrota é o "errou", e o resto é o ba-dum-tss. Nenhum som
+    # novo -- os três já existiam, sem uso.
+    stingers = []
+    if trechos:
+        ult = trechos[-1]
+        t_fim = float(ult.get("_inicio_s", 0.0)) + float(ult.get("_dur_voz", 0.0))
+        nome = stinger_para(ult.get("fala", ""))
+        stingers.append({"nome": nome, "t": t_fim + STINGER_DEPOIS_S,
+                         "ganho": 1.0, "corte": True})
+        # A ASSINATURA FECHA TODO VÍDEO, depois do stinger (T4). Meio segundo.
+        stingers.append({"nome": "assinatura", "t": t_fim + ASSINATURA_DEPOIS_S,
+                         "ganho": 0.9, "corte": True})
+        print(f"[sfx] stinger '{nome}' a {STINGER_DEPOIS_S:.1f}s do fim da "
+              f"tirada, assinatura a {ASSINATURA_DEPOIS_S:.2f}s")
+    # E ELA MARCA O CORTE DE VOLTA DA ABERTURA FRIA (T4): o `whoosh` que o
+    # roteirista já põe ali diz "outro momento"; a assinatura em cima dele diz
+    # "este canal". Ganho baixo: é carimbo, não anúncio.
+    if len(trechos) > 1 and trechos[0].get("flash"):
+        stingers.append({"nome": "assinatura",
+                         "t": float(trechos[1].get("_inicio_s", 0.0)) + 0.05,
+                         "ganho": 0.55, "corte": True})
+
     if passos:
         print(f"[sfx] {len(passos)} pisada(s) em cadencia")
     if cortes_sonoros:
         print(f"[sfx] {len(cortes_sonoros)} whoosh(es) marcando corte de plano")
-    return sorted(limpos + passos + cortes_sonoros, key=lambda e: e["t"])
+    return sorted(limpos + passos + cortes_sonoros + stingers, key=lambda e: e["t"])
+
+
+# O stinger entra 0,8 s depois da última sílaba (a faixa medida é 0,8-1,7);
+# a assinatura vem em cima da cauda dele. Ver `eventos_do_spec`.
+STINGER_DEPOIS_S = 0.80
+ASSINATURA_DEPOIS_S = 1.25
+
+# O que o TEXTO do remate diz que ele é. Dinheiro no remate é a registradora
+# (metade das esquetes deste canal é sobre dinheiro saindo); derrota dita em
+# voz alta é o "errou"; o resto é piada, e piada leva o ba-dum-tss.
+_REMATE_DINHEIRO = ("real", "reais", "conto", "pila", "centavo", "r$",
+                    "pix", "boleto", "parcela", "juros", "multa", "taxa")
+_REMATE_DERROTA = ("bloque", "cancel", "reprov", "negativ", "acabou",
+                   "perdeu", "perdi", "nao pode", "nao da", "fechad", "proibid",
+                   "errad", "expir", "venceu", "vencid", "recus", "indefer",
+                   "suspens", "sem sinal", "morreu", "quebrou")
+
+
+def stinger_para(fala):
+    """Qual stinger o remate pede, lendo o texto dele."""
+    s = str(fala or "").lower()
+    for a, b in (("á", "a"), ("ã", "a"), ("â", "a"), ("é", "e"), ("ê", "e"),
+                 ("í", "i"), ("ó", "o"), ("ô", "o"), ("õ", "o"), ("ú", "u"),
+                 ("ç", "c")):
+        s = s.replace(a, b)
+    import re as _re
+    if any(p in s for p in _REMATE_DINHEIRO) or _re.search(r"\b\d{2,}\b", s):
+        return "caixa"
+    if any(p in s for p in _REMATE_DERROTA):
+        return "erro"
+    return "rimshot"
 
 
 def _duracao_total(trechos):
@@ -803,11 +893,81 @@ def segmentos_do_spec(spec):
         seg = {"inicio": float(tr.get("_inicio_s", 0.0)),
                "dur": float(tr.get("dur", dur)),
                "estilo": ESTILO_DA_EMOCAO.get(emo, "leve"),
-               "intensidade": INTENSIDADE_DA_EMOCAO.get(emo, 1.0)}
+               "intensidade": INTENSIDADE_DA_EMOCAO.get(emo, 1.0),
+               "_flash": bool(tr.get("flash"))}
         if i == len(trechos) - 1 and len(trechos) > 1:
             seg["breque"] = True
         fora.append(seg)
-    return fora
+    return _arco(fora)
+
+
+# A TRILHA CONHECE A ESTRUTURA, E NÃO SÓ A EMOÇÃO (11/09, T2 do PLANO-TRILHA).
+#
+# Até aqui cada trecho virava um segmento com o estilo da EMOÇÃO declarada
+# da fala, e só. A esquete tem quatro partes -- gancho, escalada, virada,
+# remate -- e a trilha não recebia nenhuma delas: recebia seis adjetivos
+# soltos. No vídeo do ônibus (10/09) o arco saiu `triunfo -> deboche -> tenso
+# -> tenso -> triunfo -> leve`: a esquete escala de um jeito e a música de
+# outro, e às vezes ela DESCE no degrau mais alto porque a emoção declarada
+# ali era `neutro`.
+#
+# O arco é fixo de propósito -- é a forma da esquete deste canal:
+#
+#     gancho     entra no meio do compasso, já andando, com peso alto
+#     escalada   sobe 1 semitom por degrau e +8% de andamento, e a
+#                intensidade nunca cai de um degrau para o seguinte
+#     virada     o breque (já existia)
+#     remate     volta no tom e no andamento do degrau mais alto
+#
+# A emoção continua decidindo a PROGRESSÃO (harmonia); a estrutura decide o
+# tom, o andamento e o peso. Música que sobe junto com a escalada é o que
+# faz o espectador sentir que a coisa está piorando -- e "a coisa piora" é
+# o motor cômico inteiro deste canal.
+SEMITONS_POR_DEGRAU = 1
+SEMITONS_MAX = 3
+ANDAMENTO_POR_DEGRAU = 0.08
+ANDAMENTO_MAX = 1.24
+
+
+def _arco(segs):
+    if not segs:
+        return segs
+    n = len(segs)
+    i_gancho = next((i for i, s in enumerate(segs) if not s.get("_flash")), 0)
+    i_remate = n - 1
+    degrau = 0
+    piso_int = 0.0
+    for i, s in enumerate(segs):
+        if s.get("_flash"):
+            s["papel"] = "flash"
+            s["intensidade"] = max(s["intensidade"], 1.15)
+            s["transpor"], s["andamento"] = 0, 1.0
+        elif i == i_gancho:
+            s["papel"] = "gancho"
+            s["intensidade"] = max(s["intensidade"], 1.10)
+            s["transpor"], s["andamento"] = 0, 1.0
+            s["entrada_quente"] = True
+        elif i == i_remate and n > 1:
+            s["papel"] = "remate"
+            # o remate volta no tom e no andamento do degrau mais alto: voltar
+            # ao tom do começo depois do breque leria como "não aconteceu nada"
+            s["transpor"] = min(SEMITONS_MAX, max(0, degrau - 1) * SEMITONS_POR_DEGRAU)
+            s["andamento"] = min(ANDAMENTO_MAX, 1.0 + max(0, degrau - 1) * ANDAMENTO_POR_DEGRAU)
+        else:
+            s["papel"] = "escalada"
+            s["degrau"] = degrau
+            s["transpor"] = min(SEMITONS_MAX, degrau * SEMITONS_POR_DEGRAU)
+            s["andamento"] = min(ANDAMENTO_MAX, 1.0 + degrau * ANDAMENTO_POR_DEGRAU)
+            # a intensidade nunca cai dentro da escalada, e `leve` no meio da
+            # escalada vira `tenso`: o degrau mais alto não pode soar como o
+            # começo só porque a fala ali foi declarada `neutro`
+            s["intensidade"] = max(s["intensidade"], piso_int, 1.0 + 0.04 * degrau)
+            if degrau >= 1 and s["estilo"] == "leve":
+                s["estilo"] = "tenso"
+            piso_int = s["intensidade"]
+            degrau += 1
+        s.pop("_flash", None)
+    return segs
 
 
 # Quanto de BATERIA cada estilo aguenta. Groove por baixo de derrota soa
@@ -1180,22 +1340,56 @@ GENERO_PADRAO = "comedia_leve"
 GENEROS_CAMA = ("comedia_leve", "espera", "lofi", "samba", "funk", "circo")
 GENEROS_SERIOS = ("suspense", "terror", "epico", "novela", "rock", "trap")
 
-# A CAMA PADRÃO SAI DO ASSUNTO, e só entre as camas. `espera` é a musiquinha
-# de call center -- o som de metade das esquetes deste canal acontecendo --,
-# e quando a esquete é de atendimento ela é a escolha certa por conteúdo, não
-# por tom. Fora disso, a comédia leve.
-PALAVRAS_ESPERA = ("atendente", "suporte", "central", "protocolo", "ligacao",
-                   "ligar", "liguei", "telefone", "espera", "aguard", "fila",
-                   "chamado", "sac", "ouvidoria", "call")
+# A CAMA SAI DO ASSUNTO, e só entre as camas (T3 do PLANO-TRILHA, 11/09).
+#
+# Até aqui a tabela conhecia UM assunto -- call center -> `espera` -- e o
+# rodízio de 10/09 passava por cima dela: uma esquete de dinheiro saía em
+# `samba` porque era a vez do samba. O rodízio consertou o defeito certo
+# (`comedia_leve` em 3 de 3 vídeos) e criou um menor: trilha aleatória com
+# boas maneiras.
+#
+# Agora o ASSUNTO decide primeiro e o rodízio DESEMPATA. A lista é só de
+# camas de propósito -- foi casar gênero com assunto que pôs `suspense` numa
+# esquete de taxa de R$ 4,90 em 03/09, e a diferença é que nenhuma destas
+# pode assustar ninguém. Duas pistas no texto é o piso; abaixo disso a
+# esquete não tem assunto sonoro e o rodízio manda, como antes.
+CAMA_DO_ASSUNTO = {
+    "espera": ("atendente", "suporte", "central", "protocolo", "ligacao",
+               "ligar", "liguei", "telefone", "espera", "aguard", "fila",
+               "chamado", "sac", "ouvidoria", "call", "senha", "guiche",
+               "cartorio", "documento", "carimbo", "etapa", "formulario"),
+    "funk":   ("real", "reais", "conto", "pila", "pix", "boleto", "parcela",
+               "juros", "multa", "taxa", "cartao", "divida", "troco", "grana",
+               "dinheiro", "pagar", "pagou", "cobr", "emprest", "caixa"),
+    "lofi":   ("casa", "cozinha", "quarto", "sofa", "geladeira", "marmita",
+               "mae", "pai", "filho", "filha", "vo ", "vovo", "irma", "irmao",
+               "familia", "jantar", "almoco", "cama", "televisao"),
+    "samba":  ("vizinh", "rua", "calcada", "portao", "condominio", "predio",
+               "sindico", "festa", "churrasco", "bar ", "boteco", "cerveja",
+               "onibus", "ponto", "praca", "esquina"),
+    "circo":  ("plano", "regra", "protocolo", "manual", "passo a passo",
+               "tecnica", "metodo", "genial", "esperto", "garanto", "confia",
+               "so tem uma", "infalivel"),
+    "comedia_leve": ("chefe", "reuniao", "escritorio", "trabalho", "email",
+                     "e-mail", "planilha", "relatorio", "cracha", "ponto",
+                     "colega", "estagi", "rh"),
+}
+# compatibilidade: quem importava a lista antiga continua achando o nome
+PALAVRAS_ESPERA = CAMA_DO_ASSUNTO["espera"]
+PISTAS_MIN = 2
 
 
-def genero_permitido(genero, ironia=False, falas=None):
+def genero_permitido(genero, ironia=False, falas=None, por=""):
     """O gênero que vai tocar de verdade, e por quê.
 
     Devolve `(genero, motivo)`. O motivo entra no log: quando a trilha sai
     diferente do que o roteiro pediu, isso tem de aparecer -- é a mesma regra
     de `cenarios.resolver`, e ela existe porque troca silenciosa foi o que
-    escondeu o fundo verde por duas sessões."""
+    escondeu o fundo verde por duas sessões.
+
+    `por` diz DE ONDE veio o pedido: `"rodizio"` é a escolha cega de
+    `roteirista2.trilhaDaVolta`, e ela cede ao assunto quando o texto tem
+    um (T3). Um gênero pedido de propósito pelo roteiro continua mandando."""
     g = str(genero or "").strip().lower()
     if g and g not in GENEROS:
         return _cama_para(falas), f"'{g}' nao existe no catalogo"
@@ -1206,18 +1400,35 @@ def genero_permitido(genero, ironia=False, falas=None):
                 f"'{g}' e registro serio e o roteiro nao declarou ironia "
                 f"(`musica.ironia: true`); trilha dramatica embaixo de piada "
                 f"instrui a plateia a levar a serio")
+    if str(por or "").lower() == "rodizio":
+        do_assunto, pistas = _cama_do_assunto(falas)
+        if do_assunto and do_assunto != g:
+            return do_assunto, (f"o assunto pede '{do_assunto}' ({pistas} "
+                                f"pista(s) nas falas); o rodizio tinha dado '{g}'")
     return g, "pedido"
 
 
-def _cama_para(falas):
-    """A cama que o assunto pede, entre as camas."""
+def _cama_do_assunto(falas):
+    """(cama, n_pistas) que o texto das falas pede, ou (None, 0)."""
     texto = " ".join(str(f or "") for f in (falas or [])).lower()
     for a, b in (("á", "a"), ("ã", "a"), ("â", "a"), ("é", "e"), ("ê", "e"),
-                 ("í", "i"), ("ó", "o"), ("ô", "o"), ("ú", "u"), ("ç", "c")):
+                 ("í", "i"), ("ó", "o"), ("ô", "o"), ("õ", "o"), ("ú", "u"),
+                 ("ç", "c")):
         texto = texto.replace(a, b)
-    if sum(1 for p in PALAVRAS_ESPERA if p in texto) >= 2:
-        return "espera"
-    return GENERO_PADRAO
+    melhor, pontos = None, 0
+    for cama, pistas in CAMA_DO_ASSUNTO.items():
+        n = sum(texto.count(p) for p in pistas)
+        if n > pontos:
+            melhor, pontos = cama, n
+    if pontos >= PISTAS_MIN:
+        return melhor, pontos
+    return None, pontos
+
+
+def _cama_para(falas):
+    """A cama que o assunto pede, entre as camas; sem assunto, a padrão."""
+    cama, _ = _cama_do_assunto(falas)
+    return cama or GENERO_PADRAO
 
 
 def trilha(dur_s, estilo="leve", bpm=None, semente=3, sr=SR, segmentos=None,
@@ -1283,7 +1494,13 @@ def trilha(dur_s, estilo="leve", bpm=None, semente=3, sr=SR, segmentos=None,
 
     def por(bus, sinal, em, g=1.0):
         i = int(em * sr)
-        if i >= len(bus):
+        # A ENTRADA QUENTE COMEÇA ANTES DO ZERO (T2): o gancho entra no meio
+        # do compasso, e a metade que ficou antes do vídeo simplesmente não
+        # toca. Sem este corte um índice negativo escreveria no fim do buffer.
+        if i < 0:
+            sinal = sinal[-i:]
+            i = 0
+        if i >= len(bus) or not len(sinal):
             return
         m = min(len(sinal), len(bus) - i)
         bus[i:i + m] += sinal[:m].astype(np.float32) * g
@@ -1293,12 +1510,17 @@ def trilha(dur_s, estilo="leve", bpm=None, semente=3, sr=SR, segmentos=None,
                       "intensidade": 1.0}]
 
     c = 0
+    entrada_quente = bool(segmentos and segmentos[0].get("entrada_quente"))
     for seg in segmentos:
         est = seg.get("estilo", estilo)
         acordes = _GRAUS.get(est, _GRAUS["leve"])
         k_int = float(seg.get("intensidade", 1.0))
         k_bat = PESO_RITMO.get(est, 1.0) * k_int * float(gen.get("peso", 1.0))
-        compasso = 4 * 60.0 / (bpm * (0.85 + 0.15 * k_int))
+        # A ESTRUTURA MANDA NO TOM E NO ANDAMENTO (T2): cada degrau da
+        # escalada sobe um semitom e 8% de andamento -- ver `_arco`.
+        transpor = float(seg.get("transpor", 0.0))
+        andamento = float(seg.get("andamento", 1.0))
+        compasso = 4 * 60.0 / (bpm * (0.85 + 0.15 * k_int) * andamento)
         colcheia = compasso / 8.0
         t = float(seg.get("inicio", 0.0))
         fim = min(t + float(seg.get("dur", 0.0)), dur_s)
@@ -1306,13 +1528,25 @@ def trilha(dur_s, estilo="leve", bpm=None, semente=3, sr=SR, segmentos=None,
         # antes do punchline é o instrumento mais barato da comédia.
         if seg.get("breque"):
             t += min(0.85, max(0.0, (fim - t) * 0.35))
+        # ENTRADA QUENTE (T2): o gancho começa no meio do compasso, já
+        # andando -- o primeiro tempo forte ficou antes do vídeo começar.
+        if seg.get("entrada_quente"):
+            t -= compasso / 2.0
+        primeiro = True
         while t < fim:
             grau = acordes[c % len(acordes)]
+            # O CORTE CAI NA BATIDA (T6). Cada segmento começa no início do
+            # trecho, então o tempo forte já coincide com o corte de plano
+            # por construção; o que faltava era o corte ser SENTIDO. O bumbo
+            # do primeiro compasso de cada trecho entra 25% mais forte.
+            acento = 1.25 if (primeiro and not seg.get("entrada_quente")) else 1.0
+            primeiro = False
             # --- RITMO. Onde cai cada peça é a LEVADA do gênero: o mesmo
             # motor toca pop, tamborzão, samba, rock ou half-time só
             # mudando esta tabela (ver LEVADAS).
             for pos, gg in levada["bumbo"]:
-                por(ritmo, bumbo, t + pos * compasso, gg * k_bat)
+                por(ritmo, bumbo, t + pos * compasso,
+                    gg * k_bat * (acento if pos == 0 else 1.0))
             for pos, gg in levada["caixa"]:
                 por(ritmo, tampa, t + pos * compasso, gg * 0.9 * k_bat)
             ult = len(levada["chimbal"]) - 1
@@ -1325,18 +1559,18 @@ def trilha(dur_s, estilo="leve", bpm=None, semente=3, sr=SR, segmentos=None,
             # gênero: baixo que anda embaixo de suspense desmancha a tensão,
             # e nota parada embaixo de funk mata o que ele tem de melhor.
             if gen["baixo"] == "pedal":
-                por(grave, nota_grave(_TONICA * 2 ** (grau[0] / 12.0) / 4.0,
+                por(grave, nota_grave(_TONICA * 2 ** ((grau[0] + transpor) / 12.0) / 4.0,
                                       compasso, sr), t, 0.9 * k_int)
             elif gen["baixo"] == "808":
                 for j, dur_n in ((0.0, compasso * 0.45), (0.5, compasso * 0.30),
                                  (0.75, compasso * 0.22)):
-                    semi = grau[0] + (7 if j >= 0.75 else 0)
+                    semi = grau[0] + transpor + (7 if j >= 0.75 else 0)
                     por(grave, nota_grave(_TONICA * 2 ** (semi / 12.0) / 4.0,
                                           dur_n, sr),
                         t + j * compasso, 0.95 * k_int)
             else:
                 for j in range(8):
-                    semi = grau[0] + (7 if j >= 6 else 0)
+                    semi = grau[0] + transpor + (7 if j >= 6 else 0)
                     por(grave, nota_grave(_TONICA * 2 ** (semi / 12.0) / 4.0,
                                           colcheia * 0.9, sr),
                         t + j * colcheia, (0.9 if j % 2 == 0 else 0.55) * k_int)
@@ -1346,7 +1580,7 @@ def trilha(dur_s, estilo="leve", bpm=None, semente=3, sr=SR, segmentos=None,
             # arpejo: arpejo rápido de naipe de cordas vira confusão.
             if gen["timbre"] in ("cordas", "orgao"):
                 for idx in range(3):
-                    semi = grau[idx] + oitava
+                    semi = grau[idx] + oitava + transpor
                     por(harmonia, instrumento(_TONICA * 2 ** (semi / 12.0),
                                               compasso * 0.96, sr),
                         t, 0.30 * k_int)
@@ -1355,7 +1589,8 @@ def trilha(dur_s, estilo="leve", bpm=None, semente=3, sr=SR, segmentos=None,
                 for j, idx in enumerate(ordem):
                     if rng.random() < 0.12:
                         continue
-                    semi = grau[idx] + oitava + (12 if rng.random() < 0.18 else 0)
+                    semi = (grau[idx] + oitava + transpor
+                            + (12 if rng.random() < 0.18 else 0))
                     por(harmonia, instrumento(_TONICA * 2 ** (semi / 12.0),
                                               colcheia * 2.2, sr),
                         t + j * colcheia, (0.30 if j % 2 else 0.42) * k_int)
@@ -1377,8 +1612,10 @@ def trilha(dur_s, estilo="leve", bpm=None, semente=3, sr=SR, segmentos=None,
     out = np.tanh(out * 0.9) / math.tanh(0.9)
     p = float(np.max(np.abs(out))) or 1.0
     out = (out * (0.8 / p)).astype(np.float32)
-    # entrada e saída: a trilha nasce e morre fora do quadro
-    fi, fo = int(0.9 * sr), int(1.4 * sr)
+    # entrada e saída: a trilha nasce e morre fora do quadro. Com ENTRADA
+    # QUENTE (T2) a rampa de entrada cai de 0,9 s para 0,12 s: a música já
+    # está andando quando o vídeo começa, e é o que "já andando" quer dizer.
+    fi, fo = int((0.12 if entrada_quente else 0.9) * sr), int(1.4 * sr)
     if n > fi + fo:
         out[:fi] *= np.linspace(0, 1, fi)
         out[-fo:] *= np.linspace(1, 0, fo)
@@ -1529,7 +1766,8 @@ def mixar(voz_wav, eventos, destino, musica=None, dur_s=None, sr=SR, bipes=None)
                 # declarada, e a troca sempre diz o motivo.
                 gen, motivo = genero_permitido(cfg.get("genero"),
                                                ironia=bool(cfg.get("ironia")),
-                                               falas=cfg.get("falas"))
+                                               falas=cfg.get("falas"),
+                                               por=cfg.get("por", ""))
                 if motivo != "pedido":
                     print(f"[musica] '{cfg.get('genero')}' -> '{gen}': {motivo}")
                 # SEMENTE POR VÍDEO: duas esquetes do mesmo gênero não podem
@@ -1541,11 +1779,21 @@ def mixar(voz_wav, eventos, destino, musica=None, dur_s=None, sr=SR, bipes=None)
                                segmentos=segs, genero=gen)
                 g_nome = gen or GENERO_PADRAO
                 if segs:
+                    def _rot(s):
+                        p = s.get("papel", "")
+                        extra = ""
+                        if p == "escalada":
+                            extra = f"+{int(s.get('transpor', 0))}st"
+                        elif p == "remate":
+                            extra = "volta"
+                        elif p == "gancho":
+                            extra = "quente"
+                        return f"{s.get('estilo', 'leve')}({extra})" if extra \
+                            else s.get("estilo", "leve")
                     print(f"[musica] genero {g_nome} "
                           f"({GENEROS[g_nome]['timbre']} + {GENEROS[g_nome]['levada']}, "
                           f"{float(cfg.get('bpm') or GENEROS[g_nome]['bpm']):.0f} bpm); "
-                          "por trecho: "
-                          + " -> ".join(s.get("estilo", "leve") for s in segs)
+                          "arco: " + " -> ".join(_rot(s) for s in segs)
                           + (" (com breque no punchline)"
                              if any(s.get("breque") for s in segs) else ""))
                 else:
