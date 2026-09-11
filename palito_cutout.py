@@ -4593,7 +4593,7 @@ def _fazer_voltar(por_ator, fora_de_cena):
 INTERVALO_GESTO_S = 3.5
 
 
-def _trocar_gesto_sem_licenca(por_ator, fala, expressao=None):
+def _trocar_gesto_sem_licenca(por_ator, fala, expressao=None, idioma=None):
     """`acenar` sem cumprimento na fala vira `apresentar`.
 
     POR QUE (04/09, ciclo 25 -- queixa 2 do dono do projeto, a metade que
@@ -4628,7 +4628,7 @@ def _trocar_gesto_sem_licenca(por_ator, fala, expressao=None):
     for chave, acoes in (por_ator or {}).items():
         for a in acoes or []:
             nome = a.get("nome")
-            if ACOES.tem_licenca(nome, fala, a.get("motivo")):
+            if ACOES.tem_licenca(nome, fala, a.get("motivo"), idioma):
                 continue
             novo = ACOES.TROCA_SEM_LICENCA.get(nome)
             if novo:
@@ -5508,7 +5508,9 @@ def render(pasta_partes, spec, saida, tmpdir=None, amostra=0):
         # E O GESTO QUE A FALA NÃƒO PEDE TROCA DE NOME ANTES DE TUDO: o
         # raleamento escolhe QUEM FICA pela ordem, e escolher entre gestos que
         # ainda vÃ£o ser trocados Ã© decidir sobre o que nÃ£o vai acontecer.
-        _trocar_gesto_sem_licenca(por_ator, tr.get("fala"), tr.get("expressao"))
+        # A LICENCA E' DO IDIOMA DO SPEC (12/09, GUIA §46): sem `idioma`, pt-BR.
+        _trocar_gesto_sem_licenca(por_ator, tr.get("fala"), tr.get("expressao"),
+                                  spec.get("idioma"))
         _ralear_gestos(por_ator, float(tr.get("dur") or 0.0), gancho=(i_tr == 0))
         if i_tr == 0 and os.environ.get("GANCHO_ENTRA") != "1":
             _gancho_ja_em_cena(por_ator, falante)
