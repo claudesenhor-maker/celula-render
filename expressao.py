@@ -478,7 +478,12 @@ def prosodia(nome, intensidade=1.0, base=None):
 # lista de itens.
 RESPIRO_PADRAO = 0.34
 RESPIRO_ANTES_DA_TIRADA = 0.85
-RESPIRO_FINAL = 0.60
+# 0,60 -> 1,90 EM 11/09 (T1 do PLANO-TRILHA). O stinger do remate cai 0,8 s
+# depois da última sílaba e a assinatura do canal em 1,25 s -- a faixa em
+# que "a ficha cai" é medida em +0,8 a +1,7 s. Com 0,6 s de cauda os dois
+# seriam cortados pelo fim do vídeo. O quadro segura o rosto da virada
+# enquanto o som resolve, que é o que um remate pede.
+RESPIRO_FINAL = 1.90
 
 
 def respiro_sugerido(i, total):
