@@ -1832,7 +1832,15 @@ def aplicar(acoes, t_rel, rig, dur_trecho):
         else:
             u = (t_rel - de) / (ate - de)
             decorrido, passou = (t_rel - de) * dur_trecho, False
-        pilha.append(((de, i_a),
+        # QUEM COMECOU ANTES DO TRECHO CONTA COMO TENDO COMECADO EM 0 (11/09).
+        # O gancho passou a comecar em andamento (`de` negativo, ver
+        # `palito_cutout._gancho_em_andamento`), e com a chave crua ele ia
+        # para BAIXO de `parado`/`gesticular` -- que o motor injeta em 0 e
+        # antes na lista -- e os dois escreviam por cima dos bracos do susto:
+        # o primeiro quadro saia de novo com o boneco de bracos caidos. No
+        # empate em 0 quem desempata e' a ordem da lista, e as camadas de base
+        # vem primeiro: a acao do roteiro fica por cima, como deve.
+        pilha.append(((max(de, 0.0), i_a),
                       (f, u, env, so_membros, decorrido, de, ate, a, passou,
                        nome)))
 
