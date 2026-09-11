@@ -311,8 +311,21 @@ def _descricao_objeto_en(chave):
         "caixa_de_papelao": "a closed cardboard box",
         "marmita": "a plastic lunch box with a lid",
         "guarda_chuva_quebrado": "a broken umbrella with bent ribs",
+        # 11/09: "a carta" desenhou uma ESPATULA -- a palavra em portugues
+        # nao ancora nada no modelo, e o pedido de "cabo" completou o resto.
+        # PARDO e nao branco: objeto branco em fundo branco e' apagado pelo
+        # recorte por cor (a segunda tentativa perdeu o miolo do envelope)
+        "carta": "a cartoon brown paper envelope drawn with thick black "
+                 "outlines, with a small red stamp",
     }
-    return d.get(chave, "a " + chave.replace("_", " "))
+    if chave in d:
+        return d[chave]
+    # A CHAVE VEM DO ROTEIRISTA, EM PORTUGUES (`situacao.chave_visual`), e o
+    # prompt e' em ingles. Solta, a palavra vira qualquer coisa; dita como o
+    # que ela e' -- o nome em portugues de um objeto de mao --, o modelo tem
+    # por onde comecar.
+    return (f"the everyday hand-held object called \"{chave.replace('_', ' ')}\" "
+            f"in Brazilian Portuguese")
 
 
 def _recortar_fundo(dados):
@@ -400,6 +413,30 @@ def _recortar_fundo(dados):
     return buf.getvalue()
 
 
+def prompt_objeto(chave):
+    """O pedido de imagem de um objeto -- UM lugar só, para quem gera fora do
+    render (ferramentas, n8n) pedir exatamente o mesmo texto."""
+    return ". ".join([
+        # DESENHO, DITO NA FRENTE (11/09): sem isto o FLUX devolveu FOTO de um
+        # envelope -- o estilo pedido no fim do prompt perde para o substantivo
+        # do começo, que é onde o modelo ancora (a mesma lição do `a tv remote`)
+        "simple flat 2D cartoon drawing, not a photo: "
+        + _descricao_objeto_en(chave),
+        "ISOLATED single object centred on a plain flat pure white background",
+        # o rig gruda o objeto no osso da mão por um ponto de pega, e o objeto
+        # na DIAGONAL deixa uma ponta para isso. NEM "CABO" NEM "MÃO" (11/09):
+        # "with a clear handle" fez de um envelope uma ESPÁTULA, e "the part a
+        # hand would hold" desenhou a MÃO segurando -- o modelo desenha o
+        # substantivo que aparece, e a negação "no hands" não o apaga.
+        "lying diagonally, from the lower left to the upper right",
+        "no scenery, no shadow, no ground line",
+        "no other object next to it, nothing else in the picture",
+        "thick uniform black outline",
+        "100% flat colours, no shading, no gradient, no texture",
+        "limited high-contrast palette",
+    ])
+
+
 def gerar_objeto(chave, pasta_destino):
     """Gera o objeto `chave` com alfa, grava em `pasta_destino` e sobe.
 
@@ -409,19 +446,7 @@ def gerar_objeto(chave, pasta_destino):
     chave = chave_valida(chave)
     if not chave:
         return None
-    prompt = ". ".join([
-        _descricao_objeto_en(chave),
-        "ISOLATED single object centred on a plain flat pure white background",
-        # o rig gruda o objeto no osso da mão por um ponto de pega; objeto sem
-        # cabo ou alça legível fica flutuando ao lado do corpo
-        "seen from the side, with a clear handle or graspable part pointing "
-        "to the lower left",
-        "no scenery, no shadow, no ground line, no hands holding it, no person",
-        "no other object next to it, nothing else in the picture",
-        "thick uniform black outline",
-        "100% flat colours, no shading, no gradient, no texture",
-        "limited high-contrast palette",
-    ])
+    prompt = prompt_objeto(chave)
     print(f"[sob-demanda] gerando objeto '{chave}'...")
     dados = _cloudflare(prompt, "photo, 3d render, realistic, gradient, "
                                 "shading, text, letters, watermark, frame, "
