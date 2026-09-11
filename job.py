@@ -10,7 +10,7 @@ Variáveis de ambiente:
   CALLBACK_URL          webhook do n8n que retoma o nó Wait
   SUPABASE_URL          https://SEUPROJETO.supabase.co
   SUPABASE_SERVICE_KEY  service_role key
-  SUPABASE_BUCKET       padrão: toonzueira
+  SUPABASE_BUCKET       obrigatória (o Action define)
 """
 import os, sys, re, time, json, traceback
 from pathlib import Path
@@ -28,7 +28,7 @@ from palito_v5 import render_spec
 
 SB = os.environ["SUPABASE_URL"].rstrip("/")
 KEY = os.environ["SUPABASE_SERVICE_KEY"]
-BUCKET = os.environ.get("SUPABASE_BUCKET", "toonzueira")
+BUCKET = os.environ["SUPABASE_BUCKET"]   # o Action define; sem padrao aqui (11/09)
 
 
 def subir(local, remoto, mime="video/mp4", tentativas=4):
