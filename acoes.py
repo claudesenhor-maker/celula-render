@@ -191,6 +191,74 @@ LICENCA = {
                          "ta osso", "desisto", "cansei"),
 }
 
+# A LICENCA E' DO IDIOMA (12/09, GUIA §46 -- o segundo canal, em ingles).
+#
+# A tabela acima procura PALAVRA na fala, e palavra e' da lingua: numa fala
+# em ingles nenhuma pista de `LICENCA` aparece, todo gesto vira "sem
+# licenca" e o motor troca todos pelo gesto da emocao -- o video inteiro com
+# a mao na cintura. Uma lista unica com as duas linguas tambem nao serve:
+# "no" e' negacao em ingles e "em o" em portugues, "me" e' pronome nas duas
+# com sentidos diferentes. Cada lingua tem o seu jogo, e `tem_licenca` o
+# escolhe pelo `idioma` do spec. O pt-BR e' a tabela de cima, sem copia.
+#
+# O INGLES NAO ESTA CALIBRADO (lei 79): foi escrito pela mesma regra de cada
+# gesto -- `apontar` quer alvo ou imperativo dirigido ao outro, `acenar` quer
+# cumprimento ou despedida -- e o primeiro corpus em ingles e' o que vai
+# dizer quais listas estao curtas. `regua_movimento.py` mede isso.
+LICENCA_EN = {
+    "apontar": ("this", "that", "these", "those", "look", "there", "here",
+                "see", "you", "your", "yours",
+                # imperativo dirigido ao outro: quem manda, aponta
+                "sign", "pay", "take", "grab", "bring", "give", "explain",
+                "answer", "listen", "repeat", "check", "go ", "sit", "read",
+                "show me", "hand it"),
+    "apontar_para_si": ("i ", "i'", "me", "my", "mine", "myself", "am ", "i'm",
+                        "i've", "i did", "i have", "i got"),
+    "acenar": ("hi", "hey", "hello", "bye", "good morning", "good afternoon",
+               "good night", "what's up", "sup", "see ya", "see you", "later",
+               "thanks", "thank you", "wav"),
+    "negar": ("no", "not", "never", "nothing", "none", "nope", "nah", "no way",
+              "forget it", "stop it", "don't", "won't", "can't", "isn't",
+              "ain't", "neither"),
+    "encolher_ombros": ("dunno", "don't know", "no idea", "maybe", "who knows",
+                        "whatever", "either way", "oh well", "what can you do",
+                        "figures", "too bad", "my bad", "that's it", "it is what",
+                        "guess so", "beats me", "so much for"),
+    "comemorar": ("did it", "got it", "worked", "won", "yes!", "yay", "finally",
+                  "thank god", "phew", "nailed it", "nice", "sweet"),
+    "mao_no_queixo": ("i think", "think", "wonder", "hmm", "doubt", "weird",
+                      "strange", "how come", "what do you mean", "don't get it",
+                      "wait", "hold on", "let me see", "makes sense", "i swear",
+                      "not sure", "hang on"),
+    # --- os tres gestos de 05/09 ---
+    "conferir_relogio": ("time", "o'clock", "late", "deadline", "minute",
+                         "minutes", "hour", "hours", "today", "tomorrow", "early",
+                         "half an hour", "five minutes", "due", "clock", "pm",
+                         "am ", "a.m", "p.m"),
+    "bater_no_bolso": ("where's", "where is", "gone", "lost", "forgot", "found",
+                       "wallet", "key", "keys", "phone", "id ", "license",
+                       "where did", "missing"),
+    "esfregar_o_rosto": ("tired", "can't take", "again", "one more time", "help",
+                         "oh my god", "omg", "jesus", "ugh", "i give up", "done with",
+                         "so over", "kill me", "exhausted"),
+}
+LICENCA_POR_IDIOMA = {"pt-BR": LICENCA, "en-US": LICENCA_EN}
+
+
+def licenca_de(idioma=None):
+    """A tabela de licenca da lingua do spec. Prefixo basta ('en' -> en-US);
+    lingua sem tabela cai no pt-BR, e avisa -- gesto medido pela regua da
+    lingua errada e' defeito calado (lei 65)."""
+    cod = str(idioma or "pt-BR")
+    if cod in LICENCA_POR_IDIOMA:
+        return LICENCA_POR_IDIOMA[cod]
+    for k in LICENCA_POR_IDIOMA:
+        if k.split("-")[0] == cod.split("-")[0]:
+            return LICENCA_POR_IDIOMA[k]
+    print(f"[licenca] idioma {cod!r} sem tabela de licenca; usando pt-BR")
+    return LICENCA
+
+
 # QUANDO O GESTO NÃO TEM LICENÇA, QUAL ENTRA NO LUGAR.
 #
 # Só `acenar` está aqui, e a razão é a lei 37: dos quinze `acenar` do corpus,
@@ -332,9 +400,10 @@ _VAZIAS = {"para", "pelo", "pela", "ao", "aos", "com", "que", "onde", "esta",
            "imaginario", "imaginaria", "lado", "cima", "baixo", "frente"}
 
 
-def tem_licenca(nome, fala, motivo=None):
-    """A fala pede este gesto? Gesto fora de `LICENCA` não exige nada."""
-    palavras = LICENCA.get(nome)
+def tem_licenca(nome, fala, motivo=None, idioma=None):
+    """A fala pede este gesto? Gesto fora de `LICENCA` não exige nada.
+    `idioma` escolhe a tabela (ver `LICENCA_POR_IDIOMA`); sem ele, pt-BR."""
+    palavras = licenca_de(idioma).get(nome)
     if not palavras:
         return True
     limpa = sem_acento(fala)
