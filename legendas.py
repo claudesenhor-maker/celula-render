@@ -83,7 +83,13 @@ a o as os um uma uns umas de do da dos das em no na nos nas por pra pro
 para com sem sob sobre entre ate ate' e ou mas que se ao aos a` as` num numa
 meu minha meus minhas teu tua seu sua nosso nossa este esta esse essa aquele
 aquela isso isto seu ja nao muito mais tao
+an the of to in on at for with and or but if than that this these those my
+your his her our their its is are was be not so very
 """.split())
+# AS DUAS LINGUAS NA MESMA LISTA (12/09, o segundo canal, em ingles). Aqui a
+# uniao e' segura: a lista so' decide onde a legenda QUEBRA, e uma palavra
+# inglesa nao aparece numa fala em portugues -- as que coincidem ("a", "no",
+# "as", "do") ja eram presas nas duas.
 
 COR_TEXTO = (255, 255, 255, 255)
 
@@ -542,6 +548,9 @@ _RUIDO_TITULO = {
     "oxe", "mano", "velho", "bicho", "rapaz", "uai", "vixe", "eita",
     "né", "ne", "pô", "po", "viu", "ué", "ue", "poxa", "nossa",
     "firmeza", "beleza", "vacilei", "sério", "serio",
+    # ingles (12/09): a mesma familia -- interjeicao e vocativo
+    "dude", "man", "bro", "yo", "hey", "ugh", "okay", "ok", "yeah", "seriously",
+    "honestly", "like", "whoa", "damn", "geez", "jeez",
 }
 
 # NÃO ENTRAM NO FIM DO TÍTULO. Um título cortado em "por", "de" ou "com" fica
@@ -553,6 +562,10 @@ _NAO_TERMINA = {
     "pra", "para", "com", "sem", "que", "e", "o", "a", "os", "as", "um",
     "uma", "meu", "minha", "seu", "sua", "ao", "aos", "à", "às", "num",
     "numa", "pelo", "pela", "se", "mas", "ou",
+    # ingles (12/09)
+    "of", "to", "in", "on", "at", "for", "with", "and", "or", "but", "the",
+    "an", "my", "your", "his", "her", "our", "their", "by", "from", "into",
+    "if", "so", "than", "that", "this", "is", "are", "was", "be",
 }
 
 
