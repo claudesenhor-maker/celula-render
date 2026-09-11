@@ -57,7 +57,7 @@ Uso:
     python3 preparar_assets.py --tudo     # refaz todos
 
 Variaveis de ambiente:
-    SUPABASE_URL, SUPABASE_SERVICE_KEY, SUPABASE_BUCKET (padrao: toonzueira)
+    SUPABASE_URL, SUPABASE_SERVICE_KEY, SUPABASE_BUCKET (obrigatorias; o Action define)
 """
 import argparse, io, json, os, sys, zipfile
 import numpy as np
@@ -71,7 +71,7 @@ import segmentar as SEG
 
 SB = os.environ["SUPABASE_URL"].rstrip("/")
 KEY = os.environ["SUPABASE_SERVICE_KEY"]
-BUCKET = os.environ.get("SUPABASE_BUCKET", "toonzueira")
+BUCKET = os.environ["SUPABASE_BUCKET"]   # o Action define; sem padrao aqui (11/09)
 H = {"apikey": KEY, "Authorization": f"Bearer {KEY}"}
 
 # Os 6 ossos sem os quais o palito_cutout.py nao consegue montar um frame
