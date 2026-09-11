@@ -3637,6 +3637,17 @@ def montar_frame(camada, cenario, cam, quadril_x=W / 2, camadas=None,
 # arte comeÃ§a a aparecer ampliada quatro vezes -- a folha do personagem Ã©
 # desenhada uma vez sÃ³, e nÃ£o hÃ¡ de onde tirar mais pixel.
 CLOSE_FALANTE = 1.90
+# O CLOSE DO GANCHO E' NO ROSTO (11/09, ordem do dono: "primeiro quadro com
+# acao e close"). O 1,90 acima enquadra UM ator de corpo inteiro -- e' o
+# close de conversa, e no feed ele le como "um boneco em pe". No trecho 0
+# a camera vai ao ROSTO e ao tronco: 2,50 poe a cabeca com ~1/4 da altura
+# do quadro. O limite e' o mesmo de sempre, a folha desenhada uma vez so:
+# 2,50 amplia a arte ~1,6x sobre a escala dela, conferido na previa antes
+# de subir; acima de ~2,8 o traco comeca a borrar.
+CLOSE_GANCHO = float(os.environ.get("CLOSE_GANCHO", "2.50"))
+# e o recuo do cold open, NESTE plano, e' menor: 18% sobre 2,50 levaria o
+# quadro 0 a 2,95, justamente onde o traco borra.
+COLD_OPEN_FORCA_CLOSE = 0.08
 
 
 def _terco_do_trecho(i, n_atores):
@@ -3748,7 +3759,8 @@ def _close_no_falante(i, n_trechos, n_atores):
 
 
 def _enquadramento(i, n_trechos, n_atores, t, centro_corpo=None,
-                   close=False, centro_rosto=None, teto_par=1.0):
+                   close=False, centro_rosto=None, teto_par=1.0,
+                   z_close=None):
     """Plano do trecho `i`: quanto a cÃ¢mera fecha, e onde ela centra.
 
     POR QUE ISTO EXISTE
@@ -3799,7 +3811,7 @@ def _enquadramento(i, n_trechos, n_atores, t, centro_corpo=None,
     # ator, nÃ£o o par --, entÃ£o nem o teto nem os cinco degraus valem para
     # ele. O push-in de 3,5% continua, que Ã© o que separa vÃ­deo de foto.
     if close:
-        z = CLOSE_FALANTE * (1.0 + 0.035 * max(0.0, min(1.0, t)))
+        z = (z_close or CLOSE_FALANTE) * (1.0 + 0.035 * max(0.0, min(1.0, t)))
         meia = 0.5 / z
         alvo = centro_rosto if centro_rosto is not None else centro_corpo
         if alvo is None:
@@ -5776,9 +5788,12 @@ def render(pasta_partes, spec, saida, tmpdir=None, amostra=0):
             # desce pelo tronco. Sem o crÃ¢nio -- folha sem cabeÃ§a separada
             # -- cai no centro do corpo, que Ã© o comportamento de antes.
             centro_rosto = None
+            # o trecho 0 fecha no ROSTO (CLOSE_GANCHO); os outros closes
+            # continuam enquadrando o corpo de quem fala
+            z_close = CLOSE_GANCHO if i_tr == 0 else CLOSE_FALANTE
             if fecha and pecas_falante and "cranio" in pecas_falante:
                 pers_f = posto[falante][0]
-                z_prev = CLOSE_FALANTE * (1.0 + 0.035 * max(0.0, min(1.0, t)))
+                z_prev = z_close * (1.0 + 0.035 * max(0.0, min(1.0, t)))
                 topo = (pecas_falante["cranio"][1]
                         - pers_f.altura_cranio() * pers_f.escala)
                 hjan = H / z_prev
@@ -5786,7 +5801,8 @@ def render(pasta_partes, spec, saida, tmpdir=None, amostra=0):
             z_tr, zy = _enquadramento(i_tr, n_trechos, len(chaves), t,
                                       centro_corpo, close=fecha,
                                       centro_rosto=centro_rosto,
-                                      teto_par=teto_par)
+                                      teto_par=teto_par,
+                                      z_close=z_close)
             # A AÃ‡ÃƒO NÃƒO COMANDA MAIS A CÃ‚MERA (03/09, queixa 5 do dono do
             # projeto: *"enquadramento nÃ£o foi resolvido, o personagem acena
             # e o fundo inteiro vai com ele"*).
@@ -5873,7 +5889,8 @@ def render(pasta_partes, spec, saida, tmpdir=None, amostra=0):
                 jan0 = COLD_OPEN_S / max(float(tr.get("dur") or 1.0), 0.2)
                 if t < jan0:
                     u = t / max(jan0, 1e-6)
-                    cam["zoom"] *= 1.0 + COLD_OPEN_FORCA * (1.0 - u) ** 1.6
+                    forca0 = COLD_OPEN_FORCA_CLOSE if fecha else COLD_OPEN_FORCA
+                    cam["zoom"] *= 1.0 + forca0 * (1.0 - u) ** 1.6
             # A MIRA DA AÃ‡ÃƒO Ã‰ RELATIVA AO CORPO, NÃƒO Ã€ TELA (29/08).
             #
             # Uma aÃ§Ã£o pode querer olhar mais para cima -- o `susto` pede
