@@ -42,7 +42,7 @@ import requests
 
 SB = (os.environ.get("SUPABASE_URL") or "").rstrip("/")
 KEY = os.environ.get("SUPABASE_SERVICE_KEY", "")
-BUCKET = os.environ.get("SUPABASE_BUCKET", "toonzueira")
+BUCKET = os.environ.get("SUPABASE_BUCKET", "")   # o Action define; sem padrao aqui (11/09)
 CF_CONTA = os.environ.get("CF_ACCOUNT_ID", "04483caa8b5f9674b84399fcdd1ef9d5")
 CF_TOKEN = os.environ.get("CF_API_TOKEN", "")
 
