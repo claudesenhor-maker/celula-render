@@ -3715,6 +3715,15 @@ def _close_no_falante(i, n_trechos, n_atores):
         lido como troca de plano. Com menos de trÃªs trechos nÃ£o hÃ¡
         alternÃ¢ncia que valha: o vÃ­deo inteiro viraria um close sÃ³.
     """
+    # O PRIMEIRO QUADRO E' CLOSE, COM QUALQUER ELENCO (11/09, ordem do dono:
+    # "implemente o primeiro quadro com acao e close"). A regra de 01/09
+    # (mais abaixo) ja fechava o trecho 0 -- mas so com DOIS em cena e tres
+    # trechos ou mais. No monologo o gancho abria no degrau 1,60 do ciclo,
+    # mirando o MEIO DO CORPO: boneco de corpo inteiro no primeiro quadro,
+    # que e' o que os quadros publicados mostram. Aqui o trecho 0 fecha no
+    # ROSTO de quem fala sempre; o resto da alternancia segue como era.
+    if i == 0:
+        return True
     if n_atores < 2 or n_trechos < 3:
         return False
     # O GANCHO FECHA (01/09, R1 do DIAGNOSTICO.md). Todo vÃ­deo do canal
@@ -4761,6 +4770,67 @@ def _gancho_ja_em_cena(por_ator, falante):
               f"camera nao pode fechar em quem esta fora do quadro")
 
 
+# O GANCHO COMECA NO MEIO DO GESTO (11/09).
+#
+# Em que ponto do gesto o quadro 0 cai. `susto` tem o pico em u~0,31
+# (`_pulso(u * 1,6)`), `pular` e `tropecar` perto de 0,5; 0,30 poe os tres no
+# trecho mais visivel da curva -- bracos ja no alto, corpo ja fora do repouso.
+PRE_ROLL_GANCHO_U = 0.30
+
+
+def _gancho_em_andamento(por_ator, falante):
+    """O PRIMEIRO QUADRO TEM ACAO: o gesto do gancho ja comeca em andamento.
+
+    Ordem do dono (11/09): *"implemente o primeiro quadro com acao e close"*.
+    Os quadros publicados abriam com o boneco EM PE, e por dois motivos que
+    se somavam:
+
+      * o gesto do gancho comeca em `de: 0` -- e em u=0 toda acao e' o
+        repouso. O susto so chega ao pico no frame ~7, e o quadro 0 (a capa
+        que o feed mostra antes de o video tocar) e' sempre o boneco parado;
+      * quando o roteirista escolhia `entrar_correndo`, `_gancho_ja_em_cena`
+        a descartava (com razao) e nada entrava no lugar: sem acao nenhuma.
+
+    A SAIDA E' COMECAR A ACAO ANTES DO VIDEO. `ACOES.aplicar` aceita `de`
+    negativo sem caso especial: em t=0 o `u` ja vale PRE_ROLL_GANCHO_U e o
+    ataque do envelope ja passou (o tempo decorrido conta desde `de`). A
+    janela termina onde terminava -- so o comeco e' puxado para tras.
+
+    A ACAO E' COPIADA, NUNCA ALTERADA NO SPEC: o som do gancho e a ficha
+    tecnica leem o `de` original, e um `de` negativo la mandaria o efeito
+    sonoro para antes do video comecar.
+    """
+    if not falante or falante not in por_ator:
+        return
+    acoes = list(por_ator.get(falante) or [])
+    idx = None
+    for k, a in enumerate(acoes):
+        if (a.get("nome") in ACOES.ACOES_DE_GANCHO
+                and a.get("nome") not in ACOES.ACOES_DE_ENTRADA
+                and float(a.get("de", 0.0)) <= 0.15):
+            idx = k
+            break
+    if idx is None:
+        # Sem gancho de quem fala -- em geral porque a entrada acabou de ser
+        # descartada. O gancho automatico de sempre, agora no falante.
+        acoes.insert(0, {"nome": "susto", "de": 0.0, "ate": 0.42, "forca": 1.0,
+                         "motivo": "gancho: o primeiro quadro tem acao (11/09)"})
+        idx = 0
+        print(f"[gancho] trecho 0: {falante} sem acao de gancho -- susto "
+              f"injetado no lugar")
+    a = dict(acoes[idx])
+    ate = float(a.get("ate", 0.42))
+    if ate <= 0.0:
+        ate = 0.42
+    u0 = PRE_ROLL_GANCHO_U
+    a["de"] = -u0 * ate / (1.0 - u0)
+    a["ate"] = ate
+    acoes[idx] = a
+    por_ator[falante] = acoes
+    print(f"[gancho] trecho 0: {a.get('nome')} de {falante} comeca em andamento "
+          f"(u={u0:.2f} no quadro 0; de={a['de']:.3f})")
+
+
 def _quem_recebe(por_ator, na_mao, t, objetos):
     """Entregar Ã© PASSAR: o que sai de uma mÃ£o entra na outra.
 
@@ -5430,6 +5500,11 @@ def render(pasta_partes, spec, saida, tmpdir=None, amostra=0):
         _ralear_gestos(por_ator, float(tr.get("dur") or 0.0), gancho=(i_tr == 0))
         if i_tr == 0 and os.environ.get("GANCHO_ENTRA") != "1":
             _gancho_ja_em_cena(por_ator, falante)
+        # O PRIMEIRO QUADRO JA TEM ACAO (11/09) -- ver `_gancho_em_andamento`.
+        # `GANCHO_EM_ANDAMENTO=0` desliga, para a previa A/B poder mostrar o
+        # antes (o mesmo recurso de `GANCHO_ENTRA`).
+        if i_tr == 0 and os.environ.get("GANCHO_EM_ANDAMENTO") != "0":
+            _gancho_em_andamento(por_ator, falante)
         # E A REGRA GERAL, PARA OS OUTROS TRECHOS: a cÃ¢mera nÃ£o fecha em quem
         # estÃ¡ entrando. O trecho 0 Ã© o caso caro (Ã© o gancho, e a correÃ§Ã£o
         # ali Ã© desfazer a entrada, que nÃ£o tem motivo no instante zero), mas
