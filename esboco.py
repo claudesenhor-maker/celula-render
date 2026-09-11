@@ -27,7 +27,7 @@ from PIL import Image
 
 SB = os.environ["SUPABASE_URL"].rstrip("/")
 KEY = os.environ["SUPABASE_SERVICE_KEY"]
-BUCKET = os.environ.get("SUPABASE_BUCKET", "toonzueira")
+BUCKET = os.environ["SUPABASE_BUCKET"]   # o Action define; sem padrao aqui (11/09)
 H = {"apikey": KEY, "Authorization": f"Bearer {KEY}"}
 
 # A ORDEM VEM DO RIG, E NAO DE UMA COPIA (05/09). Ate aqui esta lista era
