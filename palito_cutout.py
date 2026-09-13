@@ -4651,7 +4651,7 @@ def _trocar_gesto_sem_licenca(por_ator, fala, expressao=None, idioma=None):
                 a["nome"] = emo
 
 
-def _ralear_gestos(por_ator, dur_s, gancho=False):
+def _ralear_gestos(por_ator, dur_s, gancho=False, fala=None, idioma=None):
     """Tira do trecho os gestos DECORATIVOS que passam da conta.
 
     POR QUE ISTO Ã‰ CÃ“DIGO E NÃƒO PROMPT (lei 16)
@@ -4722,6 +4722,29 @@ def _ralear_gestos(por_ator, dur_s, gancho=False):
         if len(decorativas) <= cabem:
             continue
         decorativas.sort(key=lambda a: float(a.get("de", 0.0)))
+        # QUEM FICA E' O GESTO QUE A FALA PEDE (13/09, ordem do dono: *"os
+        # gestos estao aleatorios (...) precisamos de gestos e acoes que batam
+        # com o conteudo do video"*).
+        #
+        # Ate aqui ficava a PRIMEIRA de cada janela, e o docstring dizia por
+        # que: *"escolher a melhor exigiria saber qual gesto a fala pede, que
+        # e' exatamente o que ninguem sabe medir hoje"*. Isso deixou de ser
+        # verdade -- `ACOES.tem_licenca` responde essa pergunta, e ela e'
+        # chamada DUAS LINHAS acima, em `_trocar_gesto_sem_licenca`. O
+        # raleamento estava jogando fora a informacao que o passo anterior
+        # acabou de produzir: com tres gestos e vaga para um, saia o
+        # licenciado e ficava o decorativo, so' por ele estar mais cedo na
+        # fala.
+        #
+        # A ordem agora e' licenciado primeiro, e DENTRO de cada grupo o mais
+        # cedo -- a regra antiga continua valendo como desempate, que e' onde
+        # ela sempre esteve certa. `sort` e' estavel em Python, entao basta
+        # reordenar por licenca depois de ordenar por tempo.
+        if fala:
+            decorativas.sort(
+                key=lambda a: 0 if ACOES.tem_licenca(a.get("nome"), fala,
+                                                     a.get("motivo"), idioma)
+                else 1)
         ficam = decorativas[:cabem]
         saiu = [a.get("nome") for a in decorativas[cabem:]]
         # a ordem original importa para `acoes.aplicar` (a precedÃªncia Ã©
@@ -5354,9 +5377,18 @@ def render(pasta_partes, spec, saida, tmpdir=None, amostra=0):
             txt_titulo = titulo_da_esquete(
                 [t.get("fala") for t in spec["trechos"]])
         if txt_titulo:
-            titulo = Titulo(W, H, txt_titulo)
-            print(f"[titulo] \"{txt_titulo}\" nos primeiros "
-                  f"{titulo.ate:.1f}s, em {len(titulo.linhas)} linha(s)")
+            # `total`, e nao `total_video`: a cauda do loop nao passa pelo
+            # laco de frames (ela copia o ultimo quadro e o quadro 0), entao o
+            # ultimo quadro DESENHADO e' o de `total`. E' ali que a reprise
+            # tem de estar de pe -- ver `legendas.Titulo.volta`.
+            titulo = Titulo(W, H, txt_titulo, dur_total=total)
+            if titulo.volta is not None:
+                print(f"[titulo] \"{txt_titulo}\" nos primeiros "
+                      f"{titulo.ate:.1f}s e de volta em {titulo.volta:.1f}s "
+                      f"(ate o fim), em {len(titulo.linhas)} linha(s)")
+            else:
+                print(f"[titulo] \"{txt_titulo}\" nos primeiros "
+                      f"{titulo.ate:.1f}s, em {len(titulo.linhas)} linha(s)")
 
     leg = None
     if spec.get("legenda", True):
@@ -5465,6 +5497,30 @@ def render(pasta_partes, spec, saida, tmpdir=None, amostra=0):
             centro_corpo = (cenarios[cen].chao_y - alt_corpo * 0.45) / H
 
         falante = tr.get("ator") if tr.get("ator") in elenco else padrao_ator
+        # O NARRADOR NAO TEM BOCA EM CENA (13/09, ordem do dono: *"o
+        # personagem fala dele mesmo em terceira pessoa, de novo cometendo o
+        # mesmo erro com o narrador"*).
+        #
+        # A LINHA ACIMA ERA O DEFEITO. No trecho de narracao `tr["ator"]` e'
+        # `"narrador"`, que nao esta no elenco -- entao `falante` caia em
+        # `padrao_ator`, o protagonista. E `falante` e' quem: mexe a boca
+        # (`nivel`), recebe a cara do trecho (`rosto.para`) e ganha o close de
+        # `_close_no_falante`. Resultado no video `8e2fe5f6` (canal PT): a
+        # narradora diz *"Pal ja ligou tres vezes pro SAC"* e quem esta na
+        # tela, em plano medio, sozinho, sincronizando a frase com a boca,
+        # e' o Pal. O texto estava certo (a regua VOZ DE NARRADOR de 12/09
+        # passou com `n_voz_narrador: 0`); o VIDEO e' que dublava o narrador
+        # com o personagem -- e e' o video que o dono assiste.
+        #
+        # Narracao e' VOZ OFF: ninguem mexe a boca, ninguem gesticula como
+        # quem fala (todos caem em `escutar`, que e' o idle de quem ouve) e a
+        # camera NAO fecha em ninguem -- fechar num rosto calado enquanto uma
+        # voz de fora fala e' a mesma mentira em outro plano. O corpo
+        # continua sendo o do protagonista para posicao, acoes e objeto: ele
+        # esta na cena, so' nao esta falando.
+        narracao = (bool(tr.get("narracao"))
+                    or str(tr.get("ator") or "").strip().lower() == "narrador")
+        quem_fala = None if narracao else falante
         # QUEM ESTÃ EM CENA MUDA DE TRECHO PARA TRECHO (30/08, noite). Dois
         # por vez continua sendo o teto (lei 10); o elenco do VÃDEO nÃ£o tem
         # teto. `posto` dÃ¡ o lugar de cada um dentro DESTE trecho, porque o
@@ -5487,6 +5543,13 @@ def render(pasta_partes, spec, saida, tmpdir=None, amostra=0):
         # sempre. Decidido aqui porque depende de quantos estÃ£o em cena
         # AGORA, e isso muda de trecho para trecho (lei 10).
         fecha = _close_no_falante(i_tr, n_trechos, len(chaves))
+        if narracao and fecha:
+            # ver `narracao` la em cima: nao ha falante neste trecho, entao
+            # nao ha em quem fechar. O plano aberto ainda ajuda a frase de
+            # contexto, que e' justamente o que a narracao carrega.
+            fecha = False
+            print(f"[narrador] trecho {i_tr}: voz off -- sem close em quem "
+                  f"fala, e ninguem mexe a boca")
         # O PLANO DO PAR SAI DA LARGURA MEDIDA, e sai UMA VEZ por trecho.
         # `meia_esq`/`meia_dir` sÃ£o o nÃºcleo de cada um, medidos na arte no
         # frame de repouso (lei 33), entÃ£o isto Ã© a mesma disciplina da
@@ -5548,7 +5611,8 @@ def render(pasta_partes, spec, saida, tmpdir=None, amostra=0):
         # A LICENCA E' DO IDIOMA DO SPEC (12/09, GUIA §46): sem `idioma`, pt-BR.
         _trocar_gesto_sem_licenca(por_ator, tr.get("fala"), tr.get("expressao"),
                                   spec.get("idioma"))
-        _ralear_gestos(por_ator, float(tr.get("dur") or 0.0), gancho=(i_tr == 0))
+        _ralear_gestos(por_ator, float(tr.get("dur") or 0.0), gancho=(i_tr == 0),
+                       fala=tr.get("fala"), idioma=spec.get("idioma"))
         if i_tr == 0 and os.environ.get("GANCHO_ENTRA") != "1":
             _gancho_ja_em_cena(por_ator, falante)
         # O PRIMEIRO QUADRO JA TEM ACAO (11/09) -- ver `_gancho_em_andamento`.
@@ -5651,7 +5715,7 @@ def render(pasta_partes, spec, saida, tmpdir=None, amostra=0):
                 # Sem ela os dois gesticulam em sincronia e o mesmo ator
                 # repete o compasso trecho apÃ³s trecho -- ver `gesticular`.
                 rig, c = _rig_do_trecho(tr, t, corte, por_ator[chave], x0,
-                                        falando=(chave == falante),
+                                        falando=(chave == quem_fala),
                                         semente_gesto=(chaves.index(chave)
                                                        * 3.0 + i_tr),
                                         na_mao=na_mao.get(chave))
@@ -5676,11 +5740,19 @@ def render(pasta_partes, spec, saida, tmpdir=None, amostra=0):
                 rig = rigs[chave]
                 # a cara de QUEM FALA vem do trecho; quem ouve fica na cara
                 # de reaÃ§Ã£o que o roteirista der a ele, ou neutro
-                cara = rosto.para(tr, t, tr["dur"], chave) if chave == falante \
-                    else EXPR.obter(tr.get("expressao_" + chave, "neutro"))
+                if chave == quem_fala:
+                    cara = rosto.para(tr, t, tr["dur"], chave)
+                elif narracao and chave == falante:
+                    # voz off: a boca fica parada, mas a CARA e' a do trecho
+                    # -- quem esta na tela reage ao que o narrador conta, e
+                    # cara neutra durante a frase de contexto e' o "boneco
+                    # estatico" por outro caminho
+                    cara = EXPR.obter(tr.get("expressao", "neutro"))
+                else:
+                    cara = EXPR.obter(tr.get("expressao_" + chave, "neutro"))
                 pisca = EXPR.piscando(n, FPS, semente=chaves.index(chave),
                                       expr_nome=tr.get("expressao", "neutro")
-                                      if chave == falante else "neutro")
+                                      if chave == quem_fala else "neutro")
                 # SÃ“ QUEM FALA MEXE A BOCA. Sem isto os dois abrem o
                 # maxilar na mesma envoltÃ³ria e ninguÃ©m sabe quem falou.
                 # O EFEITO ESPECIAL DESTE TRECHO, se houver (10/09).
@@ -5713,7 +5785,7 @@ def render(pasta_partes, spec, saida, tmpdir=None, amostra=0):
                         # nao se remonta sozinho no meio do trecho.
                         _ef = (_efd.get("nome"), 1.0, _efd.get("lado", "d"))
                 so_dele[chave] = desenhar_personagem(
-                    pers, rig, nivel if chave == falante else 0.0,
+                    pers, rig, nivel if chave == quem_fala else 0.0,
                     pisca, na_mao[chave], cara,
                     saida_pos=pecas_falante if chave == falante else None,
                     efeito=_ef)
@@ -5830,6 +5902,31 @@ def render(pasta_partes, spec, saida, tmpdir=None, amostra=0):
             # o trecho 0 fecha no ROSTO (CLOSE_GANCHO); os outros closes
             # continuam enquadrando o corpo de quem fala
             z_close = CLOSE_GANCHO if i_tr == 0 else CLOSE_FALANTE
+            # A EMENDA DO LOOP (13/09, ordem do dono: *"melhore a qualidade do
+            # loop, esta muito forcado"*).
+            #
+            # A cauda dissolve o ultimo quadro NO PRIMEIRO. So' que o primeiro
+            # e' o close do gancho (2,50) e o ultimo e' o close do falante
+            # (1,90): 32% de escala de diferenca, dissolvidos em 0,45 s. O que
+            # se ve nao e' uma emenda, e' um zoom cortado no meio -- e' isso
+            # que le como forcado, e nenhum ajuste de `transicao_s` conserta,
+            # porque o problema nao e' o tempo do dissolve, e' o que ele liga.
+            #
+            # Entao o ULTIMO trecho fecha CHEGANDO no plano do primeiro: ele
+            # comeca em 1,90, onde o remate tem de comecar (a tirada precisa
+            # do corpo reagindo), e no ultimo terco da fala sobe ate 2,50. O
+            # empurrao de camera no punchline e' linguagem de comedia por si
+            # so', entao o que a emenda exige e o que a piada quer sao a mesma
+            # coisa aqui -- e o dissolve passa a ligar dois quadros do mesmo
+            # tamanho, na mesma cara.
+            #
+            # SO' COM LOOP LIGADO. Sem loop o video termina, e terminar num
+            # plano mais fechado do que a cena pediu seria mudar o remate por
+            # causa de um acabamento que nao existe.
+            if loop_on and i_tr == n_trechos - 1 and fecha:
+                u = max(0.0, min(1.0, (t - 0.66) / 0.34))
+                u = u * u * (3 - 2 * u)                      # smoothstep
+                z_close = CLOSE_FALANTE + (CLOSE_GANCHO - CLOSE_FALANTE) * u
             if fecha and pecas_falante and "cranio" in pecas_falante:
                 pers_f = posto[falante][0]
                 z_prev = z_close * (1.0 + 0.035 * max(0.0, min(1.0, t)))
@@ -6051,14 +6148,55 @@ def render(pasta_partes, spec, saida, tmpdir=None, amostra=0):
     # visualmente indistinguÃ­vel aqui e corta perto de um terÃ§o. O
     # `maxrate`/`bufsize` cortam o PICO, que Ã© o que estoura a mÃ©dia num
     # vÃ­deo com corte de plano a cada trecho.
+    # A HORA DO DIA (13/09, ordem do dono: *"precisamos aumentar a variacao do
+    # canal, mudar movimentos, gestos, cenarios"*). E' a FRENTE B1 do
+    # `PLANO-VARIACAO.md`, e ela e' a mais barata de todas: *"o mesmo cenario
+    # com paleta de manha, tarde e noite. Um filtro de cor sobre a arte, nao
+    # arte nova"*.
+    #
+    # O DADO JA EXISTIA E ERA JOGADO FORA. Todo conceito do Planejamento
+    # escreve a hora dentro do `CENARIO BASE`: *"escritorio, tarde"*, *"casa,
+    # noite"*, *"living_room, evening"*, *"Cozinha de apartamento pequeno,
+    # madrugada"*. O `Pedir Roteiro v2` lia essa linha so' para tirar dela o
+    # LUGAR e descartava o resto -- e sete cenarios renderizados sempre na
+    # mesma luz e' metade do motivo de dois videos seguidos parecerem o mesmo
+    # video. `Montar Spec` agora manda `spec.hora`, e o mapa da luz mora aqui,
+    # que e' onde o visual do canal mora.
+    #
+    # E' UM `-vf` NO ENCODE, e nao um passe por quadro: custo zero por frame,
+    # e nada muda na montagem -- a arte continua a mesma, a luz e' que muda.
+    # `tarde` nao tem filtro de proposito: a arte foi desenhada nessa luz, e
+    # o "normal" do canal tem de continuar existindo para as outras horas
+    # lerem como hora.
+    GRADE_DA_HORA = {
+        "manha": "eq=brightness=0.03:saturation=1.05,"
+                 "colorbalance=rs=-0.04:bs=0.06",
+        "tarde": "",
+        "fim_de_tarde": "eq=saturation=1.12,"
+                        "colorbalance=rs=0.10:gs=0.02:bs=-0.08",
+        "noite": "eq=brightness=-0.05:contrast=1.06:saturation=0.90,"
+                 "colorbalance=rs=-0.08:bs=0.12",
+    }
+    _hora = str(spec.get("hora") or "").strip().lower()
+    _grade = GRADE_DA_HORA.get(_hora, "")
+    if _hora and _hora not in GRADE_DA_HORA:
+        print(f"[luz] hora {_hora!r} fora do mapa; sem filtro de cor")
+    elif _grade:
+        print(f"[luz] {_hora}: {_grade}")
+    elif _hora:
+        print(f"[luz] {_hora}: a arte ja foi desenhada nesta luz, sem filtro")
+
     def _encodar(crf, maxrate):
-        subprocess.run(["ffmpeg", "-y", "-v", "error", "-framerate", str(FPS),
-                        "-i", os.path.join(fd, "%05d.png"), "-i", audio,
-                        "-af", spec.get("loudnorm", "loudnorm=I=-9:LRA=8:TP=-1.5"),
-                        "-c:v", "libx264", "-preset", "medium", "-crf", str(crf),
-                        "-maxrate", maxrate, "-bufsize", "8M",
-                        "-pix_fmt", "yuv420p", "-c:a", "aac", "-b:a", "160k",
-                        "-shortest", "-movflags", "+faststart", saida], check=True)
+        cmd = ["ffmpeg", "-y", "-v", "error", "-framerate", str(FPS),
+               "-i", os.path.join(fd, "%05d.png"), "-i", audio,
+               "-af", spec.get("loudnorm", "loudnorm=I=-9:LRA=8:TP=-1.5")]
+        if _grade:
+            cmd += ["-vf", _grade]
+        cmd += ["-c:v", "libx264", "-preset", "medium", "-crf", str(crf),
+                "-maxrate", maxrate, "-bufsize", "8M",
+                "-pix_fmt", "yuv420p", "-c:a", "aac", "-b:a", "160k",
+                "-shortest", "-movflags", "+faststart", saida]
+        subprocess.run(cmd, check=True)
 
     _encodar(23, "4M")
     # REDE DE SEGURANÃ‡A: se ainda passar do teto, reencoda mais apertado em
