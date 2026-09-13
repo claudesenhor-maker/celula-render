@@ -5372,7 +5372,12 @@ def render(pasta_partes, spec, saida, tmpdir=None, amostra=0):
             # espera, e quem sabe que ela Ã© de call center Ã© o texto.
             musica.setdefault("falas", [t.get("fala") for t in spec["trechos"]])
         audio = SFX.mixar(voz, eventos, os.path.join(tmp, "mix.wav"),
-                          musica=musica, dur_s=total_video, bipes=bipes)
+                          musica=musica, dur_s=total_video, bipes=bipes,
+                          # o som fecha o laco junto com a imagem (13/09):
+                          # ver `sfx._emendar_bed`. A cauda e' a MESMA do
+                          # dissolve dos quadros, para os dois emendarem no
+                          # mesmo instante.
+                          loop_cauda_s=cauda_loop)
 
     # LEGENDA: opcional, mas ligada por padrÃ£o. Short se assiste no mudo.
     # O TÃTULO NO ALTO (03/09, item 1 do dono do projeto). Ver
