@@ -1,0 +1,56 @@
+{
+  "_leia": "Parametros de nos NAO-Code do Planejamento (Fqzk8FNbYsmLmgK3) que viraram fonte local em 13/09, depois de a auditoria mostrar a cadeia de tendencia morta: `Buscar Tendencias` devolvia ZERO itens (q com 23 palavras em OR), `Em Alta` trazia gaming e musica, e o top de videos do canal era ruido de 4 views. `ferramentas/subir_planejamento.py` aplica: `query_parameters` troca a lista inteira de parametros de consulta de um no HTTP; `query` troca o SQL de um no Postgres.",
+  "Buscar Tendências (YouTube)": {
+    "_por_que": "search.list com q de 23 termos em OR + videoDuration=short + relevanceLanguage devolvia `items: []` todo dia (execucao 27778 e anteriores). Agora: TRES termos de comedia por dia, em rodizio pela lista `planejamento.tendencias_queries` da identidade (por canal/lingua), categoria 23 (Comedy), ultimos 10 dias, por views. E' o que a API oferece de mais perto de 'Shorts de humor que estao subindo agora'.",
+    "query_parameters": [
+      {"name": "part", "value": "snippet"},
+      {"name": "type", "value": "video"},
+      {"name": "videoDuration", "value": "short"},
+      {"name": "videoCategoryId", "value": "23"},
+      {"name": "order", "value": "viewCount"},
+      {"name": "maxResults", "value": "25"},
+      {"name": "regionCode", "value": "={{ ($('Carregar Identidade').item.json.identidade_json.planejamento || {}).regiao || 'BR' }}"},
+      {"name": "relevanceLanguage", "value": "={{ ($('Carregar Identidade').item.json.identidade_json.planejamento || {}).idioma_busca || 'pt' }}"},
+      {"name": "publishedAfter", "value": "={{ $now.minus({ days: 10 }).toISO() }}"},
+      {"name": "q", "value": "={{ (function(){ const p = ($('Carregar Identidade').item.json.identidade_json.planejamento || {}); const qs = Array.isArray(p.tendencias_queries) && p.tendencias_queries.length ? p.tendencias_queries : ['humor', 'comedia', 'engracado']; const d = Math.floor(Date.now() / 864e5); return qs[d % qs.length]; })() }}"}
+    ]
+  },
+  "Em Alta na região": {
+    "_por_que": "mostPopular sem categoria e' a home do YouTube: MrBeast, Free Fire, arrocha. Com videoCategoryId=23 vem o que esta em alta EM COMEDIA na regiao -- e' de la que o assunto do momento pode sair.",
+    "query_parameters": [
+      {"name": "part", "value": "snippet,statistics"},
+      {"name": "chart", "value": "mostPopular"},
+      {"name": "videoCategoryId", "value": "23"},
+      {"name": "regionCode", "value": "={{ ($('Carregar Identidade').first().json.identidade_json.planejamento || {}).regiao || 'BR' }}"},
+      {"name": "maxResults", "value": "25"}
+    ]
+  },
+  "YouTube search.list": {
+    "workflow": "fMgDq0e0BX05ljlc",
+    "_por_que": "Minerador de Concorrentes. O search.list por canal trazia os 15 mais vistos de QUALQUER duracao, e o `Ranquear` cortava em 65 s: Porta dos Fundos, GUIGO, Toro de Miolo e CarneMoidaTV (prioridade 1, em portugues, com dialogo) tinham ZERO videos minerados, e a Avenu (memes de mosquito sem fala) tinha 15. Com videoDuration=short o canal entrega os Shorts dele.",
+    "query_parameters": [
+      {"name": "part", "value": "snippet"},
+      {"name": "channelId", "value": "={{ $json.canal_id }}"},
+      {"name": "type", "value": "video"},
+      {"name": "videoDuration", "value": "short"},
+      {"name": "order", "value": "viewCount"},
+      {"name": "maxResults", "value": "15"},
+      {"name": "publishedAfter", "value": "={{ new Date(Date.now() - 60*86400000).toISOString() }}"}
+    ]
+  },
+  "Gravar padroes_externos": {
+    "workflow": "fMgDq0e0BX05ljlc",
+    "_por_que": "13/09: grava `outlier` (views / mediana do canal, calculado no Ranquear) e `origem = minerador`.",
+    "query": "INSERT INTO padroes_externos (cell_id, video_id, canal_id, titulo, publicado_em, duracao_s, views, likes, views_por_hora, gancho_tipo, gancho_palavras, virada_pct, dispositivo, n_falas, punch_ultima_palavra, outlier, origem) SELECT (x->>'cell_id')::uuid, x->>'video_id', x->>'canal_id', x->>'titulo', (x->>'publicado_em')::timestamptz, (x->>'duracao_s')::numeric, (x->>'views')::bigint, (x->>'likes')::bigint, (x->>'views_por_hora')::numeric, x->>'gancho_tipo', (x->>'gancho_palavras')::int, (x->>'virada_pct')::numeric, x->>'dispositivo', (x->>'n_falas')::int, (x->>'punch_ultima_palavra')::boolean, (x->>'outlier')::numeric, 'minerador' FROM jsonb_array_elements($1::jsonb) x ON CONFLICT (cell_id, video_id) DO UPDATE SET views = EXCLUDED.views, likes = EXCLUDED.likes, views_por_hora = EXCLUDED.views_por_hora, titulo = EXCLUDED.titulo, outlier = EXCLUDED.outlier, origem = coalesce(padroes_externos.origem, EXCLUDED.origem), gancho_tipo = coalesce(EXCLUDED.gancho_tipo, padroes_externos.gancho_tipo), dispositivo = coalesce(EXCLUDED.dispositivo, padroes_externos.dispositivo), minerado_em = now() RETURNING padrao_id"
+  },
+  "Criar item de ensaio": {
+    "workflow": "XfiDZUkLootfs0hc",
+    "_por_que": "13/09: o ensaio pegava `identidade_celula ... WHERE ativo LIMIT 1`, sem ordem -- com dois canais caia no EN e um conceito em portugues virava roteiro em ingles, o que invalidou a primeira prova de aderencia. Agora aceita `cell_id` no corpo; sem ele, o canal mais antigo (o PT), como era antes de existir o canal 2.",
+    "query": "INSERT INTO fila_producao (fila_id, cell_id, prompt_video, horario_post, status, modo) SELECT $1::uuid, i.cell_id, $2, now(), 'ensaio', 'ensaio' FROM identidade_celula i WHERE i.ativo = true AND ($3 = '' OR i.cell_id::text = $3) ORDER BY i.criado_em LIMIT 1 RETURNING fila_id, cell_id",
+    "query_replacement": "={{ [$json.body.fila_id, $json.body.prompt_video, $json.body.cell_id || ''] }}"
+  },
+  "Carregar Top Vídeos": {
+    "_por_que": "o 'padrao de vitoria' entrava no brief com os 5 melhores scores, e com 4 a 19 views por video o score e' ruido: os cinco de hoje eram do roteirista antigo ('bomba no poste', 'Marcatone'), com as FALAS inteiras -- exemplo ruim que o modelo imita (lei 48). Agora so' entra video com 30+ views, do roteirista v2, e so' premissa/gancho/punch.",
+    "query": "SELECT COALESCE(jsonb_agg(t), '[]'::jsonb) AS top_videos FROM (SELECT regexp_replace(prompt_usado, '\\| FALAS:.*$', '') AS prompt_usado, score FROM videos WHERE cell_id = $1::uuid AND score IS NOT NULL AND coalesce((metricas_json->>'views')::int, 0) >= 30 AND fila_id IN (SELECT fila_id FROM fila_producao WHERE roteiro_json->'atributos'->>'roteirista' = 'v2') ORDER BY score DESC, publicado_em DESC LIMIT 5) t"
+  }
+}
