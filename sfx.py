@@ -633,14 +633,15 @@ def eventos_do_spec(spec):
             nome, onde, g = reg
             de, ate = float(a.get("de", 0.0)), float(a.get("ate", 1.0))
             fora.append({"nome": nome, "t": t0 + (de + (ate - de) * onde) * dur,
-                         "ganho": g * float(a.get("forca", 1.0))})
+                         "ganho": g * float(a.get("forca", 1.0)), "auto": True})
 
         for j in (tr.get("expressoes") or []):
             reg = DA_EXPRESSAO.get(str(j.get("nome") or j.get("valor") or "").strip().lower())
             if not reg:
                 continue
             nome, g = reg
-            fora.append({"nome": nome, "t": t0 + float(j.get("de", 0.0)) * dur, "ganho": g})
+            fora.append({"nome": nome, "t": t0 + float(j.get("de", 0.0)) * dur,
+                         "ganho": g, "auto": True})
 
         # explícitos: sempre por último, para o roteirista poder pôr um som
         # exatamente onde quiser sem lutar contra o automático
@@ -726,6 +727,33 @@ def eventos_do_spec(spec):
             print(f"[sfx] {len(antes)} efeito(s) tirado(s) do 1,5s que "
                   f"antecede o remate: o silencio ali e' o setup da piada")
 
+    # E O SILENCIO DENTRO DO REMATE (13/09, ordem do dono: *"no canal en
+    # tivemos novamente no final do video um efeito sonoro sem sentido"*).
+    #
+    # A guarda acima limpa o 1,5 s ANTES da ultima fala e para ali. Dentro
+    # dela nao havia guarda nenhuma -- e e' exatamente ali que o `Montar Spec`
+    # injeta a reacao da virada: *"a virada cai aqui: o corpo reage junto com
+    # a tirada"*, uma acao de `REACAO` em `de: 0.62, ate: 1`. Duas das cinco
+    # dessa lista tem som automatico (`maos_na_cabeca` -> thud, `susto` ->
+    # sting), entao o punchline levava um baque em cima da propria tirada,
+    # vindo de um gesto que o roteiro nao pediu e que ninguem ve acontecer.
+    # Somado ao stinger que entra 0,8 s depois, sao dois sons em um segundo e
+    # meio, nenhum dos dois com causa na tela.
+    #
+    # SO' O AUTOMATICO SAI. O que o roteirista escreveu em `sfx` continua
+    # passando -- ali a intencao e' do texto, e o remate pode ser um som.
+    # E' a mesma politica que o `rimshot descartado do remate` do `Montar
+    # Spec` ja aplica do outro lado do pipeline (GUIA §47).
+    if trechos:
+        _ult = trechos[-1]
+        _t0_ult = float(_ult.get("_inicio_s", 0.0))
+        dentro = [e for e in limpos if e.get("auto") and e["t"] >= _t0_ult]
+        if dentro:
+            limpos = [e for e in limpos if e not in dentro]
+            print(f"[sfx] {len(dentro)} efeito(s) automatico(s) tirado(s) de "
+                  f"dentro do remate: som sem causa na tela em cima da tirada "
+                  f"({', '.join(sorted({e['nome'] for e in dentro}))})")
+
     # A DENSIDADE, e por que ela afrouxou (03/09, item 4).
     #
     # Era um efeito a cada 2,5 s -- dezoito num vídeo de 45 s. Comédia de
@@ -765,14 +793,38 @@ def eventos_do_spec(spec):
     if trechos:
         ult = trechos[-1]
         t_fim = float(ult.get("_inicio_s", 0.0)) + float(ult.get("_dur_voz", 0.0))
-        nome = stinger_para(ult.get("fala", ""))
-        stingers.append({"nome": nome, "t": t_fim + STINGER_DEPOIS_S,
-                         "ganho": 1.0, "corte": True})
+        # O IDIOMA DO SPEC ESCOLHE AS PALAVRAS (13/09) -- ver `stinger_para`.
+        nome = stinger_para(ult.get("fala", ""), spec.get("idioma"))
+        # E O ROTEIRO TEM A ULTIMA PALAVRA: se o roteirista escreveu um som
+        # explicito na segunda metade do remate, ele JA' e' a pontuacao da
+        # tirada, e o stinger por cima vira o segundo som sem causa.
+        _pedido = any(
+            float(s.get("em", 0.0) if isinstance(s, dict) else 0.0) >= 0.5
+            for s in (ult.get("sfx") or []))
+        if _pedido:
+            print("[sfx] stinger dispensado: o roteiro ja pos um som no "
+                  "remate")
+        else:
+            stingers.append({"nome": nome, "t": t_fim + STINGER_DEPOIS_S,
+                             "ganho": 1.0, "corte": True})
         # A ASSINATURA FECHA TODO VÍDEO, depois do stinger (T4). Meio segundo.
-        stingers.append({"nome": "assinatura", "t": t_fim + ASSINATURA_DEPOIS_S,
-                         "ganho": 0.9, "corte": True})
-        print(f"[sfx] stinger '{nome}' a {STINGER_DEPOIS_S:.1f}s do fim da "
-              f"tirada, assinatura a {ASSINATURA_DEPOIS_S:.2f}s")
+        #
+        # MENOS QUANDO O VIDEO ESTA EM LOOP (13/09). Com `spec.loop` ligado o
+        # video nao termina: ele dissolve no primeiro quadro e recomeca. Um
+        # carimbo de "acabou" 1,25 s depois da tirada cai exatamente em cima
+        # da emenda, e o que se ouve no rewatch e' assinatura -> gancho, dois
+        # sons fortes colados. Loop e assinatura de fecho sao duas leituras
+        # opostas do mesmo instante; com loop, quem manda e' o loop.
+        _loop = spec.get("loop")
+        _loop_on = bool(_loop.get("ativo")) if isinstance(_loop, dict) else bool(_loop)
+        if _loop_on:
+            print(f"[sfx] stinger '{nome}' a {STINGER_DEPOIS_S:.1f}s do fim da "
+                  f"tirada; assinatura dispensada (video em loop)")
+        else:
+            stingers.append({"nome": "assinatura", "t": t_fim + ASSINATURA_DEPOIS_S,
+                             "ganho": 0.9, "corte": True})
+            print(f"[sfx] stinger '{nome}' a {STINGER_DEPOIS_S:.1f}s do fim da "
+                  f"tirada, assinatura a {ASSINATURA_DEPOIS_S:.2f}s")
     # E ELA MARCA O CORTE DE VOLTA DA ABERTURA FRIA (T4): o `whoosh` que o
     # roteirista já põe ali diz "outro momento"; a assinatura em cima dele diz
     # "este canal". Ganho baixo: é carimbo, não anúncio.
@@ -803,18 +855,42 @@ _REMATE_DERROTA = ("bloque", "cancel", "reprov", "negativ", "acabou",
                    "errad", "expir", "venceu", "vencid", "recus", "indefer",
                    "suspens", "sem sinal", "morreu", "quebrou")
 
+# AS LISTAS SAO DO IDIOMA (13/09) -- e ate hoje so' existiam em portugues.
+#
+# Foi assim que o canal EN ganhou um `rimshot` em TODO video: nenhuma palavra
+# de `_REMATE_DINHEIRO` nem de `_REMATE_DERROTA` aparece em ingles, entao
+# `stinger_para` caia sempre no `return "rimshot"` -- o ba-dum-tss de piada
+# pronta, em cima de um remate que muitas vezes nao e' piada de tirada. E' a
+# mesma familia de defeito que a `LICENCA` do gesto teve em 12/09: uma tabela
+# de palavras escrita para uma lingua servindo dois canais.
+_REMATE_DINHEIRO_EN = ("buck", "dollar", "$", "cent", "rent", "bill", "fee",
+                       "fine", "interest", "payment", "installment", "charge",
+                       "deposit", "refund", "invoice", "tax", "owes", "owe")
+_REMATE_DERROTA_EN = ("banned", "blocked", "cancel", "denied", "rejected",
+                      "expired", "broken", "broke it", "it's over", "its over",
+                      "gone", "lost", "failed", "shut down", "locked",
+                      "no longer", "can't", "cant ", "not allowed", "dead",
+                      "sold out", "closed", "suspended", "declined")
 
-def stinger_para(fala):
-    """Qual stinger o remate pede, lendo o texto dele."""
+
+def stinger_para(fala, idioma=None):
+    """Qual stinger o remate pede, lendo o texto dele.
+
+    `idioma` escolhe o jogo de palavras (prefixo basta: 'en' -> en-US); sem
+    ele, pt-BR -- ver `_REMATE_DINHEIRO_EN`.
+    """
     s = str(fala or "").lower()
     for a, b in (("á", "a"), ("ã", "a"), ("â", "a"), ("é", "e"), ("ê", "e"),
                  ("í", "i"), ("ó", "o"), ("ô", "o"), ("õ", "o"), ("ú", "u"),
                  ("ç", "c")):
         s = s.replace(a, b)
+    ingles = str(idioma or "").lower().startswith("en")
+    dinheiro = _REMATE_DINHEIRO_EN if ingles else _REMATE_DINHEIRO
+    derrota = _REMATE_DERROTA_EN if ingles else _REMATE_DERROTA
     import re as _re
-    if any(p in s for p in _REMATE_DINHEIRO) or _re.search(r"\b\d{2,}\b", s):
+    if any(p in s for p in dinheiro) or _re.search(r"\b\d{2,}\b", s):
         return "caixa"
-    if any(p in s for p in _REMATE_DERROTA):
+    if any(p in s for p in derrota):
         return "erro"
     return "rimshot"
 
