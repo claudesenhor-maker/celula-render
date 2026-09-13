@@ -5261,6 +5261,38 @@ def render(pasta_partes, spec, saida, tmpdir=None, amostra=0):
     # o respiro entra no Ã¡udio como silÃªncio de verdade. Sem isto o
     # -shortest do fim decepava a cauda de cada trecho -- o vÃ­deo saÃ­a
     # 1,35s mais curto do que o log dizia (ver juntar_com_respiro)
+    # O LOOP (12/09, ordem do dono: *"vamos adotar o sistema em loop para os
+    # dois canais buscando aumentar a retenção (...) por enquanto em todos os
+    # vídeos, crie um modo que posso desativar e ativar"*).
+    #
+    # Rewatch conta como view e como tempo assistido (PLANO-RETENCAO P4), e a
+    # unica tecnica que multiplica a mesma view e' o video terminar onde
+    # comecou: o espectador nao registra que acabou e assiste de novo. Aqui
+    # isso e' feito no unico lugar em que e' GARANTIDO, o quadro: depois do
+    # ultimo trecho entra uma cauda em que o ultimo quadro dissolve no
+    # PRIMEIRO quadro do video (o mesmo, pixel a pixel, com legenda e tudo) e
+    # segura nele um instante. Quando o YouTube reinicia, o quadro 0 continua
+    # o quadro N-1 -- e' a emenda invisivel.
+    #
+    # A chave mora na IDENTIDADE do canal (`acabamento.loop`), nao aqui: e'
+    # dado do canal e o dono liga e desliga pelo painel, por canal. O `Montar
+    # Spec` a traz no spec (`spec.loop`); sem o bloco, nao ha loop e o log diz
+    # isso -- valor de reserva escondido e' copia (lei 91).
+    loop_cfg = spec.get("loop")
+    if isinstance(loop_cfg, bool):
+        loop_cfg = {"ativo": loop_cfg}
+    loop_cfg = loop_cfg if isinstance(loop_cfg, dict) else {}
+    loop_on = bool(loop_cfg.get("ativo")) and not amostra
+    loop_trans = max(0.0, float(loop_cfg.get("transicao_s", 0.45)))
+    loop_segura = max(0.0, float(loop_cfg.get("segurar_s", 0.20)))
+    cauda_loop = (loop_trans + loop_segura) if loop_on else 0.0
+    if loop_on:
+        print(f"[loop] ligado: cauda de {cauda_loop:.2f}s (dissolve {loop_trans:.2f}s "
+              f"+ segura {loop_segura:.2f}s no primeiro quadro)")
+    elif "loop" not in spec:
+        print("[loop] spec sem `loop`: video sem cauda de loop")
+    total_video = total + cauda_loop
+
     voz = juntar_com_respiro(faixas, respiros, os.path.join(tmp, "voz.wav"), tmp)
     # O LIPSYNC SAI DA VOZ PURA, e Ã© por isso que o envelope Ã© medido AQUI,
     # antes da mixagem: com efeito e trilha dentro, a boca do personagem
@@ -5292,6 +5324,11 @@ def render(pasta_partes, spec, saida, tmpdir=None, amostra=0):
         if isinstance(musica, dict) and not musica.get("arquivo"):
             musica = dict(musica)
             musica.setdefault("segmentos", SFX.segmentos_do_spec(spec))
+            # a cauda do loop continua na trilha do ultimo trecho: musica que
+            # para antes do quadro e' o fim se anunciando
+            if cauda_loop and musica.get("segmentos"):
+                musica["segmentos"][-1]["dur"] = (
+                    float(musica["segmentos"][-1].get("dur", 0.0)) + cauda_loop)
             # a trilha Ã© de ESTE vÃ­deo: o gÃªnero vem do roteiro (`genero`) e
             # a semente do fila_id, para que duas esquetes do mesmo gÃªnero
             # nÃ£o saiam com o mesmo arpejo nota por nota
@@ -5302,7 +5339,7 @@ def render(pasta_partes, spec, saida, tmpdir=None, amostra=0):
             # espera, e quem sabe que ela Ã© de call center Ã© o texto.
             musica.setdefault("falas", [t.get("fala") for t in spec["trechos"]])
         audio = SFX.mixar(voz, eventos, os.path.join(tmp, "mix.wav"),
-                          musica=musica, dur_s=total, bipes=bipes)
+                          musica=musica, dur_s=total_video, bipes=bipes)
 
     # LEGENDA: opcional, mas ligada por padrÃ£o. Short se assiste no mudo.
     # O TÃTULO NO ALTO (03/09, item 1 do dono do projeto). Ver
@@ -5946,6 +5983,12 @@ def render(pasta_partes, spec, saida, tmpdir=None, amostra=0):
             # quadro inteiro. Comprimir com afinco um arquivo que ninguÃ©m
             # guarda Ã© trabalho puro.
             quadro.save(os.path.join(fd, f"{n:05d}.png"), compress_level=1)
+            # o loop precisa do primeiro quadro COMPOSTO (com legenda e titulo
+            # como saem na tela) e do ultimo; ver a cauda depois do laco
+            if loop_on:
+                if n == 0:
+                    quadro_zero = quadro.copy()
+                quadro_ultimo = quadro
             if quero is not None:
                 # a folha guarda o relÃ³gio: defeito achado numa amostra sem
                 # o segundo obriga a reabrir o vÃ­deo para saber onde estÃ¡
@@ -5966,6 +6009,25 @@ def render(pasta_partes, spec, saida, tmpdir=None, amostra=0):
         # em trecho, de quando o fundo era um ladrilho infinito; agora cada
         # trecho comeÃ§a no ponto que `PONTOS_DE_CORTE` manda, e um resto de
         # deslocamento vindo de trÃ¡s sÃ³ desalinharia esse ponto.
+    # A CAUDA DO LOOP (12/09). Ver `loop_cfg` la em cima. O dissolve e' em
+    # smoothstep -- comeca e termina parado, que e' o que faz a emenda nao
+    # chamar atencao --, e os quadros de "segura" sao o quadro 0 literal: no
+    # rewatch o video continua exatamente dali.
+    if loop_on and n > 0:
+        n_trans = int(round(loop_trans * FPS))
+        n_segura = int(round(loop_segura * FPS))
+        base = quadro_ultimo.convert("RGB")
+        alvo = quadro_zero.convert("RGB")
+        for k in range(n_trans):
+            u = (k + 1) / float(n_trans + 1)
+            u = u * u * (3 - 2 * u)
+            Image.blend(base, alvo, u).save(os.path.join(fd, f"{n:05d}.png"), compress_level=1)
+            n += 1
+        for _ in range(n_segura):
+            alvo.save(os.path.join(fd, f"{n:05d}.png"), compress_level=1)
+            n += 1
+        print(f"[loop] cauda: {n_trans} quadros de dissolve + {n_segura} segurando o "
+              f"primeiro quadro ({(n_trans + n_segura) / FPS:.2f}s)")
     print(f"[cutout] {n} frames ({n/FPS:.1f}s)")
     print(f"[cara] {' -> '.join(caras)}")
     print(f"[camera] plano por trecho: {' -> '.join(planos)}")
