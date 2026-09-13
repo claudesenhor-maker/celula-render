@@ -40,8 +40,10 @@ O QUE MUDOU EM 29/08
        e perder a piada. Agora o texto manda: `_casar` garante uma entrada
        por palavra escrita, estimando o tempo das que faltarem.
 """
+import math
 import os
-from PIL import Image, ImageDraw, ImageFont
+import re
+from PIL import Image, ImageDraw, ImageFilter, ImageFont
 
 # Fica ACIMA da faixa de baixo: no app do YouTube o titulo, o @canal e os
 # botoes comem os ultimos ~18% da tela, e legenda embaixo demais e legenda
@@ -144,11 +146,17 @@ CANDIDATAS = [
 # ele para o polegar. Duas famílias na mesma tela só ficam ruins quando as
 # duas disputam a mesma função; aqui elas se dividem.
 #
-# A ordem prefere CONDENSADA e depois BLACK/HEAVY: letra estreita cabe mais
-# palavra na largura de um 9:16, e peso alto é o que sobrevive a uma faixa de
-# fundo. Se nada disso existir, cai na mesma da legenda -- o título continua
-# existindo, só sem o contraste de família.
+# A FONTE VAI NO REPOSITÓRIO (12/09). Até aqui a lista dependia do que o
+# runner tivesse instalado, e o Ubuntu do Actions só tem DejaVu e Liberation:
+# o título de produção saía em DejaVu Condensed, que é fonte de sistema, e o
+# dono viu isso -- *"o título está meio morto"*. `work/fontes/` leva a Lilita
+# One (OFL, licença ao lado): display arredondada e pesada, que lê como
+# cartaz de desenho animado e não como legenda de player. `subir_render.py`
+# a sincroniza com o resto. A ordem depois dela é a de sempre -- CONDENSADA e
+# depois BLACK/HEAVY --, e se nada existir cai na fonte da legenda.
 CANDIDATAS_TITULO = [
+    os.path.join(os.path.dirname(os.path.abspath(__file__)), "fontes",
+                 "LilitaOne-Regular.ttf"),
     "/usr/share/fonts/truetype/dejavu/DejaVuSansCondensed-Bold.ttf",
     "/usr/share/fonts/truetype/liberation/LiberationSansNarrow-Bold.ttf",
     "C:/Windows/Fonts/impact.ttf",
@@ -372,25 +380,54 @@ TITULO_SEGUNDOS = 4.5
 # Duas linhas no máximo: três já é parágrafo, e parágrafo no alto de um Short
 # não se lê -- se lê a boca de quem fala.
 TITULO_LINHAS = 2
-TITULO_COR = (255, 255, 255, 255)         # branco sobre a faixa escura
-# A FAIXA: quase preta e quase opaca. Escura porque o texto é claro e o
-# contraste tem de sobreviver a qualquer cenário atrás; quase opaca (e não
-# opaca) porque uma tarja 100% chapada lê como erro de player, e deixar o
-# cenário insinuado atrás mantém a tela viva.
-TITULO_FUNDO = (18, 16, 22, 224)
+
+# O CARTAZ DE PAPEL (12/09, pedido do dono: *"o título superior está meio
+# morto, esse fundo preto não está bonito (...) fazer ele desaparecer de
+# maneira mais natural, em uma transição, talvez mudar a fonte ou/e o
+# fundo"*).
+#
+# A tarja preta de 04/09 resolvia o contraste e só isso: ela é a única coisa
+# na tela que não pertence ao mundo da cena -- é interface, e a lei 23 já
+# tinha reprovado interface em cima do desenho. O que pertence ao mundo é
+# PAPEL: o canal se chama PAPERCUT e todo personagem é recorte com contorno
+# preto. Então o título virou um pedaço de papel creme, com o mesmo contorno
+# preto dos bonecos, uma sombra curta (ele está COLADO por cima da cena, não
+# impresso nela) e um pouquinho torto, como se tivesse sido colado à mão.
+# A tinta é escura sobre o papel claro -- é cartaz, não legenda --, e o
+# número (a coisa que se segura nos três segundos, `GANCHO_NUMERO`) sai na
+# cor de destaque do canal, a mesma da palavra ativa da legenda.
+#
+# Ele ENTRA E SAI COMO UM CORPO, não como um valor de alfa: entra em "pop"
+# (cresce de 0,82 até passar de 1,0 e assenta -- o mesmo *follow through*
+# da lei 76 que faz o gesto ler como vivo) e sai subindo, encolhendo e
+# esmaecendo ao mesmo tempo, em 0,6 s com ease-in. Um fade seco no lugar é
+# o que o dono chamou de "morto": nada na cena some sem se mover.
+TITULO_PAPEL = (252, 246, 231, 255)      # creme de papel, não branco de player
+TITULO_TINTA = (30, 26, 24, 255)         # tinta, a mesma família do contorno
+TITULO_CONTORNO = (24, 20, 18, 255)      # o preto do traço dos bonecos
+TITULO_DESTAQUE = (222, 70, 44, 255)     # o número, em vermelho de cartaz
+TITULO_SOMBRA = (0, 0, 0, 105)
+TITULO_INCLINACAO = -2.0                 # graus; colado torto, de propósito
+TITULO_ENTRADA_S = 0.35
+TITULO_SAIDA_S = 0.6
+_NUMERO_NO_TITULO = re.compile(r"\d|R\$|\$|€")
 
 
 class Titulo:
-    """A frase de premissa, no alto, nos primeiros segundos.
+    """A frase de premissa, no alto, nos primeiros segundos, como um cartaz
+    de papel colado por cima da cena (ver `TITULO_PAPEL`).
 
-    Desenhada com a mesma família de fonte e o mesmo contorno da legenda: é
-    o mesmo canal falando, e duas tipografias diferentes na mesma tela leem
-    como dois vídeos colados."""
+    O cartaz é desenhado UMA vez (`_cartaz`) e composto por frame: o custo
+    por quadro é um recorte e um `alpha_composite`, e nos ~25 frames de
+    entrada e saída, uma reamostragem. Legenda e título continuam sendo
+    famílias diferentes de propósito (ver `CANDIDATAS_TITULO`)."""
 
     def __init__(self, largura, altura, texto, segundos=TITULO_SEGUNDOS):
         self.W, self.H = largura, altura
         self.texto = str(texto or "").strip().upper()
         self.ate = float(segundos)
+        self._cartaz = None
+        self._cache = {}
         # ENCOLHER ANTES DE CORTAR (03/09). A primeira versão fixava o corpo
         # em 4,3% da altura e depois tirava palavras até caber em duas linhas
         # -- e o título perdia justamente o fim, que é onde mora a
@@ -459,52 +496,119 @@ class Titulo:
                 palavras.pop()
         return []
 
-    def desenhar(self, quadro, t):
-        if not self.linhas or t > self.ate:
-            return quadro
-        # some suavemente no último meio segundo, para não piscar
-        alfa = 255
-        if t > self.ate - 0.5:
-            alfa = max(0, int(255 * (self.ate - t) / 0.5))
-        # A FAIXA DE FUNDO (04/09, item 2). Sem ela o título depende do que
-        # estiver atrás: sobre a parede clara de um cenário ele some, e o
-        # contorno sozinho não resolve porque ele é uma linha, não uma
-        # superfície. A faixa dá ao título o mesmo que um cartaz tem -- um
-        # plano próprio -- e é o que o faz parar o polegar.
-        #
-        # Desenhada numa camada à parte e composta: o `quadro` chega em RGB e
-        # `d.rectangle` com alfa não mistura, ele substitui. Sem isto a faixa
-        # sairia opaca no primeiro frame e o fade final não existiria.
-        cx = self.W / 2.0
-        alt_linha = int(self.tam * 1.18)
-        larg = max(self.fonte.getlength(l) for l in self.linhas)
-        pad_x, pad_y = int(self.tam * 0.55), int(self.tam * 0.34)
-        y0 = int(self.H * TITULO_Y) - pad_y
-        x0 = int(cx - larg / 2.0) - pad_x
-        x1 = int(cx + larg / 2.0) + pad_x
-        y1 = y0 + alt_linha * len(self.linhas) + pad_y * 2 - int(self.tam * 0.16)
-        faixa = Image.new("RGBA", quadro.size, (0, 0, 0, 0))
-        df = ImageDraw.Draw(faixa)
-        raio = int(self.tam * 0.30)
-        df.rounded_rectangle([x0, y0, x1, y1], radius=raio,
-                             fill=TITULO_FUNDO[:3] + (int(TITULO_FUNDO[3] * alfa / 255),))
-        quadro.paste(Image.alpha_composite(
-            quadro.crop((0, 0, self.W, self.H)).convert("RGBA"), faixa
-        ).convert(quadro.mode), (0, 0))
+    # ------------------------------------------------------------------
+    def _montar_cartaz(self):
+        """O cartaz inteiro, uma vez: papel, contorno, sombra, texto, tilt.
 
-        d = ImageDraw.Draw(quadro)
-        y = int(self.H * TITULO_Y)
+        Devolve (imagem RGBA, centro do papel dentro dela). O centro é o que
+        o `desenhar` posiciona -- o tilt muda o bbox e sem o centro guardado
+        o cartaz sairia deslocado conforme a largura da frase."""
+        tam = self.tam
+        alt_linha = int(tam * 1.12)
+        larg = max(self.fonte.getlength(l) for l in self.linhas)
+        pad_x, pad_y = int(tam * 0.62), int(tam * 0.30)
+        cont = max(4, tam // 9)             # o contorno dos bonecos: 3 a 6 px
+        larg_papel = int(larg + pad_x * 2)
+        alt_papel = int(alt_linha * len(self.linhas) + pad_y * 2 - tam * 0.10)
+        sombra_dy = int(tam * 0.16)
+        margem = int(tam * 0.9)             # sobra para sombra, contorno e tilt
+        Wc = larg_papel + margem * 2
+        Hc = alt_papel + margem * 2 + sombra_dy
+        x0, y0 = margem, margem
+        x1, y1 = x0 + larg_papel, y0 + alt_papel
+        raio = int(tam * 0.26)
+
+        # sombra curta e borrada: o papel está por cima da cena
+        sombra = Image.new("RGBA", (Wc, Hc), (0, 0, 0, 0))
+        ImageDraw.Draw(sombra).rounded_rectangle(
+            [x0 + sombra_dy // 2, y0 + sombra_dy, x1 + sombra_dy // 2, y1 + sombra_dy],
+            radius=raio, fill=TITULO_SOMBRA)
+        sombra = sombra.filter(ImageFilter.GaussianBlur(max(2, tam // 10)))
+
+        papel = Image.new("RGBA", (Wc, Hc), (0, 0, 0, 0))
+        dp = ImageDraw.Draw(papel)
+        dp.rounded_rectangle([x0, y0, x1, y1], radius=raio, fill=TITULO_PAPEL,
+                             outline=TITULO_CONTORNO, width=cont)
+
+        # o texto, palavra a palavra, para o número sair na cor de destaque
+        y = y0 + pad_y
+        espaco = self.fonte.getlength(" ")
         for linha in self.linhas:
             w = self.fonte.getlength(linha)
-            x = (self.W - w) / 2.0
-            # o contorno CONTINUA, mesmo com a faixa: ela é escura e o texto é
-            # claro, mas o fade final passa por valores intermediários em que
-            # os dois se aproximam
-            d.text((x, y), linha, font=self.fonte,
-                   fill=TITULO_COR[:3] + (alfa,),
-                   stroke_width=max(2, self.borda // 2),
-                   stroke_fill=COR_BORDA[:3] + (alfa,))
+            x = x0 + (larg_papel - w) / 2.0
+            for pal in linha.split(" "):
+                cor = TITULO_DESTAQUE if _NUMERO_NO_TITULO.search(pal) else TITULO_TINTA
+                dp.text((x, y), pal, font=self.fonte, fill=cor)
+                x += self.fonte.getlength(pal) + espaco
             y += alt_linha
+
+        cartaz = Image.alpha_composite(sombra, papel)
+        if TITULO_INCLINACAO:
+            cartaz = cartaz.rotate(TITULO_INCLINACAO, resample=Image.BICUBIC,
+                                   expand=False, center=((x0 + x1) / 2.0, (y0 + y1) / 2.0))
+        return cartaz, ((x0 + x1) / 2.0, (y0 + y1) / 2.0)
+
+    @staticmethod
+    def _fase(t, ate):
+        """(alfa 0..1, escala, deslocamento vertical em fração de `tam`).
+
+        Entrada: pop com sobra (passa de 1,0 e assenta, lei 76). Saída: sobe,
+        encolhe e esmaece juntos, com ease-in -- começa devagar e vai embora
+        rápido, que é como uma coisa sai de cena."""
+        if t < TITULO_ENTRADA_S:
+            u = max(0.0, t / TITULO_ENTRADA_S)
+            # ease-out com sobra de 6%: 0,82 -> 1,06 -> 1,00
+            esc = 0.82 + 0.18 * (1 - (1 - u) ** 3) + 0.06 * math.sin(math.pi * u)
+            return min(1.0, u / 0.45), esc, -0.35 * (1 - u) ** 2
+        if t > ate - TITULO_SAIDA_S:
+            u = min(1.0, (t - (ate - TITULO_SAIDA_S)) / TITULO_SAIDA_S)
+            e = u * u                      # ease-in
+            return 1.0 - e, 1.0 - 0.08 * e, -0.9 * e
+        return 1.0, 1.0, 0.0
+
+    def desenhar(self, quadro, t):
+        if not self.linhas or t > self.ate or t < 0:
+            return quadro
+        if self._cartaz is None:
+            self._cartaz = self._montar_cartaz()
+        cartaz, (ccx, ccy) = self._cartaz
+        alfa, esc, dy = self._fase(t, self.ate)
+        if alfa <= 0:
+            return quadro
+
+        # reamostra só quando a escala muda (entrada e saída); o miolo do
+        # tempo usa o cartaz como está, sem custo
+        chave = round(esc, 3)
+        cam = self._cache.get(chave)
+        if cam is None:
+            if abs(esc - 1.0) < 0.002:
+                cam = cartaz
+            else:
+                cam = cartaz.resize((max(1, int(cartaz.width * esc)),
+                                     max(1, int(cartaz.height * esc))),
+                                    Image.BILINEAR if esc > 1 else Image.LANCZOS)
+            if len(self._cache) < 64:
+                self._cache[chave] = cam
+        if alfa < 1.0:
+            a = cam.getchannel("A").point(lambda v: int(v * alfa))
+            cam = cam.copy()
+            cam.putalpha(a)
+
+        # o centro do papel pousa em (W/2, TITULO_Y + meia altura do papel)
+        alt_papel = int(self.tam * 1.12) * len(self.linhas) + int(self.tam * 0.30) * 2
+        cy = self.H * TITULO_Y + alt_papel / 2.0 + dy * self.tam
+        px = int(round(self.W / 2.0 - ccx * esc))
+        py = int(round(cy - ccy * esc))
+
+        # compõe só a região do cartaz: o quadro chega em RGB e `paste` com
+        # máscara não mistura semitransparência corretamente com o contorno
+        rx0, ry0 = max(0, px), max(0, py)
+        rx1, ry1 = min(self.W, px + cam.width), min(self.H, py + cam.height)
+        if rx1 <= rx0 or ry1 <= ry0:
+            return quadro
+        fundo = quadro.crop((rx0, ry0, rx1, ry1)).convert("RGBA")
+        pedaco = cam.crop((rx0 - px, ry0 - py, rx1 - px, ry1 - py))
+        quadro.paste(Image.alpha_composite(fundo, pedaco).convert(quadro.mode), (rx0, ry0))
         return quadro
 
 
