@@ -163,6 +163,88 @@ def _descricao_en(chave):
     return f"a simple everyday brazilian {chave.replace('_', ' ')}, seen from inside"
 
 
+# O n8n TEM A CREDENCIAL QUE FALTA AQUI (13/09).
+#
+# O DEFEITO, MEDIDO NO VIDEO QUE FOI AO AR. O `317c0b76` chama-se "He Tried
+# Paying Rent With A Controller", a esquete inteira gira em volta de um
+# controle de video game, e o log do Action diz:
+#
+#     CF_API_TOKEN:
+#     [sob-demanda] gerando objeto 'game_controller'...
+#     [sob-demanda] sem CF_API_TOKEN no ambiente; nao da para gerar
+#     [objeto] game_controller: nao achei, seguindo sem ele
+#
+# O video foi publicado SEM a coisa de que ele fala. E nao e' um caso: o
+# catalogo esta em 8 cenarios e 10 objetos desde agosto, e `assets_gerados`
+# prova que nada novo foi gerado uma unica vez -- e' a queixa do dono em
+# 13/09 (*"ate o momento nao vi um video que um objeto novo foi feito
+# conforme solicitacao do roteiro"*), e ela e' inteiramente verdadeira.
+#
+# O segredo `CF_API_TOKEN` esta pendente na lista do dono desde 11/09. Mas
+# ele NAO E' a unica porta para a Cloudflare: o fluxo `Gerar Assets` do n8n
+# (`nrSxcnZLEH5xoLlt`) tem a credencial `cloudflare` viva e o webhook publico
+# `gerar-assets`, e ele faz mais do que gerar -- ja sobe no bucket e registra
+# em `assets_gerados`. Provado em 13/09: um `controle_video_game` pedido por
+# ali voltou em 114 s, no estilo do canal, e o recorte por cor daqui aceitou.
+#
+# Entao a escada fica: token no ambiente (mais rapido, uma chamada) -> a
+# esteira (sem segredo nenhum) -> encomenda. O dono continua ganhando com o
+# segredo, e a esteira deixa de depender dele.
+N8N = (os.environ.get("N8N_BASE") or "https://toonzueira.duckdns.org").rstrip("/")
+PUBLICO = f"{SB}/storage/v1/object/public/{BUCKET}" if SB and BUCKET else ""
+# 114 s foi o medido para um objeto; o cenario e' maior. O teto existe para a
+# esteira nunca ficar presa aqui: estourado, cai na encomenda, que e' o
+# comportamento de antes desta mudanca.
+ESPERA_ESTEIRA_S = 300
+
+
+def _pela_esteira(tipo, chave, desc_en, quadrado=False):
+    """Pede a arte ao fluxo `Gerar Assets` do n8n e baixa o bruto do bucket.
+
+    Devolve os bytes da imagem, ou None. Ver o comentario longo acima: este
+    caminho existe porque a credencial da Cloudflare mora no n8n, e o Action
+    de render nao a tem.
+    """
+    alvo = f"{PUBLICO}/assets_bruto/{tipo}/geral/{chave}.jpg"
+    # 1. JA ESTA LA? Outro video pode ter pedido a mesma coisa hoje -- e o
+    #    bucket e' o catalogo, entao consultar antes de gerar e' a mesma
+    #    disciplina do `jaTem` do `Montar Pedidos`.
+    try:
+        r = requests.get(alvo, timeout=60)
+        if r.status_code == 200 and len(r.content) > 2000:
+            print(f"[sob-demanda] '{chave}' ja estava no bucket "
+                  f"({len(r.content)/1024:.0f} KB); nao gerei de novo")
+            return r.content
+    except Exception:
+        pass
+    # 2. PEDE. `pecas` e' o contrato do `Montar Pedidos` para arte avulsa.
+    print(f"[sob-demanda] pedindo '{chave}' a esteira (o n8n tem a "
+          f"credencial da Cloudflare)...")
+    try:
+        r = requests.post(f"{N8N}/webhook/gerar-assets", timeout=ESPERA_ESTEIRA_S,
+                          json={"pecas": [{"tipo": tipo, "chave": chave,
+                                           "desc_en": desc_en}]})
+        r.raise_for_status()
+    except Exception as e:
+        print(f"[sob-demanda] a esteira nao respondeu ({e})")
+        return None
+    # 3. BAIXA O QUE ELA SUBIU. O fluxo responde depois de subir, entao o
+    #    arquivo ja existe -- mas o CDN do Storage as vezes atrasa alguns
+    #    segundos, e tres tentativas custam menos que perder a arte.
+    for tentativa in range(3):
+        try:
+            r = requests.get(alvo, timeout=90)
+            if r.status_code == 200 and len(r.content) > 2000:
+                print(f"[sob-demanda] '{chave}' gerado pela esteira: "
+                      f"{len(r.content)/1024:.0f} KB")
+                return r.content
+        except Exception:
+            pass
+        time.sleep(5)
+    print(f"[sob-demanda] a esteira disse ok mas '{chave}' nao apareceu no bucket")
+    return None
+
+
 def _cloudflare(prompt, negativa, quadrado=False):
     """Uma imagem da Workers AI, em bytes. Erro devolve None e avisa.
 
@@ -236,6 +318,9 @@ def gerar_cenario(chave, pasta_destino):
     prompt = ". ".join([_BASE[0], _descricao_en(chave)] + _BASE[1:])
     print(f"[sob-demanda] gerando cenario '{chave}'...")
     dados = _cloudflare(prompt, _NEGATIVA)
+    if not dados:
+        # SEM O TOKEN, PELA ESTEIRA (13/09) -- ver `_pela_esteira`.
+        dados = _pela_esteira("cenario", chave, _descricao_en(chave))
     if not dados:
         return None
     os.makedirs(pasta_destino, exist_ok=True)
@@ -452,6 +537,12 @@ def gerar_objeto(chave, pasta_destino):
                                 "shading, text, letters, watermark, frame, "
                                 "border, hands, person, background scenery, "
                                 "multiple objects", quadrado=True)
+    if not dados:
+        # SEM O TOKEN, PELA ESTEIRA (13/09) -- ver `_pela_esteira`. O recorte
+        # por cor continua sendo feito AQUI: o `Gerar Assets` sobe o bruto, e
+        # o alfa e' conta de cor, nao de rede neural.
+        dados = _pela_esteira("objeto", chave, _descricao_objeto_en(chave),
+                              quadrado=True)
     if not dados:
         return None
     try:
