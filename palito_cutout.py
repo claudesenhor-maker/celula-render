@@ -4710,6 +4710,16 @@ def _ralear_gestos(por_ator, dur_s, gancho=False, fala=None, idioma=None):
         estruturais, decorativas = [], []
         for a in acoes:
             nome = a.get("nome")
+            # A REACAO DA VIRADA E' ESTRUTURAL (13/09). `Montar Spec` marca
+            # `virada: true` no gesto que ele poe no instante da tirada -- o
+            # unico gesto do video com funcao dramatica declarada. Sem esta
+            # linha ele disputava a vaga unica de um trecho de 3,7 s com o
+            # gesto que ilustra o comeco da frase, e perdia por estar mais
+            # tarde: a garantia "o corpo reage junto com a tirada" era
+            # desfeita pela garantia "um gesto a cada 3,5 s".
+            if a.get("virada"):
+                estruturais.append(a)
+                continue
             if (nome in ACOES.ACOES_DE_ENTRADA or nome in ACOES.ACOES_DE_SAIDA
                     or nome in ACOES.ACOES_PEGAM_OBJETO
                     or nome in ACOES.ACOES_LARGAM_OBJETO
