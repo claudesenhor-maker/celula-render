@@ -790,41 +790,43 @@ def eventos_do_spec(spec):
     # registradora, derrota é o "errou", e o resto é o ba-dum-tss. Nenhum som
     # novo -- os três já existiam, sem uso.
     stingers = []
+    # DEPOIS DA ULTIMA FALA NAO ENTRA SOM NENHUM QUE O ROTEIRO NAO TENHA
+    # PEDIDO (13/09, terceira vez que o dono cobra a mesma coisa: *"no canal
+    # en tivemos NOVAMENTE no final do video um efeito sonoro sem sentido"*,
+    # e depois *"o erro do audio continuou"*).
+    #
+    # O QUE EU TINHA FEITO, E POR QUE NAO BASTOU. Na volta anterior tirei o
+    # som AUTOMATICO de dentro do remate (o thud do gesto injetado) e a
+    # assinatura, e MANTIVE o stinger de 11/09 (T1), porque ele tinha um
+    # racional escrito: *"silencio sem resolucao le como falha de audio"*. O
+    # video `317c0b76` saiu com um `rimshot` a 17,1 s, pico 0,665 -- o unico
+    # som forte depois da tirada, e exatamente o que o dono ouviu e chamou de
+    # sem sentido. De novo.
+    #
+    # O RACIONAL DE T1 ESTAVA ERRADO PARA ESTE CANAL, e o proprio projeto ja
+    # tinha decidido isso: o `Montar Spec` descarta `rimshot` do remate desde
+    # 12/09 porque *"o punch cai no silencio"* (GUIA §47) -- a mesma sessao
+    # que T1 contradisse por outra porta. Ba-dum-tss em TODO video nao e'
+    # pontuacao, e' carimbo: ele toca igual quando a piada funcionou e quando
+    # nao funcionou, e um som que nao depende de nada na tela e' a definicao
+    # do que o dono vem reclamando desde 27/08.
+    #
+    # Fica UMA regra, e ela vale para o fim do video inteiro: som depois da
+    # ultima fala so' existe se o ROTEIRO o escreveu. `stinger_para` continua
+    # aqui -- ela e' quem escolhe o som quando o roteiro pede um sem dizer
+    # qual -- e `ASSINATURA_DEPOIS_S` sobrevive para o A/B, como o
+    # `FECHO_DO_VAO` de 04/09.
     if trechos:
         ult = trechos[-1]
         t_fim = float(ult.get("_inicio_s", 0.0)) + float(ult.get("_dur_voz", 0.0))
-        # O IDIOMA DO SPEC ESCOLHE AS PALAVRAS (13/09) -- ver `stinger_para`.
-        nome = stinger_para(ult.get("fala", ""), spec.get("idioma"))
-        # E O ROTEIRO TEM A ULTIMA PALAVRA: se o roteirista escreveu um som
-        # explicito na segunda metade do remate, ele JA' e' a pontuacao da
-        # tirada, e o stinger por cima vira o segundo som sem causa.
-        _pedido = any(
-            float(s.get("em", 0.0) if isinstance(s, dict) else 0.0) >= 0.5
-            for s in (ult.get("sfx") or []))
+        _pedido = [s for s in (ult.get("sfx") or [])
+                   if float(s.get("em", 0.0) if isinstance(s, dict) else 0.0) >= 0.5]
         if _pedido:
-            print("[sfx] stinger dispensado: o roteiro ja pos um som no "
-                  "remate")
+            print(f"[sfx] o remate tem {len(_pedido)} som(ns) do roteiro; "
+                  f"nenhum automatico entra depois dele")
         else:
-            stingers.append({"nome": nome, "t": t_fim + STINGER_DEPOIS_S,
-                             "ganho": 1.0, "corte": True})
-        # A ASSINATURA FECHA TODO VÍDEO, depois do stinger (T4). Meio segundo.
-        #
-        # MENOS QUANDO O VIDEO ESTA EM LOOP (13/09). Com `spec.loop` ligado o
-        # video nao termina: ele dissolve no primeiro quadro e recomeca. Um
-        # carimbo de "acabou" 1,25 s depois da tirada cai exatamente em cima
-        # da emenda, e o que se ouve no rewatch e' assinatura -> gancho, dois
-        # sons fortes colados. Loop e assinatura de fecho sao duas leituras
-        # opostas do mesmo instante; com loop, quem manda e' o loop.
-        _loop = spec.get("loop")
-        _loop_on = bool(_loop.get("ativo")) if isinstance(_loop, dict) else bool(_loop)
-        if _loop_on:
-            print(f"[sfx] stinger '{nome}' a {STINGER_DEPOIS_S:.1f}s do fim da "
-                  f"tirada; assinatura dispensada (video em loop)")
-        else:
-            stingers.append({"nome": "assinatura", "t": t_fim + ASSINATURA_DEPOIS_S,
-                             "ganho": 0.9, "corte": True})
-            print(f"[sfx] stinger '{nome}' a {STINGER_DEPOIS_S:.1f}s do fim da "
-                  f"tirada, assinatura a {ASSINATURA_DEPOIS_S:.2f}s")
+            print(f"[sfx] nada depois da tirada ({t_fim:.1f}s): o punch cai no "
+                  f"silencio (o stinger automatico saiu em 13/09)")
     # E ELA MARCA O CORTE DE VOLTA DA ABERTURA FRIA (T4): o `whoosh` que o
     # roteirista já põe ali diz "outro momento"; a assinatura em cima dele diz
     # "este canal". Ganho baixo: é carimbo, não anúncio.
@@ -1769,7 +1771,52 @@ def _ducking(voz, sr, ataque=0.05, saida=0.32):
     return _ajustar(np.repeat(g, jan), len(voz))
 
 
-def mixar(voz_wav, eventos, destino, musica=None, dur_s=None, sr=SR, bipes=None):
+def _emendar_bed(faixa, cauda_s, sr):
+    """A cama fecha o laço: o fim dela vira o começo dela.
+
+    POR QUE (13/09, ordem do dono: *"video en nao ficou em loop"*)
+        O vídeo loopa desde 12/09 -- medido no arquivo entregue, o último
+        quadro é o primeiro com 95,8% dos pixels idênticos. O que não loopava
+        era o SOM, e o envelope do MP4 mostra o tamanho do buraco:
+
+            fim do vídeo (18,50s)   pico 0,039   ~silêncio
+            começo (0,00s)          pico 0,853   o susto do gancho
+
+        Silêncio de um lado, estouro do outro. A imagem emendava e o ouvido
+        cortava -- e é o ouvido que decide se aquilo foi um loop ou um fim.
+
+        A causa é a GRADE da cama: `trilha` põe as peças de ritmo a cada
+        compasso (`while t < fim`), e num gênero de 80 bpm o compasso tem 3 s.
+        O último compasso cabe inteiro antes do fim, então o último segundo e
+        meio do vídeo só tem a cauda decaindo das notas anteriores. Para um
+        vídeo que termina, isso é um fade-out de graça; para um vídeo que
+        recomeça, é um buraco.
+
+    O QUE ESTA FUNÇÃO FAZ
+        Os últimos `cauda_s` segundos da cama passam a ser um crossfade
+        (smoothstep, o mesmo do dissolve da imagem) para os PRIMEIROS
+        `cauda_s` segundos dela. É o espelho exato do que o vídeo faz com os
+        quadros -- lá o último dissolve no primeiro, aqui a cama faz o mesmo.
+
+    SÓ A CAMA, E ISSO IMPORTA
+        Se o crossfade fosse da mistura inteira, o susto do gancho (que mora
+        em t=0) tocaria DUAS vezes: uma na emenda e outra no rewatch. A cama
+        é a única camada contínua do vídeo -- voz e efeito são eventos, e
+        evento repetido na emenda é o defeito que se está consertando.
+    """
+    n = len(faixa)
+    c = int(max(0.0, cauda_s) * sr)
+    if c < 2 or n < 2 * c:
+        return faixa
+    u = np.linspace(0.0, 1.0, c, dtype=np.float32)
+    u = u * u * (3.0 - 2.0 * u)
+    saida = faixa.copy()
+    saida[n - c:] = faixa[n - c:] * (1.0 - u) + faixa[:c] * u
+    return saida
+
+
+def mixar(voz_wav, eventos, destino, musica=None, dur_s=None, sr=SR, bipes=None,
+          loop_cauda_s=0.0):
     """Voz + efeitos + trilha -> um WAV só, que é o que o ffmpeg recebe.
 
     `musica` é o bloco `musica` do spec (ou None/False para desligar):
@@ -1877,7 +1924,16 @@ def mixar(voz_wav, eventos, destino, musica=None, dur_s=None, sr=SR, bipes=None)
                           f"{float(cfg.get('bpm') or GENEROS[g_nome]['bpm']):.0f} bpm")
             g = _db(float(cfg.get("ganho_db", GANHO_MUSICA_DB)))
             duck = _ducking(_ajustar(voz, n), sr)
-            mix += _ajustar(faixa, n) * g * _ajustar(duck, n)
+            # A EMENDA DO LAÇO, antes do ducking: ver `_emendar_bed`. Depois
+            # do ducking ela emendaria a cama JÁ abaixada pela fala, e o nível
+            # do fim deixaria de casar com o do começo -- que é justamente o
+            # que se está consertando.
+            bed = _ajustar(faixa, n)
+            if loop_cauda_s > 0:
+                bed = _emendar_bed(bed, loop_cauda_s, sr)
+                print(f"[musica] cama emendada no laco: os ultimos "
+                      f"{loop_cauda_s:.2f}s dissolvem no comeco dela")
+            mix += bed * g * _ajustar(duck, n)
         except Exception as e:
             print(f"[musica] falhou ({e}); seguindo sem trilha")
 
