@@ -410,6 +410,13 @@ TITULO_SOMBRA = (0, 0, 0, 105)
 TITULO_INCLINACAO = -2.0                 # graus; colado torto, de propósito
 TITULO_ENTRADA_S = 0.35
 TITULO_SAIDA_S = 0.6
+# Quanto antes do fim o cartaz volta (13/09). Ver `Titulo.volta`: ele sobe com
+# o mesmo pop da abertura e NAO sai mais, para o ultimo quadro do video ser o
+# mais parecido possivel com o primeiro -- que e' o que o loop dissolve.
+# 1,6 s e' o tempo de a subida acontecer (0,35 s) e ainda sobrar leitura: o
+# titulo tem no maximo oito palavras (`formato.titulo_max_palavras`), e uma
+# linha de oito palavras se le em pouco mais de um segundo.
+TITULO_REPRISE_S = 1.6
 _NUMERO_NO_TITULO = re.compile(r"\d|R\$|\$|€")
 
 
@@ -422,10 +429,38 @@ class Titulo:
     entrada e saída, uma reamostragem. Legenda e título continuam sendo
     famílias diferentes de propósito (ver `CANDIDATAS_TITULO`)."""
 
-    def __init__(self, largura, altura, texto, segundos=TITULO_SEGUNDOS):
+    def __init__(self, largura, altura, texto, segundos=TITULO_SEGUNDOS,
+                 dur_total=0.0):
         self.W, self.H = largura, altura
         self.texto = str(texto or "").strip().upper()
         self.ate = float(segundos)
+        # A REPRISE, E POR QUE ELA EXISTE (13/09, ordem do dono: *"melhore a
+        # qualidade do loop, esta muito forcado (...) o titulo deve subir
+        # antes do video acabar"*).
+        #
+        # O loop de 12/09 dissolve o ULTIMO quadro no PRIMEIRO e segura nele.
+        # O primeiro quadro tem o cartaz do titulo no comeco do pop (escala
+        # 0,82); o ultimo nao tem cartaz nenhum, porque ele sai aos 4,5 s. O
+        # dissolve, entao, era metade emenda de cena e metade um cartaz
+        # NASCENDO do nada no meio da tela -- que e' exatamente o "forcado"
+        # que o dono viu: nao ha nada na linguagem do video que explique um
+        # papel aparecendo ali.
+        #
+        # Com a reprise o cartaz JA ESTA na tela quando a cauda comeca, e o
+        # dissolve passa a ser de titulo para titulo: a emenda deixa de ter um
+        # elemento que aparece e passa a ter um que continua. De quebra, quem
+        # chegou no meio do video le a premissa outra vez antes de o loop
+        # recomecar, que e' o que faz o rewatch fazer sentido.
+        #
+        # Ela SOBE e FICA: nada de saida. O ultimo quadro do video tem de ser
+        # o mais parecido possivel com o primeiro, e sumir antes do fim seria
+        # desfazer a razao de ela existir.
+        self.dur_total = float(dur_total or 0.0)
+        self.volta = (self.dur_total - TITULO_REPRISE_S) if self.dur_total > 0 else None
+        # nunca por cima da propria primeira aparicao: num video curtissimo as
+        # duas janelas se encostariam e o cartaz nunca sairia da tela
+        if self.volta is not None and self.volta < self.ate + 1.0:
+            self.volta = None
         self._cartaz = None
         self._cache = {}
         # ENCOLHER ANTES DE CORTAR (03/09). A primeira versão fixava o corpo
@@ -567,12 +602,21 @@ class Titulo:
         return 1.0, 1.0, 0.0
 
     def desenhar(self, quadro, t):
-        if not self.linhas or t > self.ate or t < 0:
+        if not self.linhas or t < 0:
+            return quadro
+        # DUAS JANELAS: a abertura (0..ate) e a reprise do fim (volta..).
+        # Ver `self.volta` no `__init__`. Na reprise so' ha ENTRADA -- o
+        # cartaz sobe e fica ate o ultimo quadro, que e' o que o loop emenda.
+        if t <= self.ate:
+            alfa, esc, dy = self._fase(t, self.ate)
+        elif self.volta is not None and t >= self.volta:
+            alfa, esc, dy = self._fase(min(t - self.volta, TITULO_ENTRADA_S),
+                                       1e9)
+        else:
             return quadro
         if self._cartaz is None:
             self._cartaz = self._montar_cartaz()
         cartaz, (ccx, ccy) = self._cartaz
-        alfa, esc, dy = self._fase(t, self.ate)
         if alfa <= 0:
             return quadro
 
