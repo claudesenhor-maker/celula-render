@@ -1510,7 +1510,7 @@ def _cama_para(falas):
 
 
 def trilha(dur_s, estilo="leve", bpm=None, semente=3, sr=SR, segmentos=None,
-           genero=None):
+           genero=None, laco=False):
     """Bed instrumental do tamanho exato do vídeo, em três camadas.
 
     `genero` (28/08) é a escolha do ROTEIRO -- funk, suspense, novela,
@@ -1693,10 +1693,17 @@ def trilha(dur_s, estilo="leve", bpm=None, semente=3, sr=SR, segmentos=None,
     # entrada e saída: a trilha nasce e morre fora do quadro. Com ENTRADA
     # QUENTE (T2) a rampa de entrada cai de 0,9 s para 0,12 s: a música já
     # está andando quando o vídeo começa, e é o que "já andando" quer dizer.
-    fi, fo = int((0.12 if entrada_quente else 0.9) * sr), int(1.4 * sr)
+    # NO LOOP A TRILHA NAO NASCE NEM MORRE (14/09). O video da manha mediu a
+    # cama no fim a 0,14 da mediana: a rampa de saida de 1,4 s abaixava o
+    # fim, e `_emendar_bed` o costurava na rampa de ENTRADA de 0,9 s -- duas
+    # pontas quase mudas emendadas uma na outra. Com laco a entrada e' quente
+    # e nao ha saida: quem fecha o som e' a emenda.
+    fi = int((0.12 if (entrada_quente or laco) else 0.9) * sr)
+    fo = 0 if laco else int(1.4 * sr)
     if n > fi + fo:
         out[:fi] *= np.linspace(0, 1, fi)
-        out[-fo:] *= np.linspace(1, 0, fo)
+        if fo:
+            out[-fo:] *= np.linspace(1, 0, fo)
     return out
 
 
@@ -1899,7 +1906,8 @@ def mixar(voz_wav, eventos, destino, musica=None, dur_s=None, sr=SR, bipes=None,
                 sem = abs(hash(str(cfg.get("semente", 3)))) % 10000
                 faixa = trilha(n / float(sr), cfg.get("estilo", "leve"),
                                cfg.get("bpm"), semente=sem, sr=sr,
-                               segmentos=segs, genero=gen)
+                               segmentos=segs, genero=gen,
+                               laco=loop_cauda_s > 0)
                 g_nome = gen or GENERO_PADRAO
                 if segs:
                     def _rot(s):
