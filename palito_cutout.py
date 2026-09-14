@@ -3975,6 +3975,67 @@ def _rig_do_trecho(tr, t, pan_base, acoes_do_ator, x_base, falando=True,
     return rig, cam
 
 
+# A VOLTA AO PRIMEIRO QUADRO (14/09, queixa do dono sobre o video PT da manha:
+# *"o loop nao fechou com o comeco, personagem em outra posicao"*).
+#
+# A cauda do loop dissolve o ultimo quadro no primeiro (12/09), e o dissolve
+# so' esconde a emenda se os dois quadros tiverem o boneco no mesmo lugar e
+# na mesma pose. No video da manha a virada do ultimo trecho foi `cair`, que
+# e' POSTURA (fica deitado, `ACOES_QUE_FICAM`): o ultimo quadro tinha o Zeca
+# no chao e o primeiro o tinha em pe, e o dissolve mostrou os dois de uma
+# vez. `maos_na_cabeca`, `aproximar` e `virar` fazem o mesmo em menor escala.
+#
+# Proibir as acoes que nao voltam nao basta (a lista cresce, e o gesto que
+# estava no meio da janela no ultimo quadro tambem difere), entao a garantia
+# e' geometrica: nos ultimos `VOLTA_LOOP_S` do ultimo trecho, o rig de cada
+# ator e' levado, osso a osso, ate o rig que ele tinha no quadro 0. A virada
+# acontece inteira e o corpo ASSENTA de volta -- o *settle* da lei 76 -- e o
+# dissolve passa a ligar dois quadros com a mesma silhueta.
+VOLTA_LOOP_S = 0.55
+
+
+def _peso_volta(t, dur_s):
+    """0 no resto do ultimo trecho, subindo em smoothstep ate 1 no fim dele.
+    A janela nunca passa de 45% do trecho: num trecho curto a virada ainda
+    precisa de tempo para acontecer antes de assentar."""
+    if dur_s <= 0:
+        return 0.0
+    janela = min(VOLTA_LOOP_S, 0.45 * dur_s)
+    u = (t * dur_s - (dur_s - janela)) / max(janela, 1e-6)
+    u = max(0.0, min(1.0, u))
+    return u * u * (3 - 2 * u)
+
+
+def _misturar_rig(rig, alvo, w):
+    """`rig` levado a `alvo` por `w`, osso a osso. So' mistura numero com
+    numero e lista com lista do mesmo tamanho; o que nao casa fica como esta."""
+    out = {}
+    for k, v in rig.items():
+        a = alvo.get(k)
+        if (isinstance(v, (int, float)) and not isinstance(v, bool)
+                and isinstance(a, (int, float)) and not isinstance(a, bool)):
+            out[k] = v + (a - v) * w
+        elif (isinstance(v, list) and isinstance(a, list) and len(v) == len(a)
+              and all(isinstance(x, (int, float)) for x in v + a)):
+            out[k] = [x + (y - x) * w for x, y in zip(v, a)]
+        else:
+            out[k] = v
+    return out
+
+
+def _misturar_cam(cam, alvo, w):
+    """A deformacao do ator volta junto (achatar, escala, espelho); o fundo
+    nao -- `fundo_dx` e `pan_camera` sao do cenario, e mexer neles no fim
+    faria o mundo escorregar."""
+    out = dict(cam)
+    for k in ("zoom", "zoom_y", "escala_y", "achatar"):
+        if isinstance(cam.get(k), (int, float)) and isinstance(alvo.get(k), (int, float)):
+            out[k] = cam[k] + (alvo[k] - cam[k]) * w
+    if "espelhar" in alvo and w >= 0.5:
+        out["espelhar"] = alvo["espelhar"]
+    return out
+
+
 def _carregar_elenco(spec, pasta_padrao):
     """{chave: (Personagem, x_base)}.
 
@@ -5465,6 +5526,7 @@ def render(pasta_partes, spec, saida, tmpdir=None, amostra=0):
         quero = {min(int(n_total * (i + (i * phi) % 1.0) / amostra),
                      n_total - 1)
                  for i in range(amostra)}
+    rig_zero, cam_zero = {}, {}   # a pose do quadro 0, para o loop (14/09)
     for i_tr, tr in enumerate(spec["trechos"]):
         pedido = tr.get("cenario") or CENARIOS.escolher(tr.get("fala", ""))
         cen, motivo = CENARIOS.resolver(pedido, inventario, tr.get("fala"))
@@ -5501,7 +5563,17 @@ def render(pasta_partes, spec, saida, tmpdir=None, amostra=0):
 
         # O CORTE DESTE TRECHO: o fundo fica imÃ³vel aqui dentro, e o prÃ³ximo
         # trecho pega outro pedaÃ§o da arte (ver PONTOS_DE_CORTE).
-        corte = cenarios[cen].ponto_do_trecho(i_tr)
+        # O FUNDO DO ULTIMO TRECHO E' O DO PRIMEIRO, com loop (14/09). A volta
+        # da pose (`_peso_volta`) levou a emenda da reproducao de 21 para 14 --
+        # e o que sobrou era o cenario: o trecho 0 corta a arte em 0,59 da
+        # faixa e o ultimo em 0,44, entao o dissolve ligava duas paredes
+        # diferentes. O ultimo trecho volta ao ponto do trecho 0 quando o
+        # cenario e' o mesmo; os do meio continuam saltando (lei 26).
+        if i_tr == 0:
+            cen_zero = cen
+        i_ponto = 0 if (loop_on and i_tr == n_trechos - 1 and i_tr > 0
+                        and cen == cen_zero) else i_tr
+        corte = cenarios[cen].ponto_do_trecho(i_ponto)
         cortes.append(f"{corte / max(cenarios[cen].faixa, 1):.2f}")
 
         # ONDE A CÃ‚MERA CENTRA neste cenÃ¡rio: o meio do corpo, que depende
@@ -5743,6 +5815,17 @@ def render(pasta_partes, spec, saida, tmpdir=None, amostra=0):
                 rig["quadril"] = [rig["quadril"][0],
                                   rig["quadril"][1] + dy + dy_chao]
                 rigs[chave], cams[chave] = rig, c
+                # A VOLTA AO PRIMEIRO QUADRO (14/09) -- ver `_peso_volta`.
+                if loop_on:
+                    if i_tr == 0 and f == 0:
+                        rig_zero[chave] = {k: (list(v) if isinstance(v, list) else v)
+                                           for k, v in rig.items()}
+                        cam_zero[chave] = dict(c)
+                    elif i_tr == n_trechos - 1 and chave in rig_zero:
+                        w = _peso_volta(t, float(tr.get("dur") or 0.0))
+                        if w > 0.0:
+                            rigs[chave] = _misturar_rig(rig, rig_zero[chave], w)
+                            cams[chave] = _misturar_cam(c, cam_zero[chave], w)
             # QUEM FALA FICA NA FRENTE. A ordem Ã© estÃ¡vel dentro do trecho
             # (o falante nÃ£o muda no meio de uma fala), entÃ£o nada pisca de
             # profundidade; e o braÃ§o de quem gesticula passa por cima do
@@ -6140,6 +6223,9 @@ def render(pasta_partes, spec, saida, tmpdir=None, amostra=0):
             n += 1
         print(f"[loop] cauda: {n_trans} quadros de dissolve + {n_segura} segurando o "
               f"primeiro quadro ({(n_trans + n_segura) / FPS:.2f}s)")
+    if loop_on and rig_zero:
+        print(f"[loop] no fim do ultimo trecho ({VOLTA_LOOP_S:.2f}s) "
+              f"{', '.join(sorted(rig_zero))} voltam a pose do quadro 0")
     print(f"[cutout] {n} frames ({n/FPS:.1f}s)")
     print(f"[cara] {' -> '.join(caras)}")
     print(f"[camera] plano por trecho: {' -> '.join(planos)}")
