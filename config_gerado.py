@@ -1,0 +1,135 @@
+# -*- coding: utf-8 -*-
+"""config_gerado.py -- GERADO de lab-celula/config.json.
+
+NAO EDITE AQUI. Edite o JSON e rode:
+    python ferramentas/gerar_config.py --aplicar
+
+Existe porque `work/` roda dentro do GitHub Actions, onde nao ha
+`config.json` nem `config.py` -- e desde 18/09 o motor precisa de numeros de
+FORMATO (o respiro, a legenda, o loudnorm e a cadencia do estilo cartao).
+`gerar_config.py --ver` recusa quando este arquivo esta atrasado, e
+`subir_render.py` o leva para o repo com o resto.
+
+Uso:
+    from config_gerado import formato_de
+    f = formato_de("cartao")          # a regra inteira do estilo
+"""
+
+CONFIG = {
+ "formato": {
+  "beats_max": 4,
+  "beats_min": 2,
+  "contexto_custo_palavras": 15,
+  "contexto_max_palavras": 22,
+  "contexto_min_palavras": 8,
+  "duplicata_max": 0.6,
+  "dur_max_s": 28,
+  "dur_min_s": 20,
+  "efeito_uma_em": 3,
+  "estado_igual": 0.6,
+  "fala_max_palavras": 16,
+  "fala_min_palavras": 5,
+  "falas_max": 6,
+  "falas_min": 3,
+  "gancho_max_palavras": 6,
+  "gancho_min_palavras": 3,
+  "legenda_palavras": 3,
+  "loudnorm": "loudnorm=I=-9:LRA=8:TP=-1.5",
+  "margem_tts": 1.15,
+  "narrador_max_palavras": 14,
+  "narradores_max": 2,
+  "palavras_boas_por_fala": 11,
+  "pausa_punch_s": 0.7,
+  "pausa_trecho_s": 0.35,
+  "remate_max_palavras": 12,
+  "titulo_max_palavras": 8,
+  "tolerancia_dur": 0.15,
+  "wps": 2.6
+ },
+ "formatos": {
+  "cartao": {
+   "beats_max": 4,
+   "beats_min": 2,
+   "cadencia_max_s": 3.2,
+   "cadencia_min_s": 1.8,
+   "cadencia_teto_s": 4.0,
+   "cenario_lavado": 0.42,
+   "contexto_custo_palavras": 15,
+   "contexto_max_palavras": 22,
+   "contexto_min_palavras": 8,
+   "duplicata_max": 0.6,
+   "dur_max_s": 28,
+   "dur_min_s": 20,
+   "efeito_uma_em": 3,
+   "estado_igual": 0.6,
+   "estilo": "cartao",
+   "fala_max_palavras": 16,
+   "fala_min_palavras": 5,
+   "falas_max": 8,
+   "falas_min": 4,
+   "fator_duracao": 1.5,
+   "fundo": "#F4EFE4",
+   "gancho_max_palavras": 9,
+   "gancho_min_palavras": 3,
+   "legenda_palavras": 1,
+   "loudnorm": "loudnorm=I=-13:LRA=13:TP=-1.0",
+   "margem_tts": 1.15,
+   "max_palavras_cartao": 9,
+   "motor": "cartao",
+   "narrador_max_palavras": 14,
+   "narradores_max": 2,
+   "palavras_boas_por_fala": 11,
+   "pausa_punch_s": 0.5,
+   "pausa_trecho_s": 0.3,
+   "placa_a_cada": 3,
+   "remate_max_palavras": 12,
+   "titulo_max_palavras": 8,
+   "tolerancia_dur": 0.15,
+   "wps": 3.4
+  },
+  "dupla": {
+   "beats_max": 4,
+   "beats_min": 2,
+   "contexto_custo_palavras": 15,
+   "contexto_max_palavras": 22,
+   "contexto_min_palavras": 8,
+   "duplicata_max": 0.6,
+   "dur_max_s": 28,
+   "dur_min_s": 20,
+   "efeito_uma_em": 3,
+   "estado_igual": 0.6,
+   "estilo": "dupla",
+   "fala_max_palavras": 16,
+   "fala_min_palavras": 5,
+   "falas_max": 6,
+   "falas_min": 3,
+   "gancho_max_palavras": 6,
+   "gancho_min_palavras": 3,
+   "legenda_palavras": 3,
+   "loudnorm": "loudnorm=I=-9:LRA=8:TP=-1.5",
+   "margem_tts": 1.15,
+   "motor": "palito",
+   "narrador_max_palavras": 14,
+   "narradores_max": 2,
+   "palavras_boas_por_fala": 11,
+   "pausa_punch_s": 0.7,
+   "pausa_trecho_s": 0.35,
+   "remate_max_palavras": 12,
+   "titulo_max_palavras": 8,
+   "tolerancia_dur": 0.15,
+   "wps": 2.6
+  }
+ }
+}
+
+FORMATO = CONFIG["formato"]
+FORMATOS = CONFIG["formatos"]
+ESTILO_PADRAO = "dupla"
+
+
+def formato_de(estilo=None):
+    """A regra do estilo, ja fundida com a da dupla. Estilo desconhecido cai
+    na dupla, que e' o que esta no ar."""
+    e = str(estilo or ESTILO_PADRAO).lower()
+    f = FORMATOS.get(e) or FORMATOS.get(ESTILO_PADRAO)
+    return dict(f or FORMATO)
