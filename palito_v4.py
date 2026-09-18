@@ -81,9 +81,20 @@ EXPRESSOES = {
 
 
 def merge(b, *ds):
-    o = dict(b)
+    """Junta dicts de rig -- COPIANDO as listas (16/09).
+
+    A copia era rasa, e `braco_e`/`braco_d` do REST global eram as MESMAS
+    listas em todo rig montado a partir dele. `acoes.escutar` soma no
+    `b[1]` no lugar (e `parado` tambem escreve em lista existente): com o
+    ouvinte de expressao neutra -- que nao passa por `aplicar_postura`, a
+    unica que trocava a lista -- o repouso do canal inteiro derivava a cada
+    frame: em 120 frames, [103, 12] virou [104.7, 42.9]. E' o antebraco de
+    quem escuta abrindo devagar ao longo do video, em producao, e o mesmo
+    defeito no modo cartao (o Pal "escutando" cada vez mais largo)."""
+    o = {k: (list(v) if isinstance(v, list) else v) for k, v in b.items()}
     for d in ds:
-        o.update(d)
+        for k, v in d.items():
+            o[k] = list(v) if isinstance(v, list) else v
     return o
 
 
