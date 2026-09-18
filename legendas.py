@@ -430,10 +430,14 @@ class Titulo:
     famílias diferentes de propósito (ver `CANDIDATAS_TITULO`)."""
 
     def __init__(self, largura, altura, texto, segundos=TITULO_SEGUNDOS,
-                 dur_total=0.0):
+                 dur_total=0.0, laco=False):
         self.W, self.H = largura, altura
         self.texto = str(texto or "").strip().upper()
         self.ate = float(segundos)
+        # COM LOOP O CARTAZ JA ESTA DE PE NO QUADRO 0 (14/09): o video termina
+        # exatamente no quadro 0, e o fim tem a reprise parada. Um pop de
+        # entrada no comeco faria o primeiro quadro ser o unico sem cartaz.
+        self.laco = bool(laco)
         # A REPRISE, E POR QUE ELA EXISTE (13/09, ordem do dono: *"melhore a
         # qualidade do loop, esta muito forcado (...) o titulo deve subir
         # antes do video acabar"*).
@@ -608,7 +612,10 @@ class Titulo:
         # Ver `self.volta` no `__init__`. Na reprise so' ha ENTRADA -- o
         # cartaz sobe e fica ate o ultimo quadro, que e' o que o loop emenda.
         if t <= self.ate:
-            alfa, esc, dy = self._fase(t, self.ate)
+            if self.laco and t < TITULO_ENTRADA_S:
+                alfa, esc, dy = 1.0, 1.0, 0.0      # ver `self.laco`
+            else:
+                alfa, esc, dy = self._fase(t, self.ate)
         elif self.volta is not None and t >= self.volta:
             alfa, esc, dy = self._fase(min(t - self.volta, TITULO_ENTRADA_S),
                                        1e9)
