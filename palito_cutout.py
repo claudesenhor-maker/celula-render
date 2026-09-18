@@ -3991,16 +3991,29 @@ def _rig_do_trecho(tr, t, pan_base, acoes_do_ator, x_base, falando=True,
 # ator e' levado, osso a osso, ate o rig que ele tinha no quadro 0. A virada
 # acontece inteira e o corpo ASSENTA de volta -- o *settle* da lei 76 -- e o
 # dissolve passa a ligar dois quadros com a mesma silhueta.
-VOLTA_LOOP_S = 0.55
+# 0,55 -> 2,5 s (14/09, segunda ordem do dono: *"nos ultimos 2 a 3 segundos
+# deve ser feita uma transicao suave para exatamente o mesmo quadro do
+# primeiro quadro"*). Com 0,55 s so' o corpo voltava; camera, fundo e quem
+# esta no quadro ficavam para um dissolve de 0,45 s que mostrava duas imagens
+# ao mesmo tempo. Agora TUDO volta nesta janela (ver `w_volta` no laco de
+# quadros) e o dissolve deixa de existir. `spec.loop.volta_s` muda o tempo;
+# 0 devolve o modo antigo, de cauda.
+VOLTA_LOOP_S = 2.5
+# A fusao final, curta, que termina NO quadro 0: o que o estado da cena nao
+# leva de volta sozinho (a boca, a legenda) se resolve aqui, com as duas
+# imagens ja quase iguais -- e o ultimo quadro desenhado E' o primeiro.
+FUNDE_LOOP_S = 0.6
+# sem cauda de quadros, a cama da trilha emenda no laco por este tempo
+LOOP_SOM_S = 1.0
 
 
-def _peso_volta(t, dur_s):
+def _peso_volta(t, dur_s, janela_s=VOLTA_LOOP_S):
     """0 no resto do ultimo trecho, subindo em smoothstep ate 1 no fim dele.
-    A janela nunca passa de 45% do trecho: num trecho curto a virada ainda
-    precisa de tempo para acontecer antes de assentar."""
-    if dur_s <= 0:
+    A janela nunca passa de 85% do trecho: o comeco da fala final ainda e' da
+    cena, e so' depois dele a cena volta ao comeco."""
+    if dur_s <= 0 or janela_s <= 0:
         return 0.0
-    janela = min(VOLTA_LOOP_S, 0.45 * dur_s)
+    janela = min(janela_s, 0.85 * dur_s)
     u = (t * dur_s - (dur_s - janela)) / max(janela, 1e-6)
     u = max(0.0, min(1.0, u))
     return u * u * (3 - 2 * u)
@@ -4033,6 +4046,14 @@ def _misturar_cam(cam, alvo, w):
             out[k] = cam[k] + (alvo[k] - cam[k]) * w
     if "espelhar" in alvo and w >= 0.5:
         out["espelhar"] = alvo["espelhar"]
+    return out
+
+
+def _com_alfa(camada, a):
+    """A camada de um ator com a opacidade multiplicada por `a` (0..1): quem
+    nao esta no quadro 0 sai da tela aos poucos durante a volta do loop."""
+    out = camada.copy()
+    out.putalpha(camada.getchannel("A").point(lambda v: int(v * a)))
     return out
 
 
@@ -5379,6 +5400,14 @@ def render(pasta_partes, spec, saida, tmpdir=None, amostra=0):
     loop_on = bool(loop_cfg.get("ativo")) and not amostra
     loop_trans = max(0.0, float(loop_cfg.get("transicao_s", 0.45)))
     loop_segura = max(0.0, float(loop_cfg.get("segurar_s", 0.20)))
+    # COM A VOLTA NO PROPRIO TRECHO NAO HA CAUDA (14/09): o ultimo quadro
+    # desenhado ja e' o quadro 0, e um dissolve depois dele nao teria o que
+    # dissolver -- so' atrasaria o recomeco.
+    volta_s = max(0.0, float(loop_cfg.get("volta_s", VOLTA_LOOP_S)))
+    if loop_on and volta_s > 0:
+        loop_trans = loop_segura = 0.0
+        print(f"[loop] volta ao quadro 0 nos ultimos {volta_s:.1f}s do ultimo "
+              f"trecho, fundindo em {FUNDE_LOOP_S:.1f}s; sem cauda")
     cauda_loop = (loop_trans + loop_segura) if loop_on else 0.0
     if loop_on:
         print(f"[loop] ligado: cauda de {cauda_loop:.2f}s (dissolve {loop_trans:.2f}s "
@@ -5438,7 +5467,8 @@ def render(pasta_partes, spec, saida, tmpdir=None, amostra=0):
                           # ver `sfx._emendar_bed`. A cauda e' a MESMA do
                           # dissolve dos quadros, para os dois emendarem no
                           # mesmo instante.
-                          loop_cauda_s=cauda_loop)
+                          loop_cauda_s=(cauda_loop if cauda_loop > 0 else
+                                        (LOOP_SOM_S if loop_on else 0.0)))
 
     # LEGENDA: opcional, mas ligada por padrÃ£o. Short se assiste no mudo.
     # O TÃTULO NO ALTO (03/09, item 1 do dono do projeto). Ver
@@ -5457,7 +5487,7 @@ def render(pasta_partes, spec, saida, tmpdir=None, amostra=0):
             # laco de frames (ela copia o ultimo quadro e o quadro 0), entao o
             # ultimo quadro DESENHADO e' o de `total`. E' ali que a reprise
             # tem de estar de pe -- ver `legendas.Titulo.volta`.
-            titulo = Titulo(W, H, txt_titulo, dur_total=total)
+            titulo = Titulo(W, H, txt_titulo, dur_total=total, laco=loop_on)
             if titulo.volta is not None:
                 print(f"[titulo] \"{txt_titulo}\" nos primeiros "
                       f"{titulo.ate:.1f}s e de volta em {titulo.volta:.1f}s "
@@ -5527,6 +5557,10 @@ def render(pasta_partes, spec, saida, tmpdir=None, amostra=0):
                      n_total - 1)
                  for i in range(amostra)}
     rig_zero, cam_zero = {}, {}   # a pose do quadro 0, para o loop (14/09)
+    # e o resto do quadro 0: camera, mira, terco, quem estava enquadrado, e a
+    # imagem composta -- a volta do loop leva o fim ate exatamente ele
+    quadro_zero = cam_q0 = centro_q0 = alvo_q0 = no_quadro_q0 = None
+    terco_q0 = 0.0
     for i_tr, tr in enumerate(spec["trechos"]):
         pedido = tr.get("cenario") or CENARIOS.escolher(tr.get("fala", ""))
         cen, motivo = CENARIOS.resolver(pedido, inventario, tr.get("fala"))
@@ -5744,6 +5778,16 @@ def render(pasta_partes, spec, saida, tmpdir=None, amostra=0):
             fh = (f // 2) * 2                       # animar "em 2s"
             t = fh / max(1, nf - 1)
             nivel = env[n] if n < len(env) else 0.0
+            # A VOLTA AO QUADRO 0 (14/09). `w_volta` leva pose, posicao,
+            # camera, fundo e quem esta enquadrado ao estado do quadro 0 nos
+            # ultimos `volta_s`; `w_funde` fecha o que sobra numa fusao curta
+            # que termina NO quadro 0. `w_funde` usa o quadro real e nao o
+            # "em 2s": o ultimo quadro tem de chegar a 1 exatamente.
+            w_volta = w_funde = 0.0
+            if loop_on and volta_s > 0 and i_tr == n_trechos - 1 and i_tr > 0:
+                dur_tr = float(tr.get("dur") or 0.0)
+                w_volta = _peso_volta(t, dur_tr, volta_s)
+                w_funde = _peso_volta(f / max(1, nf - 1), dur_tr, FUNDE_LOOP_S)
 
             # O QUE CADA UM TEM NA MÃƒO, ANTES do desvio da amostra. O
             # objeto Ã© ESTADO: ele passa de mÃ£o num frame e continua lÃ¡ nos
@@ -5821,11 +5865,9 @@ def render(pasta_partes, spec, saida, tmpdir=None, amostra=0):
                         rig_zero[chave] = {k: (list(v) if isinstance(v, list) else v)
                                            for k, v in rig.items()}
                         cam_zero[chave] = dict(c)
-                    elif i_tr == n_trechos - 1 and chave in rig_zero:
-                        w = _peso_volta(t, float(tr.get("dur") or 0.0))
-                        if w > 0.0:
-                            rigs[chave] = _misturar_rig(rig, rig_zero[chave], w)
-                            cams[chave] = _misturar_cam(c, cam_zero[chave], w)
+                    elif w_volta > 0.0 and chave in rig_zero:
+                        rigs[chave] = _misturar_rig(rig, rig_zero[chave], w_volta)
+                        cams[chave] = _misturar_cam(c, cam_zero[chave], w_volta)
             # QUEM FALA FICA NA FRENTE. A ordem Ã© estÃ¡vel dentro do trecho
             # (o falante nÃ£o muda no meio de uma fala), entÃ£o nada pisca de
             # profundidade; e o braÃ§o de quem gesticula passa por cima do
@@ -5968,14 +6010,30 @@ def render(pasta_partes, spec, saida, tmpdir=None, amostra=0):
             # composto, e volta no plano seguinte, no lugar dele.
             no_quadro = [falante] if (fecha and falante in so_dele) \
                 else atras_na_frente
+            # NA VOLTA DO LOOP, O QUADRO 0 DECIDE QUEM APARECE (14/09): quem
+            # nao estava enquadrado nele sai aos poucos, quem estava entra.
+            alfa_ator = {}
+            if w_volta > 0.0 and no_quadro_q0 is not None:
+                for chave in atras_na_frente:
+                    agora, antes = chave in no_quadro, chave in no_quadro_q0
+                    if agora and not antes:
+                        alfa_ator[chave] = 1.0 - w_volta
+                    elif antes and not agora:
+                        alfa_ator[chave] = w_volta
             for chave in atras_na_frente:
                 if chave == falante:
                     cam_falante = cams[chave]
                     x_falante = rigs[chave]["quadril"][0]
-                if chave not in no_quadro:
+                if chave not in no_quadro and chave not in alfa_ator:
                     continue
-                por_ator_camada.append(so_dele[chave])
-                camada.alpha_composite(so_dele[chave])
+                lay = so_dele[chave]
+                a_lay = alfa_ator.get(chave, 1.0)
+                if a_lay <= 0.001:
+                    continue
+                if a_lay < 0.999:
+                    lay = _com_alfa(lay, a_lay)
+                por_ator_camada.append(lay)
+                camada.alpha_composite(lay)
             cam = cam_falante
             # O FUNDO SEGUE A CÃ‚MERA, NÃƒO O FALANTE. `cam_falante` traz o
             # `pan_base` do trecho (o ponto de corte do cenÃ¡rio) somado ao
@@ -6154,14 +6212,39 @@ def render(pasta_partes, spec, saida, tmpdir=None, amostra=0):
             # NO CLOSE A CÃ‚MERA MIRA UM SÃ“, e Ã© a silhueta DELE que limita
             # o quanto ela fecha (ver `montar_frame`): a do par somado
             # travaria o plano em 1,33 e o close nÃ£o aconteceria.
+            centro_x = (x_falante if fecha else
+                        (sum(dentro) / len(dentro) if dentro else None))
+            alvo = so_dele.get(falante) if fecha else None
+            terco = float(_terco_do_trecho(i_tr, len(chaves)))
+            # A CAMERA TAMBEM VOLTA (14/09) -- ver `w_volta` no topo do laco.
+            # O quadro 0 guarda o que a camera pediu a `montar_frame`; na volta
+            # cada entrada anda ate o valor dele. O fundo (`fundo_dx`) vai
+            # junto: o ponto de corte do ultimo trecho ja e' o do trecho 0
+            # quando o cenario e' o mesmo, e aqui some o resto da caminhada.
+            if loop_on and n == 0:
+                cam_q0 = {k: float(cam.get(k, d)) for k, d in
+                          (("zoom", 1.0), ("zoom_y", 0.5), ("fundo_dx", 0.0))}
+                centro_q0, terco_q0 = centro_x, terco
+                alvo_q0 = falante if fecha else None
+                no_quadro_q0 = list(no_quadro)
+            elif w_volta > 0.0 and cam_q0 is not None:
+                for k in ("zoom", "zoom_y", "fundo_dx"):
+                    v = float(cam.get(k, cam_q0[k]))
+                    cam[k] = v + (cam_q0[k] - v) * w_volta
+                meia_v = 0.5 / max(cam["zoom"], 1e-6)
+                cam["zoom_y"] = max(meia_v, min(1.0 - meia_v, cam["zoom_y"]))
+                if centro_x is not None and centro_q0 is not None:
+                    centro_x = centro_x + (centro_q0 - centro_x) * w_volta
+                elif w_volta >= 0.5:
+                    centro_x = centro_q0
+                terco = terco + (terco_q0 - terco) * w_volta
+                if w_volta >= 0.5:
+                    alvo = so_dele.get(alvo_q0) if alvo_q0 else None
             quadro = montar_frame(camada, cenarios[cen], cam, x_falante,
                                   camadas=por_ator_camada,
-                                  centro_x=(x_falante if fecha else
-                                            (sum(dentro) / len(dentro)
-                                             if dentro else None)),
-                                  camada_alvo=(so_dele.get(falante)
-                                               if fecha else None),
-                                  terco=_terco_do_trecho(i_tr, len(chaves)),
+                                  centro_x=centro_x,
+                                  camada_alvo=alvo,
+                                  terco=terco,
                                   caixa_extra=pecas_falante.get("_objeto"))
             # O TÃTULO ANTES DA LEGENDA: nos primeiros segundos os dois podem
             # coexistir, e o de baixo Ã© o que acompanha a boca.
@@ -6171,6 +6254,11 @@ def render(pasta_partes, spec, saida, tmpdir=None, amostra=0):
                 # por cima de tudo, e no tempo GLOBAL: o Ã­ndice do frame Ã©
                 # contÃ­nuo entre trechos, entÃ£o n/FPS Ã© o relÃ³gio do vÃ­deo
                 leg.desenhar(quadro, n / float(FPS))
+            # A FUSAO FINAL (14/09): termina NO quadro 0 composto, com titulo
+            # e legenda. O ultimo quadro desenhado do video e' o primeiro.
+            if w_funde > 0.0 and quadro_zero is not None:
+                quadro = Image.blend(quadro.convert("RGB"),
+                                     quadro_zero.convert("RGB"), w_funde)
             # COMPRESSÃƒO 1, NÃƒO A PADRÃƒO 6. Estes PNG existem por segundos:
             # o ffmpeg os lÃª na linha seguinte e a pasta Ã© temporÃ¡ria.
             # Medido num frame 1080x1920: 614 ms com a compressÃ£o padrÃ£o,
@@ -6224,7 +6312,7 @@ def render(pasta_partes, spec, saida, tmpdir=None, amostra=0):
         print(f"[loop] cauda: {n_trans} quadros de dissolve + {n_segura} segurando o "
               f"primeiro quadro ({(n_trans + n_segura) / FPS:.2f}s)")
     if loop_on and rig_zero:
-        print(f"[loop] no fim do ultimo trecho ({VOLTA_LOOP_S:.2f}s) "
+        print(f"[loop] no fim do ultimo trecho ({volta_s:.2f}s) "
               f"{', '.join(sorted(rig_zero))} voltam a pose do quadro 0")
     print(f"[cutout] {n} frames ({n/FPS:.1f}s)")
     print(f"[cara] {' -> '.join(caras)}")
