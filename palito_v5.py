@@ -44,6 +44,58 @@ SR = 24000
 # =====================================================================
 _VOZES = None          # cache do catalogo real, buscado uma vez por processo
 
+# DNS DE RESERVA (16/09). Na maquina do laboratorio o DNS da rede (10.11.0.1)
+# responde "Server failed" para speech.platform.bing.com -- so' para ele --
+# enquanto o Google DNS resolve. Era a nota "o Edge nao resolve nesta
+# maquina" do render_cartao.py. Quando o getaddrinfo do sistema falha, o
+# nome e' consultado por DNS-sobre-HTTPS (dns.google) e o resultado entra
+# no lugar; o resto do aiohttp (SNI, TLS) continua igual porque so' o IP
+# muda. Sem rede nenhuma continua falhando como antes.
+_DNS_CACHE = {}
+_getaddrinfo_original = None
+
+
+def _dns_reserva_instalar():
+    global _getaddrinfo_original
+    import socket
+    if _getaddrinfo_original is not None:
+        return
+    _getaddrinfo_original = socket.getaddrinfo
+
+    def _doh(host):
+        if host in _DNS_CACHE:
+            return _DNS_CACHE[host]
+        import json
+        import urllib.request
+        ips = []
+        try:
+            req = urllib.request.Request(f"https://dns.google/resolve?name={host}&type=A",
+                                         headers={"accept": "application/dns-json"})
+            with urllib.request.urlopen(req, timeout=8) as r:
+                for a in json.load(r).get("Answer") or []:
+                    if a.get("type") == 1:
+                        ips.append(a["data"])
+        except Exception as e:                                          # noqa: BLE001
+            print(f"[voz] DNS de reserva para {host} falhou ({e})")
+        _DNS_CACHE[host] = ips
+        if ips:
+            print(f"[voz] {host}: o DNS da rede falhou; dns.google -> {ips[0]}")
+        return ips
+
+    def _getaddrinfo(host, port, *a, **k):
+        try:
+            return _getaddrinfo_original(host, port, *a, **k)
+        except socket.gaierror:
+            ips = _doh(str(host)) if isinstance(host, str) and not host.replace(".", "").isdigit() else []
+            if not ips:
+                raise
+            out = []
+            for ip in ips:
+                out += _getaddrinfo_original(ip, port, *a, **k)
+            return out
+
+    socket.getaddrinfo = _getaddrinfo
+
 
 async def _catalogo_vozes():
     """Vozes que o servico REALMENTE oferece hoje.
@@ -56,6 +108,7 @@ async def _catalogo_vozes():
     global _VOZES
     if _VOZES is None:
         import edge_tts
+        _dns_reserva_instalar()
         _VOZES = {v["ShortName"] for v in await edge_tts.list_voices()}
     return _VOZES
 
