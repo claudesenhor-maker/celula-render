@@ -51,6 +51,36 @@ import json
 import re
 import unicodedata
 
+# A REGRA DO ESTILO vem do `config.json`, por `config_gerado.py` (18/09, §62):
+# respiro, legenda, loudnorm, cadencia e a placa sao numeros de FORMATO, e
+# formato mora num lugar so'. Sem o arquivo gerado (um repo de render
+# desatualizado, por exemplo) o conversor segue com os mesmos valores, para
+# nao parar producao por causa de configuracao -- e diz isso no log.
+try:
+    from config_gerado import formato_de as _formato_de
+    _TEM_CONFIG = True
+except ImportError:                                            # pragma: no cover
+    _TEM_CONFIG = False
+
+    def _formato_de(_estilo=None):
+        return {}
+
+
+PADRAO = {
+    "pausa_trecho_s": 0.3, "pausa_punch_s": 0.5, "legenda_palavras": 1,
+    "placa_a_cada": 3, "cenario_lavado": 0.42, "fundo": "#F4EFE4",
+    "loudnorm": "loudnorm=I=-13:LRA=13:TP=-1.0",
+    "max_palavras_cartao": 9, "cadencia_teto_s": 4.0,
+}
+
+
+def regra(estilo="cartao"):
+    """A regra do estilo, com os padroes de reserva por baixo."""
+    f = dict(PADRAO)
+    f.update({k: v for k, v in (_formato_de(estilo) or {}).items()
+              if v is not None})
+    return f
+
 # Quantos cartoes seguidos podem repetir o mesmo fundo antes de valer a pena
 # repetir a marca `fundo` (o cartao herda o anterior quando ela falta).
 # ---------------------------------------------------------------------
@@ -167,6 +197,7 @@ def converter(spec, pasta_base=None, falar=print):
     (o normal desde 30/08) nao precisa dela.
     """
     spec = copy.deepcopy(spec)
+    F = regra("cartao")
     trechos = spec.get("trechos") or []
     if not trechos:
         raise ValueError("spec sem `trechos` para converter")
@@ -186,7 +217,8 @@ def converter(spec, pasta_base=None, falar=print):
 
     cartoes = []
     fundo_atual = None
-    desde_placa = PLACA_A_CADA         # a primeira placa pode entrar logo
+    placa_a_cada = int(F["placa_a_cada"])
+    desde_placa = placa_a_cada         # a primeira placa pode entrar logo
     placas_postas = 0
     for i, tr in enumerate(trechos):
         fala = str(tr.get("fala") or "").strip()
@@ -246,15 +278,15 @@ def converter(spec, pasta_base=None, falar=print):
         # diferente atropela a conversa -- e no A/B a duracao e' uma variavel
         # que atrapalha, nao uma que se quer medir. 0,3 s devolve ~1,8 s ao
         # video de seis cartoes e deixa o corte ser ouvido.
-        c["respiro_s"] = 0.3
+        c["respiro_s"] = float(F["pausa_trecho_s"])
         if tr.get("punch") or i == len(trechos) - 1:
-            c["respiro_s"] = 0.5      # o silencio depois da tirada
+            c["respiro_s"] = float(F["pausa_punch_s"])   # depois da tirada
 
         # A PLACA COM O DADO. Uma a cada tres cartoes no maximo: placa em todo
         # cartao vira poluicao e rouba o lugar da legenda.
         desde_placa += 1
         m = VALOR.search(fala)
-        if m and desde_placa >= PLACA_A_CADA:
+        if m and desde_placa >= placa_a_cada:
             texto_placa = m.group(1).upper().strip()
             # A NOTA DE DINHEIRO SO' SERVE PARA NUMERO. O gerador `nota`
             # repete o texto no padrao da cedula (como uma nota de verdade
@@ -279,12 +311,17 @@ def converter(spec, pasta_base=None, falar=print):
     #   `cenario_lavado`: o veu que poe o desenho na frente do cenario
     #   `titulo`: ausente = o motor escreve pelo `titulo_da_esquete`, como o
     #             palito ja faz
-    spec["legenda_palavras"] = 1
-    spec.setdefault("cenario_lavado", 0.42)
-    spec.setdefault("fundo", "#F4EFE4")
+    spec["legenda_palavras"] = int(F["legenda_palavras"])
+    spec["loudnorm"] = F["loudnorm"]
+    spec.setdefault("cenario_lavado", float(F["cenario_lavado"]))
+    spec.setdefault("fundo", F["fundo"])
+    # a regra viaja no spec: quem for medir o video depois nao precisa
+    # adivinhar com que parametros ele foi feito
+    spec["regra_estilo"] = {k: F[k] for k in sorted(F) if not k.startswith("_")}
     # `trechos` sai: o `cartao.render` reescreve esse campo com a timeline da
     # voz, e um spec com os dois seria dois roteiros no mesmo arquivo
     spec.pop("trechos", None)
     falar(f"[para_cartao] {len(trechos)} trechos -> {len(cartoes)} cartoes; "
-          f"dupla: {', '.join(dupla)}; {placas_postas} placa(s) de valor")
+          f"dupla: {', '.join(dupla)}; {placas_postas} placa(s) de valor; "
+          f"regra do estilo: {'config.json' if _TEM_CONFIG else 'RESERVA (config_gerado.py nao esta aqui)'}")
     return spec
