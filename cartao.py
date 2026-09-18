@@ -1618,6 +1618,27 @@ def render(pasta_partes, spec, saida, tmpdir=None, amostra=0):
     spec["trechos"] = trechos          # para sfx/legenda, no formato de sempre
     print(f"[voz] timeline real: {total:.2f}s em {len(cartoes)} cartoes "
           f"({total / len(cartoes):.2f}s por cartao)")
+    # A CADENCIA, MEDIDA CONTRA A REGRA DO ESTILO (18/09, §62)
+    #
+    # A troca de tela e' a razao de existir deste modo: o Madrazzo troca a
+    # cada 1,7-1,9 s, e "pouca troca de telas" foi queixa do dono em 16/09
+    # (§57). A regra vive no `config.json` (`formatos.cartao.cadencia_*`) e
+    # chega aqui pelo spec (`regra_estilo`, que `para_cartao` grava) ou pelos
+    # padroes do proprio modo. Isto AVISA e nao corrige: o conserto e' no
+    # roteiro (mais falas) ou no desdobramento, e nenhum dos dois se faz aqui
+    # sem mexer no que o roteirista pediu.
+    _re_ = spec.get("regra_estilo") or {}
+    _lo = float(_re_.get("cadencia_min_s", 1.8))
+    _hi = float(_re_.get("cadencia_max_s", 3.2))
+    _teto = float(_re_.get("cadencia_teto_s", 4.0))
+    _med = total / max(1, len(cartoes))
+    if not (_lo <= _med <= _hi):
+        print(f"[cadencia] {_med:.2f}s por cartao, fora da faixa {_lo}-{_hi}s "
+              f"do estilo: {'corte rapido demais para a legenda' if _med < _lo else 'pouca troca de tela'}")
+    _longos = [(i, t["dur"]) for i, t in enumerate(trechos) if t["dur"] > _teto]
+    if _longos:
+        print(f"[cadencia] {len(_longos)} cartao(oes) acima do teto de {_teto}s: "
+              + ", ".join(f"#{i} ({d:.1f}s)" for i, d in _longos[:6]))
     voz = juntar_com_respiro(faixas, respiros, os.path.join(tmp, "voz.wav"), tmp)
     env = envelope(voz)
 
