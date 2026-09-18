@@ -327,11 +327,24 @@ def estilo_do_item(spec, fila_id, eh_producao):
     try:
         r = requests.get(f"{SB}/rest/v1/fila_producao",
                          params={"fila_id": f"eq.{fila_id}",
-                                 "select": "cell_id,horario_post"},
+                                 "select": "cell_id,horario_post,prompt_video"},
                          headers=CAB, timeout=30)
         item = (r.json() or [None])[0]
         if not item:
             return ESTILO_PADRAO, "item nao esta na fila"
+        # QUEM DECIDE E' O PLANEJAMENTO (18/09, §62): `Distribuir Horarios`
+        # escolhe o estilo de cada video do dia e escreve no conceito
+        # (`| ESTILO: cartao`), porque o ROTEIRO precisa saber antes de
+        # escrever -- o cartao pede mais texto para a mesma duracao. Aqui a
+        # marca so' e' LIDA: recalcular o rodizio seria uma segunda decisao
+        # sobre a mesma coisa, e no dia em que as duas discordassem o video
+        # sairia com o texto de um estilo e o render do outro.
+        marca = re.search(r"ESTILO:\s*([a-z_]+)",
+                          str(item.get("prompt_video") or ""), re.I)
+        if marca:
+            e = marca.group(1).lower()
+            if e in ("cartao", "dupla"):
+                return e, "decidido no Planejamento (marca no conceito)"
         cell = item["cell_id"]
         r = requests.get(f"{SB}/rest/v1/identidade_celula",
                          params={"cell_id": f"eq.{cell}",
@@ -353,8 +366,12 @@ def estilo_do_item(spec, fila_id, eh_producao):
                  if str(x.get("horario_post", ""))[:10] == dia]
         i = doDia.index(fila_id) if fila_id in doDia else 0
         estilo = "cartao" if (i % cada) == (cada - 1) else "dupla"
-        return estilo, (f"rodizio: item {i + 1} de {len(doDia)} do dia, "
-                        f"1 cartao a cada {cada}")
+        # A RESERVA, para o item que nasceu antes de o Planejamento passar a
+        # marcar (ou que foi criado a mao, pela aba Ideia ou por SQL). Ela
+        # repete a MESMA regra do nó -- indice do item no dia, 1 cartao a cada
+        # `cada` --, e o motivo diz que veio daqui.
+        return estilo, (f"rodizio no render (o conceito nao trazia a marca): "
+                        f"item {i + 1} de {len(doDia)} do dia, 1 cartao a cada {cada}")
     except Exception as e:                                       # noqa: BLE001
         print(f"[estilo] nao consegui decidir ({type(e).__name__}: {e}); "
               f"seguindo em {ESTILO_PADRAO}")
