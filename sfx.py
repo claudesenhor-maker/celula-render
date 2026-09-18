@@ -649,7 +649,20 @@ def eventos_do_spec(spec):
             nome = s.get("nome") if isinstance(s, dict) else s
             em = float(s.get("em", 0.0)) if isinstance(s, dict) else 0.0
             g = float(s.get("ganho", 1.0)) if isinstance(s, dict) else 1.0
-            fora.append({"nome": nome, "t": t0 + em * dur, "ganho": g})
+            # O SOM DO GANCHO ATRAVESSA AS GUARDAS (18/09, §59.3).
+            #
+            # `work/gancho.py` marca o efeito do trecho 0 com `gancho: true`, e
+            # a marca precisa VIAJAR: sem ela o som do gancho entra aqui como
+            # um efeito qualquer e pode ser cortado pelo teto de densidade --
+            # que corta por ganho, e por isso na pratica nao o corta hoje. "Na
+            # pratica" nao e' garantia: basta um video com tres efeitos mais
+            # altos para o gancho sair calado, e o defeito seria invisivel (o
+            # spec teria o som, o MP4 nao). E' o mesmo motivo pelo qual o
+            # `corte` tem passe livre desde 04/09.
+            e = {"nome": nome, "t": t0 + em * dur, "ganho": g}
+            if isinstance(s, dict) and s.get("gancho"):
+                e["gancho"] = True
+            fora.append(e)
 
     # DOIS SONS QUASE JUNTOS viram barulho, não ênfase. Fica o de maior
     # ganho. A janela é de 250ms porque o caso real não é empate exato: o
@@ -767,7 +780,12 @@ def eventos_do_spec(spec):
     # propósito e o impacto forte; sai o pop de encosto.
     teto = max(4, int(_duracao_total(trechos) / 4.0))
     if len(limpos) > teto:
-        fortes = sorted(limpos, key=lambda e: -e["ganho"])[:teto]
+        # o gancho nao disputa vaga: ele e' o som que decide se alguem fica
+        # para ouvir os outros (ver o comentario em `gancho: true`, acima)
+        ganchos = [e for e in limpos if e.get("gancho")]
+        resto = [e for e in limpos if not e.get("gancho")]
+        fortes = ganchos + sorted(resto, key=lambda e: -e["ganho"])[
+            :max(0, teto - len(ganchos))]
         cortados = len(limpos) - len(fortes)
         limpos = sorted(fortes, key=lambda e: e["t"])
         print(f"[sfx] {cortados} efeito(s) cortado(s) por densidade "
