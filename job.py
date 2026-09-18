@@ -29,6 +29,9 @@ from palito_v5 import render_spec
 SB = os.environ["SUPABASE_URL"].rstrip("/")
 KEY = os.environ["SUPABASE_SERVICE_KEY"]
 BUCKET = os.environ["SUPABASE_BUCKET"]   # o Action define; sem padrao aqui (11/09)
+# o cabecalho de leitura do REST, num lugar so' (as duas escritas deste
+# arquivo montam o seu porque acrescentam `Prefer`)
+CAB = {"apikey": KEY, "Authorization": f"Bearer {KEY}"}
 
 
 def subir(local, remoto, mime="video/mp4", tentativas=4):
@@ -291,6 +294,73 @@ def baixar_elenco(spec, pecas_url):
     return base, total
 
 
+# =====================================================================
+# O ESTILO DO VIDEO: dupla (cena continua) ou CARTAO (18/09)
+# =====================================================================
+# Ordem do dono: *"suba esse novo estilo para producao em paralelo com o que
+# ja esta (...) no comeco faca um video em cada estilo"*.
+#
+# POR QUE A DECISAO MORA AQUI, E NAO NO n8n
+#     O estilo e' escolha de RENDER: o roteiro dos dois e' o mesmo (ver
+#     `para_cartao`), e por isso nenhum no precisa saber que existem dois
+#     estilos. Pondo a decisao no funil, o experimento nao depende de editar
+#     um no de 111 KB nem de uma migracao de coluna -- e o dia em que o
+#     cartao sair ou entrar e' uma linha na identidade do canal.
+#
+# O RODIZIO E' PELA ORDEM DO ITEM NO DIA, e nao por sorteio (lei 34): os
+# videos do canal naquele dia sao listados por `horario_post`, e o estilo sai
+# do indice. Com `estilo_cartao_em: 2` e dois videos por dia, o primeiro sai
+# dupla e o segundo cartao -- "um video em cada estilo", como foi pedido, e
+# reproduzivel: dois renders do mesmo item dao o mesmo estilo.
+#
+# FALHA SEGURA: qualquer erro de consulta, identidade sem a chave, item fora
+# da fila (render de teste) -> `dupla`, que e' o estilo que esta no ar. Uma
+# decisao de experimento nao pode parar producao.
+ESTILO_PADRAO = "dupla"
+
+
+def estilo_do_item(spec, fila_id, eh_producao):
+    if spec.get("estilo") in ("cartao", "dupla"):
+        return spec["estilo"], "pedido no spec"
+    if not eh_producao:
+        return ESTILO_PADRAO, "render de teste (sem fila): estilo padrao"
+    try:
+        r = requests.get(f"{SB}/rest/v1/fila_producao",
+                         params={"fila_id": f"eq.{fila_id}",
+                                 "select": "cell_id,horario_post"},
+                         headers=CAB, timeout=30)
+        item = (r.json() or [None])[0]
+        if not item:
+            return ESTILO_PADRAO, "item nao esta na fila"
+        cell = item["cell_id"]
+        r = requests.get(f"{SB}/rest/v1/identidade_celula",
+                         params={"cell_id": f"eq.{cell}",
+                                 "select": "identidade_json"},
+                         headers=CAB, timeout=30)
+        idj = ((r.json() or [{}])[0] or {}).get("identidade_json") or {}
+        cada = int(((idj.get("producao") or {}).get("estilo_cartao_em")) or 0)
+        if cada < 2:
+            return ESTILO_PADRAO, "canal sem `producao.estilo_cartao_em`"
+        # os itens do MESMO DIA do canal, por horario -- o indice decide
+        dia = str(item["horario_post"])[:10]
+        r = requests.get(f"{SB}/rest/v1/fila_producao",
+                         params={"cell_id": f"eq.{cell}",
+                                 "horario_post": f"gte.{dia}T00:00:00",
+                                 "select": "fila_id,horario_post",
+                                 "order": "horario_post.asc"},
+                         headers=CAB, timeout=30)
+        doDia = [x["fila_id"] for x in (r.json() or [])
+                 if str(x.get("horario_post", ""))[:10] == dia]
+        i = doDia.index(fila_id) if fila_id in doDia else 0
+        estilo = "cartao" if (i % cada) == (cada - 1) else "dupla"
+        return estilo, (f"rodizio: item {i + 1} de {len(doDia)} do dia, "
+                        f"1 cartao a cada {cada}")
+    except Exception as e:                                       # noqa: BLE001
+        print(f"[estilo] nao consegui decidir ({type(e).__name__}: {e}); "
+              f"seguindo em {ESTILO_PADRAO}")
+        return ESTILO_PADRAO, "erro na decisao"
+
+
 def buscar_cenarios_e_objetos(spec):
     """Poe cenario e objeto no disco, que e onde o motor cut-out procura.
 
@@ -547,6 +617,12 @@ def main():
     # traco oscilando, ausencia de partes moveis. O cut-out resolve os tres
     # -- e por isso ele e o alvo. O vetor fica como rede de seguranca para
     # o dia em que a arte faltar; melhor video feio que producao parada.
+    # O ESTILO vem antes do motor: ele decide QUAL render roda (ver
+    # `estilo_do_item`). O cartao exige arte de peca, como o cut-out -- sem
+    # ela nao ha cartao, e o video cai no caminho normal.
+    estilo, porque_estilo = estilo_do_item(spec, fila_id, eh_producao)
+    print(f"[estilo] {estilo} ({porque_estilo})")
+
     pecas_url = spec.get("personagem_url") or os.environ.get("PERSONAGEM_URL", "")
     motor = "vetor"
     if pecas_url or spec.get("elenco"):
@@ -557,10 +633,24 @@ def main():
         buscar_cenarios_e_objetos(spec)
         try:
             pasta, kb = baixar_elenco(spec, pecas_url)
-            from palito_cutout import render as render_cutout
-            print(f"[motor] cut-out ({kb:.0f} KB de arte)")
-            motor = "cutout"
-            _, dur = render_cutout(pasta, spec, out, tmpdir="/tmp/render")
+            if estilo == "cartao":
+                # O MESMO ROTEIRO, EM CARTOES. A arte esta no mesmo lugar
+                # (`/tmp/personagem/<chave>`, cenarios e objetos em `../`),
+                # que e' onde `cartao.Contexto` tambem procura -- nada a
+                # mover. Se a conversao ou o render de cartao falharem, o
+                # `except` abaixo cai no vetor como sempre; por isso a
+                # conversao esta AQUI dentro e nao antes do try.
+                import para_cartao
+                from cartao import render as render_cartao
+                spec_c = para_cartao.converter(spec, pasta_base=pasta)
+                print(f"[motor] CARTAO ({kb:.0f} KB de arte)")
+                motor = "cartao"
+                _, dur = render_cartao(pasta, spec_c, out, tmpdir="/tmp/render")
+            else:
+                from palito_cutout import render as render_cutout
+                print(f"[motor] cut-out ({kb:.0f} KB de arte)")
+                motor = "cutout"
+                _, dur = render_cutout(pasta, spec, out, tmpdir="/tmp/render")
         except Exception as e:
             # Traceback completo de proposito: este except engole TUDO, ate
             # ImportError. No run #11 um 'No module named numpy' (dependencia
@@ -588,8 +678,13 @@ def main():
         "video_url": url,
         "atualizado_em": "now()",
     })
+    # O ESTILO VAI NO AVISO (18/09): e' o que permite comparar o rodizio
+    # depois. Sem ele, daqui a duas semanas ninguem sabe qual video era
+    # cartao e qual era dupla -- e o A/B vira anedota (a mesma exigencia do
+    # `gancho_frio_por` em §31.4).
     avisar({"fila_id": fila_id, "status": "ok", "video_url": url,
-            "duracao_s": dur, "render_s": round(time.time() - t0)})
+            "duracao_s": dur, "render_s": round(time.time() - t0),
+            "estilo": estilo, "estilo_por": porque_estilo, "motor": motor})
 
 
 if __name__ == "__main__":
