@@ -495,6 +495,13 @@ DA_ACAO = {
     "largar_objeto":   ("thud", 0.60, 0.5),
     "entregar_objeto": ("pop", 0.70, 0.4),
     "usar_objeto":     ("pop", 0.35, 0.4),
+    # O GESTO QUE FAZ BARULHO (19/09). Dos seis movimentos novos, este é o
+    # único que passa na régua deste dicionário -- alguém vendo o quadro no
+    # mudo entende de onde veio o som, porque é o pé no chão. Os outros
+    # cinco (recuar, inclinar, olhar de lado, estufar o peito, virar de
+    # ombros) são silenciosos de propósito: som em gesto que não bate em
+    # nada é o ba-dum-tss da lei 102 com outro nome.
+    "bater_pe":        ("passo", 0.22, 0.55),
 }
 
 # Expressões que merecem marca sonora própria, quando entram como JANELA de
