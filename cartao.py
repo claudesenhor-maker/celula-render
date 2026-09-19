@@ -78,8 +78,90 @@ POP_S = 0.14                # o cartao entra com um pop curto
 POP_FORCA = 0.06
 RESPIRO_S = 0.12
 RESPIRO_SALTO_S = 0.35
+
+# ---------------------------------------------------------------------
+# o objeto do salto de tempo sai do texto do salto (19/09)
+# ---------------------------------------------------------------------
+# "UMA HORA DEPOIS" saiu com CALENDARIO no video que o dono viu: o tipo era
+# `calendario` por padrao e so mudava se o spec dissesse `salto_tipo`. Hora e
+# minuto pedem RELOGIO (ponteiros na hora certa); dia, semana, mes e ano pedem
+# CALENDARIO (o numero circulado). Portugues e ingles, digito ou extenso.
+import re as _re
+
+_NUM_EXTENSO = {
+    "meia": 0.5, "meio": 0.5, "half": 0.5,
+    "um": 1, "uma": 1, "one": 1, "a": 1, "an": 1,
+    "dois": 2, "duas": 2, "two": 2, "tres": 3, "three": 3, "quatro": 4, "four": 4,
+    "cinco": 5, "five": 5, "seis": 6, "six": 6, "sete": 7, "seven": 7,
+    "oito": 8, "eight": 8, "nove": 9, "nine": 9, "dez": 10, "ten": 10,
+    "onze": 11, "eleven": 11, "doze": 12, "twelve": 12, "quinze": 15, "fifteen": 15,
+    "vinte": 20, "twenty": 20, "trinta": 30, "thirty": 30, "quarenta": 40, "forty": 40,
+    "cinquenta": 50, "fifty": 50,
+}
+_RE_HORAS = _re.compile(r"\b(hora|horas|hour|hours|hr|hrs|minuto|minutos|minute|minutes|min|mins|"
+                        r"manha|tarde|noite|madrugada|meio-dia|meia-noite|midnight|noon|"
+                        r"am|pm|o'clock|oclock)\b|\d+\s?h\b")
+
+
+def _sem_acento(t):
+    return (t.replace("ã", "a").replace("á", "a").replace("â", "a").replace("é", "e")
+             .replace("ê", "e").replace("í", "i").replace("ó", "o").replace("ô", "o")
+             .replace("ú", "u").replace("ç", "c"))
+
+
+def _numero_do_texto(t):
+    """O primeiro numero do texto, em digito ou por extenso; None se nao ha."""
+    m = _re.search(r"(\d+)(?:[:h](\d{2}))?", t)
+    if m:
+        return float(m.group(1)), (float(m.group(2)) if m.group(2) else None)
+    for pal in _re.findall(r"[a-z]+", t):
+        if pal in _NUM_EXTENSO:
+            return float(_NUM_EXTENSO[pal]), None
+    return None, None
+
+
+def ler_salto(texto):
+    """Decide o objeto do salto pelo texto. Devolve {tipo, hora, minutos, numero}.
+
+    relogio   -- horas/minutos ("1 HORA DEPOIS", "30 MIN DEPOIS", "6 DA MANHA",
+                 "2 HOURS LATER", "MEIA-NOITE"). Hora relativa ("N horas
+                 depois") anda a partir das 9h, que e' a hora em que a cena
+                 comeca por convencao; hora absoluta ("6 da manha", "3 da
+                 tarde") vai direto para o ponteiro.
+    calendario -- dias/semanas/meses/anos ("2 MESES DEPOIS", "NO DIA SEGUINTE",
+                 "3 YEARS LATER"); o numero circulado e' o do texto (dias) ou
+                 um dia fixo para semanas/meses/anos, para o calendario nao
+                 mostrar "dia 24" num salto de 24 meses.
+    """
+    t = _sem_acento(str(texto or "").lower())
+    n, mm = _numero_do_texto(t)
+    if _RE_HORAS.search(t) and not _re.search(r"\b(dia|dias|day|days|semana|mes|meses|ano|anos)\b", t):
+        hora, minutos = 9.0, 0.0
+        eh_minuto = bool(_re.search(r"\b(minuto|minutos|minute|minutes|min|mins)\b", t))
+        absoluta = bool(_re.search(r"\b(manha|tarde|noite|madrugada|am|pm|o'clock|oclock)\b", t))
+        if "meio-dia" in t or "noon" in t:
+            hora = 12.0
+        elif "meia-noite" in t or "midnight" in t:
+            hora = 0.0
+        elif n is not None and eh_minuto:
+            minutos = n
+        elif n is not None and absoluta:
+            hora = n + (12.0 if (_re.search(r"\b(tarde|noite|pm)\b", t) and n < 12) else 0.0)
+            minutos = mm or 0.0
+        elif n is not None and n < 1:          # "meia hora depois"
+            minutos = n * 60.0
+        elif n is not None:
+            hora = (9.0 + n) % 24
+            minutos = mm or 0.0
+        return {"tipo": "relogio", "hora": hora, "minutos": minutos, "numero": 9}
+    numero = 9
+    if n is not None and _re.search(r"\b(dia|dias|day|days)\b", t):
+        numero = int(max(1, min(14, n)))
+    return {"tipo": "calendario", "hora": 9.0, "minutos": 0.0, "numero": numero}
 ESCALA_OBJETO_SOZINHO = 2.4  # objeto solto num cartao sem gente
 LAVAR_CENARIO = 0.30         # veu da cor do fundo sobre o cenario (0,45 lavava demais)
+LAVAR_SEM_GENTE = 0.62       # cartao sem gente: o objeto e' o cartao, o cenario vira sugestao (19/09)
+OBJETO_SOZINHO_Y = 0.46      # o objeto sozinho fica no centro do quadro, no ar -- nao deitado no chao (19/09)
 
 # MOVIMENTO DENTRO DO CARTAO (15/09, ordem do dono: "nossa vantagem e' dar
 # movimento frame a frame; usaremos isso a nosso favor"). O Madrazzo segura
@@ -709,6 +791,12 @@ def _fundo(ctx, cartao, i):
                 sub.paste(teto, (0, 0))
                 img = sub
             lav = float(cartao.get("lavar", ctx.spec.get("cenario_lavado", LAVAR_CENARIO)))
+            # CARTAO SEM GENTE LAVA MAIS (19/09): o boleto sozinho num banheiro
+            # a 30% lia como lixo no chao -- o cenario disputava com o objeto,
+            # que E' o cartao. No Madrazzo o objeto sozinho fica sobre fundo
+            # quase liso. O spec pode mandar por cima com `lavar`.
+            if "lavar" not in cartao and not (cartao.get("atores") or []):
+                lav = max(lav, LAVAR_SEM_GENTE)
             if lav > 0:
                 veu = Image.new("RGBA", (W, H), _hex(ctx.spec.get("fundo", FUNDO_PADRAO), int(255 * lav)))
                 img.alpha_composite(veu)
@@ -789,6 +877,12 @@ def compor(ctx, cartao, i):
         img, anc = ob
         x = float(oc.get("x", 0.5)) * W
         y = chao_y
+        # SEM GENTE E SEM APOIO O OBJETO FLUTUA NO CENTRO (19/09): pousado na
+        # linha do chao ele saia pequeno e baixo, ao lado do vaso sanitario,
+        # como coisa caida. O Madrazzo mostra o objeto solto no meio do quadro,
+        # como icone. Com `em` (prop) ou `y` explicito, o spec manda.
+        if not cfgs and not oc.get("em") and "y" not in oc and not oc.get("tipo"):
+            y = OBJETO_SOZINHO_Y * H + img.height / 2.0
         if oc.get("em"):
             nome, _, sock = str(oc["em"]).replace("prop:", "").partition(".")
             base = props.get(nome)
@@ -840,15 +934,19 @@ def compor(ctx, cartao, i):
         y = float(pc.get("y", 0.30)) * H
         pronto.placas.append((Z["placa"], img, (x, y), float(pc.get("entra_em", 0.0))))
 
-    # -- salto de tempo: cartao sem gente com o calendario ---------------------------
+    # -- salto de tempo: cartao sem gente com o calendario OU o relogio -------------
+    # O objeto do salto sai do TEXTO (19/09): "UMA HORA DEPOIS" com calendario
+    # foi o que o dono viu no video. `salto_tipo`/`salto_hora`/`salto_numero`
+    # no spec continuam mandando por cima; sem eles, `ler_salto` decide.
     if cartao.get("salto") and not cfgs and not cartao.get("placas"):
-        tipo_s = cartao.get("salto_tipo", "calendario")
+        lido = ler_salto(cartao["salto"])
+        tipo_s = cartao.get("salto_tipo") or lido["tipo"]
         cfg_s = {"tipo": tipo_s, "texto": cartao["salto"]}
         if tipo_s == "relogio":
-            cfg_s["hora"] = float(cartao.get("salto_hora", 6))
-            cfg_s["minutos"] = float(cartao.get("salto_minutos", 0))
+            cfg_s["hora"] = float(cartao.get("salto_hora", lido["hora"]))
+            cfg_s["minutos"] = float(cartao.get("salto_minutos", lido["minutos"]))
         else:
-            cfg_s["numero"] = int(cartao.get("salto_numero", 9))
+            cfg_s["numero"] = int(cartao.get("salto_numero", lido["numero"]))
         img, anc = ctx.placa(cfg_s, tam=ctx.altura_ator * 0.9)
         pronto.placas.append((Z["placa"], img, (W / 2.0, H * 0.42), 0.0))
 
@@ -1556,7 +1654,50 @@ def desdobrar(cartoes, spec):
         print(f"[cartao] desdobrados: {len(cartoes)} -> {len(out)} cartoes "
               f"({sum(1 for c in out if c.get('tipo_var'))} variacoes: "
               + ", ".join(f"{k}={sum(1 for c in out if c.get('tipo_var') == k)}" for k in ("placa", "objeto", "close", "igual")) + ")")
-    return out
+    return _alternar_gente(out)
+
+
+def _alternar_gente(cartoes):
+    """Nunca dois cartoes SEM GENTE seguidos (19/09).
+
+    O cartao PT de 19/09 saiu com tres cartoes seguidos de um boleto no chao
+    de um banheiro vazio ("DE BARRAS", "ESPERA,", "TA PAGO."). O Madrazzo tem
+    ~40% de cartoes sem gente, mas ALTERNADOS com o boneco: o objeto e' a
+    consequencia da frase anterior, nao uma sequencia de naturezas-mortas.
+    Quando dois seguidos vem sem ator (e nao sao salto), o segundo ganha quem
+    falou por ultimo, em close, e guarda os objetos e placas que ja tinha.
+    """
+    ultimo_ator = None
+    anterior_sem_gente = False
+    for c in cartoes:
+        atores = c.get("atores") or []
+        if atores:
+            quem = c.get("ator")
+            ultimo_ator = next((a for a in atores if a.get("quem") == quem), atores[0])
+            anterior_sem_gente = False
+            continue
+        if c.get("salto"):
+            anterior_sem_gente = False
+            continue
+        if anterior_sem_gente and ultimo_ator is not None:
+            um = dict(ultimo_ator, x=0.5)
+            um.pop("alvos", None)
+            um.pop("atras_de", None)
+            # o objeto solto do cartao vai para a mao dele: e' o mesmo objeto,
+            # agora segurado -- e nao um boneco ao lado de uma coisa no chao
+            soltos = [o for o in (c.get("objetos") or []) if not (isinstance(o, dict) and o.get("tipo"))]
+            if soltos:
+                o0 = soltos[0]
+                um["objeto"] = o0["nome"] if isinstance(o0, dict) else o0
+                um.pop("mao", None)
+                c["objetos"] = [o for o in (c.get("objetos") or []) if o is not o0]
+            c["atores"] = [um]
+            c["plano"] = "close"
+            c["tipo_var"] = "close"
+            anterior_sem_gente = False
+            continue
+        anterior_sem_gente = True
+    return cartoes
 
 
 def render(pasta_partes, spec, saida, tmpdir=None, amostra=0):
