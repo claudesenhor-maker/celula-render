@@ -89,7 +89,7 @@ CONFIG = {
    "gancho_max_palavras": 9,
    "gancho_min_palavras": 3,
    "legenda_palavras": 1,
-   "loudnorm": "loudnorm=I=-13:LRA=13:TP=-1.0",
+   "loudnorm": "loudnorm=I=-11:LRA=13:TP=-1.0",
    "margem_tts": 1.15,
    "max_palavras_cartao": 9,
    "motor": "cartao",
@@ -104,6 +104,10 @@ CONFIG = {
    "saltos_min": 1,
    "titulo_max_palavras": 8,
    "tolerancia_dur": 0.15,
+   "voz": {
+    "stability": 0.35,
+    "style": 0.45
+   },
    "wps": 3.4
   },
   "dupla": {
