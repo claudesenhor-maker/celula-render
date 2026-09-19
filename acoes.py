@@ -189,6 +189,28 @@ LICENCA = {
     "esfregar_o_rosto": ("cansado", "cansada", "nao aguento", "de novo",
                          "outra vez", "socorro", "meu deus", "que saco",
                          "ta osso", "desisto", "cansei"),
+    # --- os seis de 19/09 (ver as funcoes). A licenca e' o que faz um gesto
+    # novo EXISTIR: sem palavra que o autorize, `_ralear_gestos` e
+    # `_trocar_gesto_sem_licenca` o descartam e ele nunca aparece no video.
+    "recuar": ("peraí", "perai", "pera", "calma", "espera", "quanto",
+               "ta louco", "ta maluco", "nao mesmo", "de jeito nenhum",
+               "absurdo", "quanto custa", "caro", "nem pensar"),
+    "inclinar_para": ("conta", "me conta", "como assim", "serio", "jura",
+                      "e ai", "que foi", "o que houve", "fala", "deixa eu ver",
+                      "mostra", "quanto foi", "sussurr", "segredo"),
+    "dar_de_ombros_virando": ("deixa", "deixa pra la", "esquece", "tanto faz",
+                              "desisto", "vou embora", "acabou", "chega",
+                              "nao quero mais", "foi mal", "problema seu"),
+    "estufar_peito": ("regra", "regras", "norma", "protocolo", "regulamento",
+                      "politica", "procedimento", "lei", "artigo", "sistema",
+                      "nao posso", "nao autoriza", "so com", "precisa de",
+                      "e assim que funciona", "manda"),
+    "olhar_de_lado": ("sei nao", "sei nao hein", "hmm", "ahn", "duvido",
+                      "serio mesmo", "ta certo", "aham", "sla", "tem certeza",
+                      "desconfio", "estranho", "mentira"),
+    "bater_pe": ("rapido", "anda logo", "vai logo", "demora", "quanto tempo",
+                 "to esperando", "ainda", "fila", "urgente", "pressa",
+                 "ja passou", "cade"),
 }
 
 # A LICENCA E' DO IDIOMA (12/09, GUIA §46 -- o segundo canal, em ingles).
@@ -241,6 +263,26 @@ LICENCA_EN = {
     "esfregar_o_rosto": ("tired", "can't take", "again", "one more time", "help",
                          "oh my god", "omg", "jesus", "ugh", "i give up", "done with",
                          "so over", "kill me", "exhausted"),
+    # --- os seis de 19/09, no idioma do canal EN ---
+    "recuar": ("wait", "hold on", "hold up", "whoa", "how much", "no way",
+               "you're kidding", "that's insane", "absurd", "expensive",
+               "not a chance", "easy there"),
+    "inclinar_para": ("tell me", "what happened", "seriously", "really",
+                      "no way", "show me", "let me see", "how much was it",
+                      "spill it", "secret", "so what"),
+    "dar_de_ombros_virando": ("forget it", "never mind", "whatever", "i'm out",
+                              "i'm done", "that's it", "enough", "your problem",
+                              "skip it", "leaving"),
+    "estufar_peito": ("rule", "rules", "policy", "protocol", "procedure",
+                      "regulation", "the law", "section", "the system",
+                      "i can't", "not authorized", "only with", "you need",
+                      "that's how it works"),
+    "olhar_de_lado": ("i doubt", "sure about that", "right...", "uh huh",
+                      "hmm", "yeah right", "you sure", "suspicious", "strange",
+                      "bs", "come on"),
+    "bater_pe": ("hurry", "hurry up", "come on", "how long", "still waiting",
+                 "taking forever", "the line", "urgent", "in a rush",
+                 "already", "where is it"),
 }
 LICENCA_POR_IDIOMA = {"pt-BR": LICENCA, "en-US": LICENCA_EN}
 
@@ -1242,6 +1284,141 @@ def esfregar_o_rosto(u, rig, dur, a):
     return {}
 
 
+# =====================================================================
+# OS SEIS DE 19/09 -- e o buraco que eles preenchem
+# =====================================================================
+# Ordem do dono: *"vamos otimizar a movimentacao e criar novos movimentos"*.
+#
+# O catalogo tinha 40 poses e um desequilibrio medido: 71,8% das acoes do
+# corpus eram POSE DE BRACO (§24), e as unicas que mudavam o corpo inteiro
+# eram picos (`susto`, `cair`, `pular`, `tropecar`) -- bons para o gancho,
+# grandes demais para o meio da esquete. Faltava o REGISTRO INTERMEDIARIO: o
+# corpo dizendo alguma coisa sem gritar.
+#
+# Os seis abaixo sao todos desse registro, e cada um cobre uma coisa que a
+# esquete deste canal faz o tempo todo e que ate hoje so' existia em FALA:
+#
+#     recuar         -- "peraí": o corpo se afasta antes de a boca discordar
+#     inclinar_para  -- o interesse, a fofoca, o "me conta"
+#     dar_de_ombros_virando -- desistir e ja ir saindo, sem sair de cena
+#     estufar_peito  -- a autoridade de quem cita o regulamento
+#     olhar_de_lado  -- a desconfianca; o unico que NAO mexe o braco
+#     bater_pe       -- a impaciencia que faz barulho (sfx `passo`)
+#
+# Todos obedecem ao contrato das outras: funcao de `u` (0 a 1), sem estado
+# entre quadros, mexendo `rig` no lugar. Nenhum deles desloca o personagem --
+# o deslocamento tem dono (`andar`, `aproximar`, `afastar`) e misturar as
+# duas coisas foi o que produziu o travelling que rebobinava (§38.1).
+def recuar(u, rig, dur, a):
+    """Meio passo para tras com o tronco: *"peraí"*, sem sair do lugar.
+
+    O corpo recua ANTES de a fala discordar -- e' o gesto mais comum de
+    quem acabou de ouvir um preco absurdo, e o catalogo nao tinha nada
+    entre `negar` (braco) e `afastar` (locomocao, muda o quadro). Aqui o
+    quadril nao anda: quem recua e' o tronco e a cabeca, e as maos sobem
+    um pouco em defesa.
+    """
+    k = _suave(min(1.0, u * 2.6))
+    volta = _suave(max(0.0, (u - 0.62) / 0.38)) * 0.55
+    forca = k - volta
+    rig["tronco"] = -90.0 + 7.0 * forca
+    rig["cabeca"] = rig.get("cabeca", 0.0) - 5.0 * forca
+    _braco(rig, "e", 64.0, -58.0, 22.0, forca)
+    _braco(rig, "d", 116.0, -58.0, -22.0, forca)
+    return {}
+
+
+def inclinar_para(u, rig, dur, a):
+    """O tronco pende na direcao do outro: interesse, fofoca, *"me conta"*.
+
+    O oposto exato de `recuar`, e o par dele. `lado_alvo` diz para onde
+    (o motor o preenche nas acoes de interacao); sem ele, inclina para a
+    mao de fora, que e' o lado em que o outro costuma estar.
+    """
+    lado = a.get("lado_alvo") or a.get("sentido") or "d"
+    s = 1.0 if str(lado).startswith("d") else -1.0
+    k = _suave(min(1.0, u * 2.2))
+    rig["tronco"] = -90.0 - 9.0 * k * s
+    rig["cabeca"] = rig.get("cabeca", 0.0) - 6.0 * k * s
+    # o braco do lado para onde ele pende fica solto; o outro fecha um pouco
+    _braco(rig, "d" if s > 0 else "e", 88.0, -74.0, 6.0, k * 0.6)
+    return {}
+
+
+def dar_de_ombros_virando(u, rig, dur, a):
+    """Desiste e ja gira o corpo para ir embora -- sem sair de cena.
+
+    `encolher_ombros` diz "nao sei"; este diz "acabou, eu vou embora" e e'
+    o que fecha uma esquete de parede educada sem precisar do
+    `sair_andando`, que tira o personagem do quadro e mata o loop (§53.3).
+    O giro para em 24 graus: o suficiente para ler como saida, pouco o
+    bastante para a cara continuar na camera.
+    """
+    k = _suave(min(1.0, u * 1.9))
+    gira = _suave(max(0.0, (u - 0.4) / 0.6))
+    _braco(rig, "e", 52.0, -38.0, 14.0, k)
+    _braco(rig, "d", 128.0, -38.0, -14.0, k)
+    rig["tronco"] = -90.0 + 4.0 * k
+    rig["cabeca"] = rig.get("cabeca", 0.0) + 10.0 * gira
+    return {"giro_corpo": 24.0 * gira}
+
+
+def estufar_peito(u, rig, dur, a):
+    """Peito para fora, queixo para cima: quem esta com o regulamento do lado.
+
+    E' a pose da PAREDE EDUCADA -- o motor comico mais usado do canal --, e
+    ela nao existia: o atendente que barra tudo fazia `bracos_cruzados`, que
+    e' defesa, quando o que ele sente e' autoridade. Sobe o tronco, abre os
+    ombros e desce as maos para a cintura.
+    """
+    k = _suave(min(1.0, u * 2.0))
+    respira = math.sin(2 * math.pi * 0.7 * u * max(dur, 0.5)) * 0.25 * k
+    rig["tronco"] = -90.0 - 3.0 * (k + respira)
+    rig["cabeca"] = rig.get("cabeca", 0.0) - 7.0 * k
+    _braco(rig, "e", 44.0, 64.0, 10.0, k)
+    _braco(rig, "d", 136.0, 64.0, -10.0, k)
+    return {}
+
+
+def olhar_de_lado(u, rig, dur, a):
+    """So a CABECA: o olhar de desconfianca, sem braco nenhum.
+
+    O unico gesto do catalogo que nao mexe os bracos, e e' por isso que ele
+    existe: com um gesto a cada 3,5 s (`INTERVALO_GESTO_S`), toda pausa da
+    esquete gastava uma pose de braco. Este cabe entre duas falas sem
+    consumir a vaga do gesto seguinte, e e' a reacao mais barata que existe
+    -- o que o outro acabou de dizer nao colou.
+    """
+    lado = a.get("lado_alvo") or "d"
+    s = 1.0 if str(lado).startswith("d") else -1.0
+    k = _suave(min(1.0, u * 3.0))
+    segura = 1.0 - _suave(max(0.0, (u - 0.7) / 0.3)) * 0.4
+    rig["cabeca"] = rig.get("cabeca", 0.0) - 12.0 * k * segura * s
+    rig["tronco"] = -90.0 - 1.5 * k * s
+    return {}
+
+
+def bater_pe(u, rig, dur, a):
+    """A impaciencia que faz BARULHO: o pe bate duas vezes no chao.
+
+    O canal tem doze gestos de espera e nenhum que produza som, entao a
+    pressa era sempre muda. O `sfx.DA_ACAO` casa `passo` com este nome, e
+    a batida cai nos mesmos instantes do pe -- o corpo e o som dizem a
+    mesma coisa no mesmo quadro (lei 22).
+    """
+    batidas = 2.0
+    fase = (u * batidas) % 1.0
+    bate = max(0.0, math.sin(math.pi * fase)) ** 2
+    k = _suave(min(1.0, u * 3.0))
+    # so a perna da frente sobe; o corpo acompanha de leve
+    rig["perna_inf_d"] = rig.get("perna_inf_d", 0.0) - 16.0 * bate
+    rig["perna_sup_d"] = rig.get("perna_sup_d", 0.0) - 7.0 * bate
+    rig["tronco"] = -90.0 + 1.6 * bate
+    _braco(rig, "e", 58.0, 70.0, 12.0, k)
+    _braco(rig, "d", 122.0, 70.0, -12.0, k)
+    return {}
+
+
 def comemorar(u, rig, dur, a):
     """Os dois braços para cima, com um quique. Fim feliz, ou ironia."""
     # O QUIQUE NÃO PODE SER UM CORTE (31/08). Os dois ramos não se
@@ -1583,6 +1760,14 @@ CATALOGO = {
     "conferir_relogio": conferir_relogio,
     "bater_no_bolso": bater_no_bolso,
     "esfregar_o_rosto": esfregar_o_rosto,
+    # os seis de 19/09: o registro INTERMEDIARIO, entre a pose de braco e o
+    # pico. Ver o bloco de comentario antes de `recuar`.
+    "recuar": recuar,
+    "inclinar_para": inclinar_para,
+    "dar_de_ombros_virando": dar_de_ombros_virando,
+    "estufar_peito": estufar_peito,
+    "olhar_de_lado": olhar_de_lado,
+    "bater_pe": bater_pe,
     "comemorar": comemorar,
     "negar": negar,
     "susto": susto,
