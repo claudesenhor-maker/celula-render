@@ -22,6 +22,14 @@ CONFIG = {
   "contexto_custo_palavras": 15,
   "contexto_max_palavras": 22,
   "contexto_min_palavras": 8,
+  "curta": {
+   "beats_max": 3,
+   "beats_min": 2,
+   "dur_max_s": 16,
+   "dur_min_s": 12,
+   "falas_max": 4,
+   "falas_min": 2
+  },
   "duplicata_max": 0.6,
   "dur_max_s": 28,
   "dur_min_s": 20,
@@ -57,6 +65,14 @@ CONFIG = {
    "contexto_custo_palavras": 15,
    "contexto_max_palavras": 22,
    "contexto_min_palavras": 8,
+   "curta": {
+    "beats_max": 3,
+    "beats_min": 2,
+    "dur_max_s": 16,
+    "dur_min_s": 12,
+    "falas_max": 4,
+    "falas_min": 2
+   },
    "duplicata_max": 0.6,
    "dur_max_s": 28,
    "dur_min_s": 20,
@@ -93,6 +109,14 @@ CONFIG = {
    "contexto_custo_palavras": 15,
    "contexto_max_palavras": 22,
    "contexto_min_palavras": 8,
+   "curta": {
+    "beats_max": 3,
+    "beats_min": 2,
+    "dur_max_s": 16,
+    "dur_min_s": 12,
+    "falas_max": 4,
+    "falas_min": 2
+   },
    "duplicata_max": 0.6,
    "dur_max_s": 28,
    "dur_min_s": 20,
