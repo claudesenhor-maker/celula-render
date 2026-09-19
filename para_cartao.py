@@ -313,6 +313,17 @@ def converter(spec, pasta_base=None, falar=print):
     #             palito ja faz
     spec["legenda_palavras"] = int(F["legenda_palavras"])
     spec["loudnorm"] = F["loudnorm"]
+    # A VOZ DO ESTILO (19/09, `formatos.cartao.voz`): a dinamica da voz do
+    # original e' 6 dB maior que a nossa (27 x 21 dB, ver `_som` no config).
+    # Abre a expressividade da ElevenLabs SO neste estilo -- a dupla continua
+    # com o perfil de voz da identidade.
+    voz_estilo = F.get("voz") if isinstance(F.get("voz"), dict) else {}
+    if voz_estilo and isinstance(spec.get("vozes"), dict):
+        for nome, cfg in spec["vozes"].items():
+            if isinstance(cfg, dict) and cfg.get("motor", "eleven") == "eleven":
+                cfg.update({k: v for k, v in voz_estilo.items() if not k.startswith("_")})
+        falar(f"[para_cartao] voz do estilo aplicada a {len(spec['vozes'])} perfil(is): "
+              + ", ".join(f"{k}={v}" for k, v in voz_estilo.items() if not k.startswith("_")))
     spec.setdefault("cenario_lavado", float(F["cenario_lavado"]))
     spec.setdefault("fundo", F["fundo"])
     # a regra viaja no spec: quem for medir o video depois nao precisa
