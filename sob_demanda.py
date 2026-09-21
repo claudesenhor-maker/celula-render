@@ -278,10 +278,12 @@ def _descricao_en(chave):
                 "festa": "party", "casamento": "wedding", "velorio": "funeral",
                 "vizinho": "neighbour", "chefe": "boss", "mae": "mother"}
     nome = " ".join(palavras.get(p, p) for p in chave.split("_") if p)
-    return (f"the inside of a {nome}, a wide interior seen from across the "
-            f"room: its counter or furniture along the far wall, a sign and "
-            f"a door; the room and its walls only, no product close-up, no "
-            f"food, no single big object")
+    # "the room and its walls only" rendeu um rascunho CINZA para 'casa'
+    # (21/09); o gerador precisa de moveis nomeados e de cor pedida.
+    return (f"the inside of a {nome}, a wide colourful interior seen from "
+            f"across the room: a counter, shelves and furniture along the "
+            f"far wall, a hanging sign, a door and a window; no product "
+            f"close-up, no food, no single big object")
 
 
 # O n8n TEM A CREDENCIAL QUE FALTA AQUI (13/09).
