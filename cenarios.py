@@ -274,6 +274,15 @@ def resolver(pedido, disponiveis, fala=None):
     if not disp:
         return None, "nenhum cenario disponivel"
 
+    # O LUGAR EXATO PRIMEIRO (21/09). Desde que o cenario e' gerado sob
+    # demanda, "banco" pode existir no disco como `banco.jpg` -- e o sinonimo
+    # do catalogo ("banco" -> "comercio", reprovado -> "escritorio") jogava
+    # fora a arte certa que acabou de ser gerada. A copia fiel troca de lugar
+    # a cada frase e foi ela que mostrou isto: 5 lugares pedidos, 3 fundos.
+    literal = _limpo(pedido).replace(" ", "_").replace("-", "_")
+    if literal in disp and literal not in REPROVADOS:
+        return literal, "pedido"
+
     alvo = normalizar(pedido)
     if alvo in disp and alvo not in REPROVADOS:
         return alvo, "pedido" if _limpo(pedido) == alvo else f"sinonimo de '{pedido}'"
