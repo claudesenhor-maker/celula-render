@@ -422,6 +422,11 @@ def buscar_cenarios_e_objetos(spec):
     def _trocar(nome):
         alvo = CEN.normalizar(nome)
         if alvo not in getattr(CEN, "REPROVADOS", {}):
+            # SINONIMO DE CENARIO BOM USA O CENARIO (21/09): "casa" e' a
+            # `sala` do catalogo, e' arte medida, e nao ha por que gerar uma
+            # "casa" nova (a esteira devolveu um rascunho cinza).
+            if alvo in CEN.CATALOGO and alvo != CEN._limpo(nome).replace(" ", "_"):
+                return alvo, f"'{nome}' e' a '{alvo}' do catalogo"
             return nome, None
         # SINONIMO DE REPROVADO GERA O LUGAR EXATO (21/09). "banco" e'
         # sinonimo de `comercio`; o `comercio` esta reprovado; e a troca
