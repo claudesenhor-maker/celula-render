@@ -673,10 +673,27 @@ def main():
             # ImportError. No run #11 um 'No module named numpy' (dependencia
             # que faltava no requirements.txt) apareceu como uma linha solta e
             # passou por defeito de arte -- o cut-out nunca tinha rodado.
-            print(f"[motor] cut-out falhou ({e}); caindo para o rig vetorial")
             traceback.print_exc()
+            # EM PRODUCAO O VETOR NAO EXISTE (20/09, ordem do dono: *"um de
+            # teste que nunca era para ter subido para producao"*). Em 20/09
+            # um `config_gerado.py` com `true` em vez de `True` derrubou o
+            # import do `para_cartao`, os dois cartoes do dia cairam aqui e um
+            # foi PUBLICADO no rig vetorial. "Melhor video feio que producao
+            # parada" valia quando o vetor era o unico motor; hoje o vetor e'
+            # o motor de TESTE, e video de teste no canal e' pior do que um
+            # item que a Manutencao repesca em 2 h. Em producao o job falha
+            # com o motivo (status `erro` + callback, no `__main__`); o vetor
+            # fica so' para ensaio e teste local.
+            if eh_producao:
+                raise RuntimeError(f"motor {estilo} falhou em producao "
+                                   f"(sem rede vetorial): {e}") from e
+            print(f"[motor] cut-out falhou ({e}); caindo para o rig vetorial "
+                  "(SO fora de producao)")
             motor = "vetor"
     if motor == "vetor":
+        if eh_producao:
+            raise RuntimeError("producao sem arte de personagem: o rig vetorial "
+                               "nao publica (20/09)")
         print("[motor] rig vetorial")
         # modo 'real' = Edge-TTS. O runner do GitHub tem rede.
         _, dur = render_spec(spec, out, modo=os.environ.get("MODO_TTS", "real"),
@@ -704,18 +721,53 @@ def main():
             "estilo": estilo, "estilo_por": porque_estilo, "motor": motor})
 
 
+RENDER_TENTATIVAS = 2     # quantas vezes um item volta para a fila depois de falhar
+
+
+def _registrar_falha_render(fila_id, erro):
+    """Grava `render_falhou` em logs_execucao e devolve quantas falhas este
+    item ja acumulou (contando esta). Sem cell_id conhecido, le da fila."""
+    hdr = {"apikey": KEY, "Authorization": f"Bearer {KEY}",
+           "Content-Type": "application/json"}
+    try:
+        r = requests.get(f"{SB}/rest/v1/fila_producao?fila_id=eq.{fila_id}&select=cell_id",
+                         headers=hdr, timeout=30)
+        cell = ((r.json() or [{}])[0] or {}).get("cell_id")
+        requests.post(f"{SB}/rest/v1/logs_execucao", headers=dict(hdr, Prefer="return=minimal"),
+                      json={"cell_id": cell, "workflow": "render", "evento": "render_falhou",
+                            "nivel": "error",
+                            "detalhe_json": {"fila_id": fila_id, "erro": str(erro)[:400]}},
+                      timeout=30)
+        r = requests.get(f"{SB}/rest/v1/logs_execucao?select=log_id&evento=eq.render_falhou"
+                         f"&detalhe_json->>fila_id=eq.{fila_id}", headers=hdr, timeout=30)
+        return len(r.json() or [])
+    except Exception as e2:                                      # noqa: BLE001
+        print(f"[fila] nao consegui registrar a falha: {e2}")
+        return RENDER_TENTATIVAS + 1
+
+
 if __name__ == "__main__":
     try:
         main()
     except Exception as e:
         traceback.print_exc()
         # Item que fica em 'aguardando_render' para sempre é o bug de "item
-        # preso" do §6. Marca 'erro' — que a Manutenção sabe repescar.
-        # NUNCA 'erro_publicacao': é beco sem saída (§7).
+        # preso" do §6. NUNCA 'erro_publicacao': é beco sem saída (§7).
+        #
+        # DESDE 20/09 A FALHA DE RENDER TENTA DE NOVO, ATE DUAS VEZES: sem o
+        # vetor como rede (ver a escolha do motor), uma falha em producao
+        # deixaria o dia sem video. O item volta a `pendente` e o Dispatcher
+        # o produz de novo no proximo ciclo; na terceira falha vira `erro`,
+        # que e' terminal -- e o motivo fica em logs_execucao (`render_falhou`)
+        # para quem for ler, em vez de so' no log do Action.
         fid = os.environ.get("FILA_ID", "")
+        falhas = _registrar_falha_render(fid, e) if UUID_RE.match(str(fid)) else 99
+        novo = "pendente" if falhas <= RENDER_TENTATIVAS else "erro"
+        print(f"[fila] falha {falhas} de {RENDER_TENTATIVAS} -> {novo}")
         try:
-            atualizar_fila(fid, {"status": "erro", "atualizado_em": "now()"})
+            atualizar_fila(fid, {"status": novo, "video_url": None, "atualizado_em": "now()"})
         except Exception as e2:
-            print(f"[fila] nao consegui marcar erro: {e2}")
-        avisar({"fila_id": fid, "status": "erro", "erro_msg": str(e)[:500]})
+            print(f"[fila] nao consegui marcar {novo}: {e2}")
+        avisar({"fila_id": fid, "status": "erro", "erro_msg": str(e)[:500],
+                "tentativa": falhas, "proximo_status": novo})
         sys.exit(1)
