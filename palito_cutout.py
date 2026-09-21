@@ -3999,10 +3999,16 @@ def _rig_do_trecho(tr, t, pan_base, acoes_do_ator, x_base, falando=True,
 # quadros) e o dissolve deixa de existir. `spec.loop.volta_s` muda o tempo;
 # 0 devolve o modo antigo, de cauda.
 VOLTA_LOOP_S = 2.5
-# A fusao final, curta, que termina NO quadro 0: o que o estado da cena nao
-# leva de volta sozinho (a boca, a legenda) se resolve aqui, com as duas
-# imagens ja quase iguais -- e o ultimo quadro desenhado E' o primeiro.
-FUNDE_LOOP_S = 0.6
+# A FUSAO FINAL SAIU (21/09, ordem do dono: *"sem forcar uma transicao com
+# efeito; leve o personagem a exata posicao em que estava quando o video
+# comecou, de forma natural"*). Ate' aqui os ultimos 0,6 s eram um
+# `Image.blend` do quadro desenhado com o quadro 0 -- um dissolve, curto, mas
+# dissolve: duas imagens ao mesmo tempo. Agora o que a fusao resolvia (a
+# cara, a boca, a piscada) volta pelo ESTADO, dentro da mesma janela da pose
+# (ver `cara_zero`, `nivel` e `pisca` no laco de quadros), e o ultimo quadro
+# desenhado e' o quadro 0 porque o estado e' o do quadro 0 -- nao porque uma
+# imagem foi pintada por cima da outra. `spec.loop.funde_s` religa a fusao.
+FUNDE_LOOP_S = 0.0
 # sem cauda de quadros, a cama da trilha emenda no laco por este tempo
 LOOP_SOM_S = 1.0
 
@@ -4028,11 +4034,28 @@ def _misturar_rig(rig, alvo, w):
         if (isinstance(v, (int, float)) and not isinstance(v, bool)
                 and isinstance(a, (int, float)) and not isinstance(a, bool)):
             out[k] = v + (a - v) * w
-        elif (isinstance(v, list) and isinstance(a, list) and len(v) == len(a)
+        elif (isinstance(v, list) and isinstance(a, list)
               and all(isinstance(x, (int, float)) for x in v + a)):
-            out[k] = [x + (y - x) * w for x, y in zip(v, a)]
+            # TAMANHOS DIFERENTES TAMBEM MISTURAM (21/09). O braco tem dois
+            # angulos em repouso (ombro, cotovelo) e TRES quando uma acao mexe
+            # na mao -- o `susto` do gancho, no quadro 0. A exigencia de
+            # `len(v) == len(a)` pulava o braco inteiro, e o rig do fim nunca
+            # chegava ao do comeco: foi o braco erguido do quadro 0 contra o
+            # braco caido do ultimo quadro no render de 21/09 (razao 6,7 na
+            # regua do loop). O que falta de um lado vale 0 (a mao em repouso).
+            n_ = max(len(v), len(a))
+            vv = list(v) + [0.0] * (n_ - len(v))
+            aa = list(a) + [0.0] * (n_ - len(a))
+            mist = [x + (y - x) * w for x, y in zip(vv, aa)]
+            out[k] = mist[:len(a)] if w >= 0.999 else mist
         else:
             out[k] = v
+    # o que so' o alvo tem (uma chave que a acao do quadro 0 criou) entra no
+    # fim, para o ultimo quadro ser o primeiro por inteiro
+    if w >= 0.999:
+        for k, a in alvo.items():
+            if k not in out:
+                out[k] = list(a) if isinstance(a, list) else a
     return out
 
 
@@ -5404,10 +5427,12 @@ def render(pasta_partes, spec, saida, tmpdir=None, amostra=0):
     # desenhado ja e' o quadro 0, e um dissolve depois dele nao teria o que
     # dissolver -- so' atrasaria o recomeco.
     volta_s = max(0.0, float(loop_cfg.get("volta_s", VOLTA_LOOP_S)))
+    funde_s = max(0.0, float(loop_cfg.get("funde_s", FUNDE_LOOP_S)))
     if loop_on and volta_s > 0:
         loop_trans = loop_segura = 0.0
         print(f"[loop] volta ao quadro 0 nos ultimos {volta_s:.1f}s do ultimo "
-              f"trecho, fundindo em {FUNDE_LOOP_S:.1f}s; sem cauda")
+              f"trecho (pose, camera, fundo, cara, boca); "
+              + (f"fusao final de {funde_s:.1f}s" if funde_s > 0 else "sem fusao, sem cauda"))
     cauda_loop = (loop_trans + loop_segura) if loop_on else 0.0
     if loop_on:
         print(f"[loop] ligado: cauda de {cauda_loop:.2f}s (dissolve {loop_trans:.2f}s "
@@ -5557,6 +5582,7 @@ def render(pasta_partes, spec, saida, tmpdir=None, amostra=0):
                      n_total - 1)
                  for i in range(amostra)}
     rig_zero, cam_zero = {}, {}   # a pose do quadro 0, para o loop (14/09)
+    cara_zero, pisca_zero, nivel_zero = {}, {}, {}   # e a cara, a piscada e a boca (21/09)
     # e o resto do quadro 0: camera, mira, terco, quem estava enquadrado, e a
     # imagem composta -- a volta do loop leva o fim ate exatamente ele
     quadro_zero = cam_q0 = centro_q0 = alvo_q0 = no_quadro_q0 = None
@@ -5786,8 +5812,11 @@ def render(pasta_partes, spec, saida, tmpdir=None, amostra=0):
             w_volta = w_funde = 0.0
             if loop_on and volta_s > 0 and i_tr == n_trechos - 1 and i_tr > 0:
                 dur_tr = float(tr.get("dur") or 0.0)
-                w_volta = _peso_volta(t, dur_tr, volta_s)
-                w_funde = _peso_volta(f / max(1, nf - 1), dur_tr, FUNDE_LOOP_S)
+                # o quadro REAL, e nao o "em 2s": no ultimo quadro o peso tem
+                # de ser exatamente 1, senao o rig para a um quadro do alvo e
+                # o loop emenda com um tranco de um pixel (21/09)
+                w_volta = _peso_volta(f / max(1, nf - 1), dur_tr, volta_s)
+                w_funde = _peso_volta(f / max(1, nf - 1), dur_tr, funde_s) if funde_s > 0 else 0.0
 
             # O QUE CADA UM TEM NA MÃƒO, ANTES do desvio da amostra. O
             # objeto Ã© ESTADO: ele passa de mÃ£o num frame e continua lÃ¡ nos
@@ -5868,6 +5897,11 @@ def render(pasta_partes, spec, saida, tmpdir=None, amostra=0):
                     elif w_volta > 0.0 and chave in rig_zero:
                         rigs[chave] = _misturar_rig(rig, rig_zero[chave], w_volta)
                         cams[chave] = _misturar_cam(c, cam_zero[chave], w_volta)
+                        if os.environ.get("DEBUG_LOOP") and (f == nf - 1 or f % 12 == 0):
+                            print(f"[loop-debug] {chave} f={f}/{nf - 1} w={w_volta:.3f} "
+                                  f"braco_d={[round(x, 1) for x in rigs[chave].get('braco_d', [])]} "
+                                  f"zero={[round(x, 1) for x in rig_zero[chave].get('braco_d', [])]} "
+                                  f"quadril={[round(x) for x in rigs[chave]['quadril']]} zero={[round(x) for x in rig_zero[chave]['quadril']]}")
             # QUEM FALA FICA NA FRENTE. A ordem Ã© estÃ¡vel dentro do trecho
             # (o falante nÃ£o muda no meio de uma fala), entÃ£o nada pisca de
             # profundidade; e o braÃ§o de quem gesticula passa por cima do
@@ -5893,6 +5927,18 @@ def render(pasta_partes, spec, saida, tmpdir=None, amostra=0):
                 pisca = EXPR.piscando(n, FPS, semente=chaves.index(chave),
                                       expr_nome=tr.get("expressao", "neutro")
                                       if chave == quem_fala else "neutro")
+                # A CARA TAMBEM VOLTA (21/09) -- ver FUNDE_LOOP_S. No quadro 0
+                # cada ator tem uma cara; na volta, a partir da metade da
+                # janela (o corpo ja esta em movimento e mascara a troca), a
+                # cara passa a ser a do quadro 0, e a piscada e a boca vao com
+                # ela: no ultimo quadro nada difere do primeiro.
+                if loop_on:
+                    if i_tr == 0 and f == 0:
+                        cara_zero[chave] = cara
+                        pisca_zero[chave] = pisca
+                    elif w_volta >= 0.5 and chave in cara_zero:
+                        cara = cara_zero[chave]
+                        pisca = pisca_zero.get(chave, False) if w_volta >= 0.9 else pisca
                 # SÃ“ QUEM FALA MEXE A BOCA. Sem isto os dois abrem o
                 # maxilar na mesma envoltÃ³ria e ninguÃ©m sabe quem falou.
                 # O EFEITO ESPECIAL DESTE TRECHO, se houver (10/09).
@@ -5924,8 +5970,17 @@ def render(pasta_partes, spec, saida, tmpdir=None, amostra=0):
                         # no quadro seguinte desfaria a piada: quem explodiu
                         # nao se remonta sozinho no meio do trecho.
                         _ef = (_efd.get("nome"), 1.0, _efd.get("lado", "d"))
+                # a boca: o nivel de audio de quem fala vai ao do quadro 0
+                # (fechada, em geral) junto com a pose -- e' o que sobrava para
+                # a fusao resolver
+                nivel_ator = nivel if chave == quem_fala else 0.0
+                if loop_on:
+                    if i_tr == 0 and f == 0:
+                        nivel_zero[chave] = nivel_ator
+                    elif w_volta > 0.0 and chave in nivel_zero:
+                        nivel_ator = nivel_ator + (nivel_zero[chave] - nivel_ator) * w_volta
                 so_dele[chave] = desenhar_personagem(
-                    pers, rig, nivel if chave == quem_fala else 0.0,
+                    pers, rig, nivel_ator,
                     pisca, na_mao[chave], cara,
                     saida_pos=pecas_falante if chave == falante else None,
                     efeito=_ef)
