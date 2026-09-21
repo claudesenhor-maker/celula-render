@@ -276,6 +276,18 @@ def casar_duracao(spec, cartoes, F, falar=print):
     saltos = sum(1.2 for c in cartoes if c.get("salto"))
     wps = float(F.get("wps_copia") or 2.6)
     est = palavras / wps + respiros + saltos
+    if est < alvo * 0.92 and cartoes:
+        # CURTA DEMAIS (21/09): a voz le mais rapido que o narrador original,
+        # e o dono pediu a duracao do original. O que falta vira RESPIRO
+        # espalhado pelos cartoes (ate' +0,9 s cada): o ritmo do original e'
+        # feito dessas pausas entre uma tela e outra.
+        falta = alvo - est
+        extra = min(0.9, falta / len(cartoes))
+        for c in cartoes:
+            c["respiro_s"] = round(float(c.get("respiro_s") or 0) + extra, 2)
+        falar(f"[copia] duracao estimada {est:.0f}s para {alvo:.0f}s do original: "
+              f"+{extra:.2f}s de respiro por cartao")
+        return None
     if est <= alvo * 1.05:
         falar(f"[copia] duracao estimada {est:.0f}s para {alvo:.0f}s do original: sem acelerar")
         return None
