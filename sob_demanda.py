@@ -117,7 +117,8 @@ _NEGATIVA = ("people, person, man, woman, character, face, hands, text, "
              "photo, 3d render, realistic, gradient, shading, furniture in "
              "the foreground, sofa in front, coffee table, rug in front, "
              "objects close to the camera, low angle, floor filling the "
-             "bottom of the frame")
+             "bottom of the frame, food close-up, sandwich, burger, plate "
+             "of food, a single big product filling the picture, still life")
 
 
 def _descricao_en(chave):
@@ -157,10 +158,130 @@ def _descricao_en(chave):
         "metro": "a metro platform with a bench and a route map on the wall",
         "aeroporto": "an airport check-in hall with counters and a "
                      "departures board",
+        # OS LUGARES QUE A COPIA PEDE (21/09). A copia fiel escolhe o lugar
+        # de cada frase livremente ("lanchonete", "banco", "delegacia"...),
+        # e o generico de antes ("a simple everyday brazilian lanchonete")
+        # rendeu, no video 8c85105e, UM SANDUICHE GIGANTE ocupando o quadro
+        # -- o gerador nao sabe o que e' lanchonete e desenhou a comida.
+        # Cada lugar aqui e' descrito como SALA (balcao, mesas, parede do
+        # fundo), nunca pelo produto que se vende nela.
+        "lanchonete": "a small snack bar interior: a long service counter "
+                      "along the far wall, stools, a menu board and a "
+                      "drinks fridge",
+        "banco": "a bank branch hall: teller counters with glass along the "
+                 "far wall, a queue ticket display and a row of chairs",
+        "delegacia": "a police station front desk room: a high counter, a "
+                     "notice board, filing cabinets and a wall clock",
+        "ponte": "a wide city bridge seen from the pavement, railings, "
+                 "lamp posts and the river and skyline far behind",
+        "loja": "a small shop interior with shelves of boxes along the far "
+                "wall and a checkout counter",
+        "loja_de_suco": "a juice bar interior: a counter with a row of "
+                        "blenders, a fruit display on the far wall and a "
+                        "price board",
+        "mercado": "a supermarket aisle: tall shelves along the far wall, a "
+                   "checkout lane and hanging price signs",
+        "supermercado": "a supermarket aisle: tall shelves along the far "
+                        "wall, a checkout lane and hanging price signs",
+        "feira": "an open-air street market: stalls with awnings in a row "
+                 "along the back, crates and hanging signs",
+        "shopping": "a shopping mall corridor: shop fronts with signs along "
+                    "the far side, a bench and potted plants",
+        "hotel": "a hotel lobby: a reception desk on the far wall, a key "
+                 "rack, a luggage trolley and a sofa pushed back",
+        "consultorio": "a doctor's consulting room: a desk, an examination "
+                       "bed against the far wall and an eye chart",
+        "dentista": "a dentist's room: a dental chair against the far wall, "
+                    "a lamp arm and a cabinet of instruments",
+        "cinema": "a cinema auditorium: rows of red seats along the back "
+                  "and a big blank screen on the far wall",
+        "estadio": "a football stadium seen from the pitch: stands full of "
+                   "colour blocks far behind and a goal at the side",
+        "parque": "a city park: lawn, a path, trees and a bench along the "
+                  "back, a lamp post",
+        "floresta": "a forest clearing: tree trunks along the back, bushes "
+                    "and a path",
+        "fazenda": "a farm yard: a barn, a fence and a water tower along "
+                   "the back",
+        "cadeia": "a prison cell block corridor: barred cell doors along "
+                  "the far wall and a bench",
+        "prisao": "a prison cell block corridor: barred cell doors along "
+                  "the far wall and a bench",
+        "tribunal": "a courtroom: the judge's high bench on the far wall, a "
+                    "witness stand and wooden benches",
+        "faculdade": "a university lecture hall: rows of desks along the "
+                     "back and a big whiteboard on the far wall",
+        "garagem": "a home garage: a workbench, tool board and shelves "
+                   "along the far wall, a rolled-up door",
+        "oficina": "a car repair workshop: a car lift with a car raised "
+                   "against the far wall, tool boards and tyres",
+        "sorveteria": "an ice cream parlour: a display counter along the "
+                      "far wall, a flavour board and stools",
+        "pizzaria": "a pizzeria dining room: tables with checked cloths "
+                    "along the back, a brick oven and a menu board",
+        "churrascaria": "a steakhouse dining room: tables along the back, "
+                        "a grill counter and a wall of skewers",
+        "loterica": "a lottery shop: a service counter along the far wall, "
+                    "a numbers display and a queue ticket machine",
+        "correios": "a post office hall: counters along the far wall, a "
+                    "parcel scale and a wall of PO boxes",
+        "cemiterio": "a cemetery: rows of gravestones and a chapel along "
+                     "the back, a cypress tree",
+        "aeroporto_pista": "an airport runway seen from the apron, a plane "
+                           "far back and the terminal building",
+        "praia_quiosque": "a beach kiosk: a thatched bar counter, stools, "
+                          "the sea far behind",
+        "quadra": "a sports court: painted lines, a hoop on the far wall "
+                  "and a bench",
+        "piscina": "a swimming pool area: the pool along the back, sun "
+                   "loungers and a diving board",
+        "ponto_de_onibus": "a bus stop on a pavement: a shelter with a bench, "
+                           "a timetable and a low wall behind",
+        "corredor": "an apartment building corridor: numbered doors along "
+                    "the far wall, a lift door and a fire hose box",
+        "portaria": "an apartment building lobby: a doorman's desk, a "
+                    "mailbox wall and a glass door on the far wall",
+        "terraco": "a rooftop terrace: a low parapet, a water tank and the "
+                   "city skyline far behind",
+        "loja_de_roupa": "a clothes shop: racks of clothes along the far "
+                         "wall, a mirror and a fitting room curtain",
+        "pet_shop": "a pet shop: shelves of pet food along the far wall, "
+                    "a grooming table and a fish tank",
+        "casa_de_cambio": "a currency exchange booth hall: a counter with "
+                          "glass and a rates board on the far wall",
+        "escritorio_do_chefe": "a boss's office: a big desk against the "
+                               "far wall, a leather chair, a diploma and a "
+                               "window with blinds",
+        "sala_de_reuniao": "a meeting room: a long table pushed back, "
+                           "chairs, a whiteboard and a screen on the far wall",
+        "recepcao": "a reception hall: a front desk on the far wall, a "
+                    "logo sign, a plant and a row of chairs",
     }
     if chave in d:
         return d[chave]
-    return f"a simple everyday brazilian {chave.replace('_', ' ')}, seen from inside"
+    # LUGAR FORA DO DICIONARIO: traduz palavra a palavra o que da' para
+    # traduzir e descreve o lugar como SALA -- o quadro precisa ser a
+    # arquitetura do lugar, nunca o produto dele.
+    palavras = {"loja": "shop", "casa": "house", "sala": "room", "bar": "bar",
+                "clube": "club", "escola": "school", "centro": "centre",
+                "posto": "station", "praca": "square", "beco": "alley",
+                "rua": "street", "quarto": "bedroom", "cozinha": "kitchen",
+                "de": "of", "da": "of the", "do": "of the", "e": "and",
+                "suco": "juice", "carro": "car", "moto": "motorbike",
+                "pao": "bread", "carne": "meat", "peixe": "fish",
+                "roupa": "clothes", "sapato": "shoe", "celular": "phone",
+                "bolo": "cake", "cafe": "coffee", "doce": "sweets",
+                "brinquedo": "toy", "livro": "book", "movel": "furniture",
+                "tinta": "paint", "flor": "flower", "bicicleta": "bicycle",
+                "pizza": "pizza", "sorvete": "ice cream", "acai": "acai",
+                "espera": "waiting", "aula": "class", "jogo": "games",
+                "festa": "party", "casamento": "wedding", "velorio": "funeral",
+                "vizinho": "neighbour", "chefe": "boss", "mae": "mother"}
+    nome = " ".join(palavras.get(p, p) for p in chave.split("_") if p)
+    return (f"the inside of a {nome}, a wide interior seen from across the "
+            f"room: its counter or furniture along the far wall, a sign and "
+            f"a door; the room and its walls only, no product close-up, no "
+            f"food, no single big object")
 
 
 # O n8n TEM A CREDENCIAL QUE FALTA AQUI (13/09).
@@ -198,25 +319,44 @@ PUBLICO = f"{SB}/storage/v1/object/public/{BUCKET}" if SB and BUCKET else ""
 ESPERA_ESTEIRA_S = 300
 
 
-def _pela_esteira(tipo, chave, desc_en, quadrado=False):
+def _apagar(caminho):
+    """Tira um objeto do bucket. Usado quando o bruto guardado nao presta
+    (recorte impossivel): deixa-lo la' faz TODO video seguinte tropecar no
+    mesmo arquivo ruim -- foi o `dinheiro` no 8c85105e (21/09)."""
+    if not (SB and KEY):
+        return False
+    try:
+        r = requests.delete(f"{SB}/storage/v1/object/{BUCKET}/{caminho}",
+                            timeout=60, headers={"apikey": KEY,
+                                                 "Authorization": f"Bearer {KEY}"})
+        return r.status_code < 300
+    except Exception:
+        return False
+
+
+def _pela_esteira(tipo, chave, desc_en, quadrado=False, ignorar_cache=False):
     """Pede a arte ao fluxo `Gerar Assets` do n8n e baixa o bruto do bucket.
 
     Devolve os bytes da imagem, ou None. Ver o comentario longo acima: este
     caminho existe porque a credencial da Cloudflare mora no n8n, e o Action
-    de render nao a tem.
+    de render nao a tem. `ignorar_cache` pula o passo 1 -- e' para refazer
+    um bruto que existe e nao serve.
     """
     alvo = f"{PUBLICO}/assets_bruto/{tipo}/geral/{chave}.jpg"
     # 1. JA ESTA LA? Outro video pode ter pedido a mesma coisa hoje -- e o
     #    bucket e' o catalogo, entao consultar antes de gerar e' a mesma
     #    disciplina do `jaTem` do `Montar Pedidos`.
-    try:
-        r = requests.get(alvo, timeout=60)
-        if r.status_code == 200 and len(r.content) > 2000:
-            print(f"[sob-demanda] '{chave}' ja estava no bucket "
-                  f"({len(r.content)/1024:.0f} KB); nao gerei de novo")
-            return r.content
-    except Exception:
-        pass
+    if ignorar_cache:
+        _apagar(f"assets_bruto/{tipo}/geral/{chave}.jpg")
+    else:
+        try:
+            r = requests.get(alvo, timeout=60)
+            if r.status_code == 200 and len(r.content) > 2000:
+                print(f"[sob-demanda] '{chave}' ja estava no bucket "
+                      f"({len(r.content)/1024:.0f} KB); nao gerei de novo")
+                return r.content
+        except Exception:
+            pass
     # 2. PEDE. `pecas` e' o contrato do `Montar Pedidos` para arte avulsa.
     print(f"[sob-demanda] pedindo '{chave}' a esteira (o n8n tem a "
           f"credencial da Cloudflare)...")
@@ -402,6 +542,54 @@ def _descricao_objeto_en(chave):
         # recorte por cor (a segunda tentativa perdeu o miolo do envelope)
         "carta": "a cartoon brown paper envelope drawn with thick black "
                  "outlines, with a small red stamp",
+        # AS COISAS DA COPIA (21/09). A copia fiel pede um objeto por frase
+        # e o mundo do canal copiado e' dinheiro, multa, loja, policia. O
+        # generico ("the object called 'dinheiro' in Portuguese") rendeu um
+        # bruto que o recorte deixa em 1%. Cores ESCURAS de proposito: o
+        # recorte e' por cor a partir das quinas, e objeto branco some.
+        "dinheiro": "a thick stack of green paper banknotes tied with a "
+                    "brown paper band",
+        "saco_de_dinheiro": "a bulging brown money sack tied at the top "
+                            "with a dollar sign printed on it",
+        "caixa_de_dinheiro": "an open wooden chest overflowing with green "
+                             "banknotes and gold coins",
+        "mala_de_dinheiro": "an open brown suitcase full of stacks of green "
+                            "banknotes",
+        "moedas": "a pile of gold coins",
+        "cofre": "a dark grey steel safe with a round dial on the door",
+        "multa": "a yellow paper fine ticket with a red stamp on it",
+        "iate": "a white and dark blue luxury yacht seen from the side",
+        "carro": "a red compact car seen from the side",
+        "carro_de_luxo": "a black luxury sports car seen from the side",
+        "mansao": "a big white mansion with columns and a red roof",
+        "casa": "a small orange house with a red roof and a door",
+        "loja": "a small shop front with a striped awning and a sign",
+        "loja_de_suco": "a small juice shop front with a striped awning and "
+                        "a big orange fruit on the sign",
+        "caixa_registradora": "a dark green cash register with a drawer "
+                              "open and banknotes inside",
+        "documento": "a white paper document with black lines of text and "
+                     "a red seal",
+        "contrato": "a white paper contract with black lines of text and a "
+                    "signature line",
+        "celular": "a black smartphone with a bright screen",
+        "notebook": "an open dark grey laptop computer",
+        "algemas": "a pair of grey steel handcuffs",
+        "distintivo": "a gold police badge in the shape of a shield",
+        "barraca_de_comida": "a small street food cart with a striped roof",
+        "suco": "a tall glass of orange juice with a straw",
+        "lanche": "a hamburger with lettuce and cheese in a bun",
+        "flores": "a bouquet of red and yellow flowers wrapped in brown paper",
+        "chave": "a big brass door key",
+        "calendario": "a wall calendar with a red circle around one day",
+        "relogio": "a round wall clock with black hands",
+        "cerveja": "a brown glass beer bottle with a red label",
+        "pizza": "a whole round pizza in an open cardboard box",
+        "computador": "a dark grey desktop computer monitor and keyboard",
+        "televisao": "a flat black television set",
+        "conta": "a long white paper bill with a barcode and a red 'due' stamp",
+        "cartao": "a blue plastic credit card",
+        "maquininha": "a small black card payment machine with a screen",
     }
     if chave in d:
         return d[chave]
@@ -545,11 +733,22 @@ def gerar_objeto(chave, pasta_destino):
                               quadrado=True)
     if not dados:
         return None
-    try:
-        recortado = _recortar_fundo(dados)
-    except Exception as e:
-        print(f"[sob-demanda] o recorte de '{chave}' falhou ({e})")
-        recortado = None
+
+    def _recortar(d):
+        try:
+            return _recortar_fundo(d)
+        except Exception as e:
+            print(f"[sob-demanda] o recorte de '{chave}' falhou ({e})")
+            return None
+    recortado = _recortar(dados)
+    if not recortado:
+        # BRUTO RUIM NAO FICA (21/09): o `dinheiro` estava no bucket como um
+        # bruto que o recorte deixa em 1%, e todo video pedia, achava, e
+        # seguia sem ele. Apaga e pede de novo, uma vez.
+        print(f"[sob-demanda] refazendo o bruto de '{chave}' (o guardado nao recorta)")
+        dados = _pela_esteira("objeto", chave, _descricao_objeto_en(chave),
+                              quadrado=True, ignorar_cache=True)
+        recortado = _recortar(dados) if dados else None
     if not recortado:
         return None
     os.makedirs(pasta_destino, exist_ok=True)
