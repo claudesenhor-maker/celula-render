@@ -48,6 +48,7 @@ USO
 """
 import copy
 import json
+import os
 import re
 import unicodedata
 
@@ -193,6 +194,103 @@ def _quem_contracena(spec):
     return [k for k in ordem if not existentes or k in existentes][:2]
 
 
+POSE_DE_ESCUTA_DIR = "escutar"
+
+
+def cartoes_direcao_salto_repetido(cartoes, salto):
+    """Dois saltos iguais seguidos sao um so' (o modelo repete o salto na
+    frase seguinte quando ela continua a mesma cena)."""
+    return bool(cartoes) and str(cartoes[-1].get("salto") or "").upper() == salto.upper()
+
+
+def _cartao_da_direcao(c, d, tr, spec, elenco, dupla):
+    """Preenche o cartao `c` a partir da direcao `d` da frase. Devolve False
+    quando a direcao nao tem nada que o motor consiga desenhar (ator fora
+    do elenco baixado, sem objeto, sem placa) -- e ai o caminho de sempre
+    monta o cartao.
+
+    O que sai daqui e' o mesmo esquema que `ideia.montar_spec` produz para
+    as copias manuais: `atores` com x/pose/expressao/objeto, `objetos`
+    soltos quando ninguem aparece, `placas` com o dado, `plano`."""
+    disponiveis = set((spec.get("elenco") or {}).keys())
+    quem_aparece = [a for a in (d.get("atores") or []) if a in disponiveis][:2]
+    expr = str(d.get("expressao") or tr.get("expressao") or "neutro")
+    obj = str(d.get("objeto") or "").strip()
+    # o objeto so' entra se a ARTE esta no disco (o job baixou ou gerou); o
+    # que nao deu para gerar fica fora, e o cartao segue sem ele
+    pasta = spec.get("pasta_objetos") or ""
+    if pasta:
+        obj_ok = obj if (obj and os.path.exists(os.path.join(pasta, obj + ".png"))) else ""
+    else:
+        obj_ok = obj if (obj and obj in (spec.get("objetos") or {})) else ""
+    tipo = str(d.get("placa_tipo") or "").strip()
+    texto_placa = str(d.get("placa_texto") or "").strip()
+    quem_fala = c.get("ator")
+    atores = []
+    for k, chave in enumerate(quem_aparece):
+        pose = str(d.get("pose") or "").strip() if k == 0 else ""
+        if not pose:
+            pose = POSE_DE_ESCUTA_DIR if (quem_fala and chave != quem_fala) else \
+                ("mostrar_objeto" if (k == 0 and obj_ok) else "gesticular")
+        a = {"quem": chave,
+             "x": 0.5 if len(quem_aparece) == 1 else (0.30 + 0.42 * k),
+             "pose": pose,
+             "expressao": expr if (not quem_fala or chave == quem_fala) else "neutro"}
+        if k == 0 and obj_ok:
+            a["objeto"] = obj_ok
+            a["mao"] = "d"
+        atores.append(a)
+    if atores:
+        c["atores"] = atores
+    elif obj_ok:
+        # CARTAO SEM GENTE: a coisa sozinha e grande -- e' a troca de tela do
+        # Madrazzo (~40% dos cartoes)
+        c["objetos"] = [{"nome": obj_ok, "x": 0.5}]
+    if tipo and texto_placa:
+        if atores and len(atores) == 1:
+            atores[0]["x"] = 0.34          # o boneco sai do centro para a placa
+        c["placas"] = [{"tipo": tipo, "texto": texto_placa.upper(),
+                        "x": 0.78 if atores else 0.5, "y": 0.30,
+                        "escala": 1.0 if atores else 1.3, "entra_em": 0.5}]
+    # o plano alterna com o que ha' na tela: gente em close quando esta' so',
+    # aberto quando ha' dois ou uma coisa grande
+    if atores and len(atores) == 1 and not c.get("placas") and not obj_ok:
+        c["plano"] = "close"
+    sfx = tr.get("sfx")
+    if sfx:
+        c["sfx"] = copy.deepcopy(sfx)
+    return bool(atores or c.get("objetos") or c.get("placas"))
+
+
+def casar_duracao(spec, cartoes, F, falar=print):
+    """A copia dura o que o original dura (21/09). Estima a fala (2,6
+    palavras/s a velocidade 1,0, medido na dupla) mais os respiros; se
+    passar do original em mais de 5%, sobe `speed` de todo perfil ElevenLabs
+    ate' `speed_max` e encurta o respiro na mesma proporcao. A ElevenLabs
+    aceita 0,7-1,2 em `voice_settings.speed`; o Edge ignora (usa `rate`)."""
+    alvo = float(spec.get("copia_dur_s") or 0)
+    if alvo <= 0:
+        return None
+    palavras = sum(len(str(c.get("texto") or "").split()) for c in cartoes)
+    respiros = sum(float(c.get("respiro_s") or 0) for c in cartoes)
+    saltos = sum(1.2 for c in cartoes if c.get("salto"))
+    wps = float(F.get("wps_copia") or 2.6)
+    est = palavras / wps + respiros + saltos
+    if est <= alvo * 1.05:
+        falar(f"[copia] duracao estimada {est:.0f}s para {alvo:.0f}s do original: sem acelerar")
+        return None
+    speed = min(float(F.get("speed_max") or 1.2), max(1.0, est / alvo))
+    for k, cfg in (spec.get("vozes") or {}).items():
+        if isinstance(cfg, dict) and cfg.get("motor", "eleven") == "eleven":
+            cfg["speed"] = round(speed, 2)
+    for c in cartoes:
+        if c.get("respiro_s"):
+            c["respiro_s"] = round(max(0.12, float(c["respiro_s"]) / speed), 2)
+    falar(f"[copia] duracao estimada {est:.0f}s para {alvo:.0f}s do original: "
+          f"voz a {speed:.2f}x e respiro /{speed:.2f}")
+    return speed
+
+
 def converter(spec, pasta_base=None, falar=print):
     """O spec de trechos da esteira, virado spec de cartoes. Nao altera o
     original.
@@ -253,6 +351,24 @@ def converter(spec, pasta_base=None, falar=print):
         if cen:
             c["fundo"] = f"cenario:{cen}"
             fundo_atual = cen
+
+        # A DIRECAO POR FRASE (21/09, copia fiel) -- ver `formatos.cartao.
+        # _direcao`. Quando o trecho traz `cartao`, o cartao sai DELA (quem
+        # aparece, pose, objeto, placa, salto), e nao da coreografia da dupla.
+        d = tr.get("cartao") if isinstance(tr.get("cartao"), dict) else None
+        if d is not None:
+            salto = str(d.get("salto") or "").strip()
+            if salto and not cartoes_direcao_salto_repetido(cartoes, salto):
+                cartoes.append({"salto": salto.upper(), "fundo": c.get("fundo")})
+            c["respiro_s"] = float(F["pausa_trecho_s"])
+            if i == len(trechos) - 1:
+                c["respiro_s"] = float(F["pausa_punch_s"])
+            if _cartao_da_direcao(c, d, tr, spec, elenco, dupla):
+                cartoes.append(c)
+                if c.get("placas"):
+                    placas_postas += 1
+                continue
+            # direcao sem nada aproveitavel: cai no caminho de sempre
 
         expr = _expressao(tr)
         pose = _pose_do_trecho(tr)
@@ -319,6 +435,16 @@ def converter(spec, pasta_base=None, falar=print):
     spec["modo"] = "cartao"
     spec["estilo"] = "cartao"
     spec["cartoes"] = cartoes
+    # a copia fiel dura o que o original dura (21/09)
+    if spec.get("copia_dur_s"):
+        casar_duracao(spec, cartoes, F, falar)
+    n_dir = sum(1 for tr in trechos if isinstance(tr.get("cartao"), dict))
+    if n_dir:
+        falar(f"[para_cartao] direcao por frase em {n_dir}/{len(trechos)} trechos: "
+              f"{sum(1 for c in cartoes if c.get('salto'))} salto(s), "
+              f"{sum(1 for c in cartoes if c.get('placas'))} placa(s), "
+              f"{sum(1 for c in cartoes if c.get('objetos'))} cartao(oes) so' de objeto, "
+              f"{len({c.get('fundo') for c in cartoes if c.get('fundo')})} fundo(s)")
     # O QUE O CARTAO LE DIFERENTE DO PALITO
     #   `legenda_palavras`: 1 (palavra a palavra e' o estilo; a producao usa 3)
     #   `cenario_lavado`: o veu que poe o desenho na frente do cenario
