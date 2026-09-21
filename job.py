@@ -423,6 +423,14 @@ def buscar_cenarios_e_objetos(spec):
         alvo = CEN.normalizar(nome)
         if alvo not in getattr(CEN, "REPROVADOS", {}):
             return nome, None
+        # SINONIMO DE REPROVADO GERA O LUGAR EXATO (21/09). "banco" e'
+        # sinonimo de `comercio`; o `comercio` esta reprovado; e a troca
+        # mandava o banco para o `escritorio`. So que hoje o cenario e'
+        # gerado sob demanda: o certo e' pedir um `banco` de verdade, e o
+        # `resolver` do motor aceita o literal quando ele esta no disco.
+        # So o proprio `comercio` (pedido com esse nome) ainda troca.
+        if CEN._limpo(nome).replace(" ", "_") != alvo:
+            return nome, None
         for p in CEN.CATALOGO.get(alvo, {}).get("parecidos", ()):
             if p not in getattr(CEN, "REPROVADOS", {}):
                 return p, f"'{alvo}' esta reprovado ({CEN.REPROVADOS[alvo]})"
