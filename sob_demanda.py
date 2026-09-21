@@ -375,7 +375,9 @@ def _pela_esteira(tipo, chave, desc_en, quadrado=False, ignorar_cache=False):
     #    segundos, e tres tentativas custam menos que perder a arte.
     for tentativa in range(3):
         try:
-            r = requests.get(alvo, timeout=90)
+            # `?t=` fura o cache do CDN: depois de refazer um bruto, a URL
+            # limpa devolveu o arquivo antigo por mais de um minuto (21/09)
+            r = requests.get(f"{alvo}?t={int(time.time())}", timeout=90)
             if r.status_code == 200 and len(r.content) > 2000:
                 print(f"[sob-demanda] '{chave}' gerado pela esteira: "
                       f"{len(r.content)/1024:.0f} KB")
@@ -578,7 +580,11 @@ def _descricao_objeto_en(chave):
         "notebook": "an open dark grey laptop computer",
         "algemas": "a pair of grey steel handcuffs",
         "distintivo": "a gold police badge in the shape of a shield",
-        "barraca_de_comida": "a small street food cart with a striped roof",
+        # o corpo branco do carrinho sumiu no recorte por cor (21/09): cor
+        # dita explicitamente em toda superficie
+        "barraca_de_comida": "a small street food cart with a dark blue "
+                             "wooden body, a yellow counter, a red and white "
+                             "striped awning and two black wheels",
         "suco": "a tall glass of orange juice with a straw",
         "lanche": "a hamburger with lettuce and cheese in a bun",
         "flores": "a bouquet of red and yellow flowers wrapped in brown paper",
