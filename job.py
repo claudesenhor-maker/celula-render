@@ -639,6 +639,17 @@ def main():
     # ela nao ha cartao, e o video cai no caminho normal.
     estilo, porque_estilo = estilo_do_item(spec, fila_id, eh_producao)
     print(f"[estilo] {estilo} ({porque_estilo})")
+    # A COPIA TROCA DE DESENHO A CADA FRASE (21/09): o teto de arte gerada
+    # por video e' do estilo (`formatos.cartao.arte_nova_max`), nao do motor
+    # -- os 2 de `sob_demanda` sao da dupla, que tem um objeto so'.
+    if estilo == "cartao":
+        try:
+            from config_gerado import formato_de as _fd
+            import sob_demanda as _SD
+            _SD.MAX_POR_VIDEO = int(_fd("cartao").get("arte_nova_max") or _SD.MAX_POR_VIDEO)
+            print(f"[sob-demanda] teto de arte nova neste video: {_SD.MAX_POR_VIDEO}")
+        except Exception as e:                                       # noqa: BLE001
+            print(f"[sob-demanda] teto do estilo nao lido ({e}); fica o do motor")
 
     pecas_url = spec.get("personagem_url") or os.environ.get("PERSONAGEM_URL", "")
     motor = "vetor"
