@@ -175,8 +175,16 @@ def _quem_contracena(spec):
     conta = {}
     for tr in (spec.get("trechos") or []):
         a = tr.get("ator")
-        if a and not tr.get("narracao"):
+        if a and a != "narrador" and not tr.get("narracao"):
             conta[a] = conta.get(a, 0) + 1
+    # A COPIA FIEL E' NARRADA (20/09): sem fala de personagem, quem conta e'
+    # `personagens_em_cena` de cada trecho -- os dois que o nucleo escolheu
+    # dos cartoes adaptados. Sem isso a dupla sairia da ORDEM do dicionario.
+    if not conta:
+        for tr in (spec.get("trechos") or []):
+            for a in (tr.get("personagens_em_cena") or []):
+                if a and a != "narrador":
+                    conta[a] = conta.get(a, 0) + 1
     existentes = list((spec.get("elenco") or {}).keys())
     ordem = sorted(conta, key=lambda k: -conta[k])
     for k in existentes:
@@ -225,6 +233,11 @@ def converter(spec, pasta_base=None, falar=print):
         if not fala:
             continue
         ator = tr.get("ator")
+        # `narrador` NAO e' um boneco (20/09): e' a voz que conta. O trecho
+        # vira cartao narrado -- os dois em pose, ninguem abre a boca -- com
+        # o perfil de voz `narrador` do canal.
+        if ator == "narrador":
+            ator = None
         narracao = bool(tr.get("narracao")) or not ator
         c = {"texto": fala}
         if not narracao:
