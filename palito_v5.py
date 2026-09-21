@@ -365,17 +365,38 @@ def _eleven(texto, cfg, out_mp3, chave, voz=None):
     voz = voz or cfg.get("eleven_voice_id") or os.environ.get("ELEVEN_VOICE_ID")
     if not voz:
         raise RuntimeError("defina ELEVEN_VOICE_ID ou eleven_voice_id no perfil de voz")
+    voice_settings = {
+        "stability": cfg.get("stability", 0.45),
+        "similarity_boost": cfg.get("similarity", 0.8),
+        "style": cfg.get("style", 0.35),
+        "use_speaker_boost": True,
+    }
+    # A VELOCIDADE (21/09): `voice_settings.speed`, 0,7-1,2 na API. A copia
+    # fiel a usa para durar o que o original dura (`para_cartao.casar_duracao`).
+    # Se a API recusar o campo (modelo que nao o aceita), a chamada e' refeita
+    # sem ele -- uma recusa aqui nunca pode derrubar a voz para o Edge.
+    speed = cfg.get("speed")
+    if isinstance(speed, (int, float)) and abs(float(speed) - 1.0) > 0.01:
+        voice_settings["speed"] = round(max(0.7, min(1.2, float(speed))), 2)
     corpo = json.dumps({
         "text": texto,
         "model_id": cfg.get("eleven_model", os.environ.get(
             "ELEVEN_MODEL", "eleven_multilingual_v2")),
-        "voice_settings": {
-            "stability": cfg.get("stability", 0.45),
-            "similarity_boost": cfg.get("similarity", 0.8),
-            "style": cfg.get("style", 0.35),
-            "use_speaker_boost": True,
-        },
+        "voice_settings": voice_settings,
     }).encode()
+    if "speed" in voice_settings:
+        try:
+            return _eleven_pedir(corpo, voz, chave, texto, out_mp3)
+        except RuntimeError as e:
+            if "speed" in str(e).lower() or "voice_settings" in str(e).lower():
+                print(f"[voz] eleven recusou `speed` ({str(e)[:80]}); refazendo sem")
+                return _eleven(texto, dict(cfg, speed=None), out_mp3, chave, voz)
+            raise
+    return _eleven_pedir(corpo, voz, chave, texto, out_mp3)
+
+
+def _eleven_pedir(corpo, voz, chave, texto, out_mp3):
+    """A chamada em si (separada em 21/09 para o recuo do `speed`)."""
     req = urllib.request.Request(
         f"https://api.elevenlabs.io/v1/text-to-speech/{voz}/with-timestamps",
         data=corpo, method="POST",
