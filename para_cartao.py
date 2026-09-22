@@ -446,6 +446,10 @@ def converter(spec, pasta_base=None, falar=print):
 
     spec["modo"] = "cartao"
     spec["estilo"] = "cartao"
+    # O LOOP DO CARTAO (22/09) mora em `cartao.render`, e nao aqui: entre este
+    # ponto e o desenho passam `gancho.abrir_no_auge`, `desdobrar` e
+    # `gancho.garantir`, e as tres reescrevem justamente o primeiro e o ultimo
+    # cartao. Ver o bloco `[loop]` la'.
     spec["cartoes"] = cartoes
     # a copia fiel dura o que o original dura (21/09)
     if spec.get("copia_dur_s"):
