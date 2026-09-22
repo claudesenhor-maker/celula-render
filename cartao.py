@@ -1716,9 +1716,36 @@ def _variacao(c, texto_b):
 
 
 def desdobrar(cartoes, spec):
-    """A lista de cartoes com os longos partidos em dois."""
+    """A lista de cartoes com os longos partidos em dois -- e os que continuam
+    longos partidos de novo (22/09).
+
+    UMA PASSADA NAO BASTAVA. `_partir_frase` corta UMA vez: uma frase de 24
+    palavras virava dois cartoes de 12, e 12 palavras a 3 p/s sao 4 s de tela
+    parada -- exatamente o `[cadencia] cartao acima do teto de 4.0s` que
+    apareceu em 1 a 3 cartoes por video na serie (o pior com 6,5 s). O estilo
+    existe para trocar de tela a cada 1,7-3,0 s; cartao de 6 s e' o defeito que
+    o dono chamou de *"pouca troca de telas"*. Entao a partida repete enquanto
+    sobrar cartao acima do teto de palavras, ate' tres voltas (a quarta ja
+    seria picotar a frase em pedaco sem sentido).
+    """
     if spec.get("desdobrar", True) is False:
         return list(cartoes)
+    saida = list(cartoes)
+    for _ in range(3):
+        nova = _uma_partida(saida)
+        if len(nova) == len(saida):
+            break
+        saida = nova
+    if len(saida) != len(cartoes):
+        print(f"[cartao] desdobrados: {len(cartoes)} -> {len(saida)} cartoes "
+              f"({sum(1 for c in saida if c.get('tipo_var'))} variacoes: "
+              + ", ".join(f"{k}={sum(1 for c in saida if c.get('tipo_var') == k)}"
+                          for k in ("placa", "objeto", "close", "igual")) + ")")
+    return _alternar_gente(saida)
+
+
+def _uma_partida(cartoes):
+    """Uma passada do desdobramento: cada cartao longo vira dois."""
     out = []
     for c in cartoes:
         if c.get("salto") or c.get("nao_desdobrar"):
@@ -1743,11 +1770,7 @@ def desdobrar(cartoes, spec):
             out.append(c)
             continue
         out += [a, b]
-    if len(out) != len(cartoes):
-        print(f"[cartao] desdobrados: {len(cartoes)} -> {len(out)} cartoes "
-              f"({sum(1 for c in out if c.get('tipo_var'))} variacoes: "
-              + ", ".join(f"{k}={sum(1 for c in out if c.get('tipo_var') == k)}" for k in ("placa", "objeto", "close", "igual")) + ")")
-    return _alternar_gente(out)
+    return out
 
 
 def _gente_na_tela(cartoes, trechos, regra):
