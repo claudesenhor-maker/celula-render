@@ -813,23 +813,29 @@ def _fundo(ctx, cartao, i):
                 # peca e a primeira da seguinte sao a mesma) e a textura
                 # continua textura. O cenario ja vai lavado a 30-62%, entao a
                 # inversao da perspectiva nao se le.
-                # UM espelho so', e ele se apaga descendo. Repetir a tira em
-                # ladrilho devolve a listra por outro caminho: na prova de
-                # 22/09 o tapete do quarto reapareceu tres vezes, uma embaixo
-                # da outra. Espelhar UMA vez continua a tabua do chao na borda
-                # de baixo -- que e' onde o olho ve -- e o desbotar para a cor
-                # media resolve os ultimos pixels, onde a perspectiva invertida
-                # comecaria a incomodar.
+                # O CHAO SE ESTICA, NAO SE ESPELHA (22/09). Ladrilhar a tira
+                # devolvia a listra (o tapete do quarto tres vezes); espelhar
+                # uma vez matou a listra e criou SIMETRIA -- uma borboleta na
+                # borda de baixo, visivel no `serie_v007`. O que um chao de
+                # verdade faz perto da camera e' ESTICAR: a mesma tabua ocupa
+                # mais pixels. Entao a tira de piso colada na borda do cenario
+                # e' redimensionada para preencher o vao inteiro. Sem repeticao
+                # e sem simetria, porque nao ha copia nenhuma -- ha' uma tira
+                # so', maior.
                 alt = H - dy
-                k = min(alt, dy)
-                espelho = sub.crop((0, alt - k, W, alt)).transpose(Image.FLIP_TOP_BOTTOM)
-                sub.paste(espelho, (0, alt))
-                if dy > k:                       # cenario curto: o resto e' cor
-                    faixa = np.asarray(img.crop((0, H - 14, W, H)).convert("RGB")) \
-                        .reshape(-1, 3).mean(axis=0)
-                    sub.paste(Image.new("RGBA", (W, dy - k),
-                                        tuple(int(c) for c in faixa) + (255,)),
-                              (0, alt + k))
+                k = max(8, min(alt, int(dy * 0.8)))
+                tira = sub.crop((0, alt - k, W, alt))
+                banda_bruta = tira.resize((W, dy), Image.BILINEAR)
+                # a EMENDA se dissolve: os primeiros pixels da banda sao a
+                # continuacao do que esta em cima, nao um corte
+                emenda = max(8, dy // 12)
+                alfa_e = Image.fromarray(
+                    (np.linspace(0, 1, emenda).reshape(-1, 1)
+                     .repeat(W, axis=1) * 255).astype(np.uint8), "L")
+                topo_real = sub.crop((0, alt - emenda, W, alt))
+                banda_bruta.paste(Image.composite(banda_bruta.crop((0, 0, W, emenda)),
+                                                  topo_real, alfa_e), (0, 0))
+                sub.paste(banda_bruta, (0, alt))
                 # O CHAO PERTO DA CAMERA SAI DE FOCO, e e' isso que apaga o
                 # espelho. Num cenario de piso liso o espelho e' invisivel; num
                 # piso com desenho (o ladrilho da cozinha, o tapete) ele vira
@@ -840,7 +846,7 @@ def _fundo(ctx, cartao, i):
                 # de 0,2 na emenda a 0,85 na borda -- assim os ultimos pixels
                 # sao cor, e nao desenho invertido.
                 banda = sub.crop((0, alt, W, H)).filter(
-                    ImageFilter.GaussianBlur(max(3, dy // 40)))
+                    ImageFilter.GaussianBlur(4))
                 media = np.asarray(banda.convert("RGB")).reshape(-1, 3).mean(axis=0)
                 veu_cor = tuple(int(c) for c in media)
                 grad = np.linspace(0.2, 0.85, dy).reshape(-1, 1)
@@ -1595,7 +1601,10 @@ def _enquadrar(q, zoom, foco, u=0.0, push=None):
         zoom = zoom * (1.0 + PUSH_IN * _ease(u))
     else:
         s = min(1.0, max(0.0, u) / 0.25)
-        zoom = zoom * (1.0 + push * (1.0 - (1.0 - s) ** 3))
+        # snap + tremor do impacto (ver `palito_cutout._enquadramento`): o
+        # seno comeca em zero, entao o quadro 0 -- onde o loop fecha -- nao muda
+        zoom = zoom * (1.0 + push * (1.0 - (1.0 - s) ** 3)
+                       + 0.02 * math.sin(s * math.pi * 4.0) * (1.0 - s))
     if zoom <= 1.001:
         return q
     jw, jh = W / zoom, H / zoom
