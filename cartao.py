@@ -1587,8 +1587,15 @@ def quadro_do_cartao(pronto, t, nivel=0.0, pisca=False):
 
 def _enquadrar(q, zoom, foco, u=0.0, push=None):
     """Recorte do plano; `u` (0..1 no cartao) avanca a camera devagar.
-    `push` troca o empurrao padrao (o do gancho e' mais forte)."""
-    zoom = zoom * (1.0 + (PUSH_IN if push is None else push) * _ease(u))
+    `push` troca o empurrao padrao: o do gancho e' mais forte e e' SNAP --
+    acontece no primeiro quarto do cartao, desacelerando, e segura (ver
+    `palito_cutout.curva_push`: o empurrao lento espalhado nao vencia os
+    cortes do resto do video)."""
+    if push is None:
+        zoom = zoom * (1.0 + PUSH_IN * _ease(u))
+    else:
+        s = min(1.0, max(0.0, u) / 0.25)
+        zoom = zoom * (1.0 + push * (1.0 - (1.0 - s) ** 3))
     if zoom <= 1.001:
         return q
     jw, jh = W / zoom, H / zoom
