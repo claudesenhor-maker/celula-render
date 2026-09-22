@@ -3766,10 +3766,25 @@ def _close_no_falante(i, n_trechos, n_atores):
 # do quadro 0 -- continua fechando.
 PUSH_TRECHO = 0.035
 PUSH_GANCHO = 0.12
+# O EMPURRAO LENTO NAO BASTOU (dupla `serie_v052`: 0,88). Espalhado pelo trecho
+# inteiro ele e' 0,5% por quadro -- menos movimento que a caminhada e os cortes
+# do resto do video. A abertura de Short usa o SNAP ZOOM: o mesmo empurrao
+# acontece nos primeiros ~20% do trecho de abertura, desacelerando, e segura.
+# O quadro 0 continua em zoom 0 (o loop fecha nele).
+SNAP_GANCHO_FRAC = 0.2
 
 
 def push_do_trecho(i):
     return PUSH_GANCHO if i == 0 else PUSH_TRECHO
+
+
+def curva_push(i, t):
+    """Quanto do empurrao ja aconteceu no ponto `t` (0..1) do trecho `i`."""
+    t = max(0.0, min(1.0, t))
+    if i == 0:
+        u = min(1.0, t / SNAP_GANCHO_FRAC)
+        return 1.0 - (1.0 - u) ** 3            # rapido e desacelerando
+    return t
 
 
 def _enquadramento(i, n_trechos, n_atores, t, centro_corpo=None,
@@ -3825,7 +3840,7 @@ def _enquadramento(i, n_trechos, n_atores, t, centro_corpo=None,
     # ator, nÃ£o o par --, entÃ£o nem o teto nem os cinco degraus valem para
     # ele. O push-in de 3,5% continua, que Ã© o que separa vÃ­deo de foto.
     if close:
-        z = (z_close or CLOSE_FALANTE) * (1.0 + push_do_trecho(i) * max(0.0, min(1.0, t)))
+        z = (z_close or CLOSE_FALANTE) * (1.0 + push_do_trecho(i) * curva_push(i, t))
         meia = 0.5 / z
         alvo = centro_rosto if centro_rosto is not None else centro_corpo
         if alvo is None:
@@ -6186,7 +6201,7 @@ def render(pasta_partes, spec, saida, tmpdir=None, amostra=0):
                 z_close = CLOSE_FALANTE + (CLOSE_GANCHO - CLOSE_FALANTE) * u
             if fecha and pecas_falante and "cranio" in pecas_falante:
                 pers_f = posto[falante][0]
-                z_prev = z_close * (1.0 + push_do_trecho(i_tr) * max(0.0, min(1.0, t)))
+                z_prev = z_close * (1.0 + push_do_trecho(i_tr) * curva_push(i_tr, t))
                 topo = (pecas_falante["cranio"][1]
                         - pers_f.altura_cranio() * pers_f.escala)
                 hjan = H / z_prev
