@@ -3758,6 +3758,20 @@ def _close_no_falante(i, n_trechos, n_atores):
     return i % 5 in (1, 4) or i == n_trechos - 1
 
 
+# O GANCHO DE CAMERA DA DUPLA (22/09) -- a mesma medida que mudou o cartao
+# (`cartao.GANCHO_PUSH_IN`): a bancada da serie deu 0,73 de movimento nos 3
+# primeiros segundos contra os 12 seguintes (`regua_gancho`, piso 1,0). O
+# close do trecho 0 empurrava 3,5%, o mesmo de todo trecho. No gancho ele
+# empurra 12%. O quadro 0 (t=0) nao muda, entao o loop -- que volta a camera
+# do quadro 0 -- continua fechando.
+PUSH_TRECHO = 0.035
+PUSH_GANCHO = 0.12
+
+
+def push_do_trecho(i):
+    return PUSH_GANCHO if i == 0 else PUSH_TRECHO
+
+
 def _enquadramento(i, n_trechos, n_atores, t, centro_corpo=None,
                    close=False, centro_rosto=None, teto_par=1.0,
                    z_close=None):
@@ -3811,7 +3825,7 @@ def _enquadramento(i, n_trechos, n_atores, t, centro_corpo=None,
     # ator, nÃ£o o par --, entÃ£o nem o teto nem os cinco degraus valem para
     # ele. O push-in de 3,5% continua, que Ã© o que separa vÃ­deo de foto.
     if close:
-        z = (z_close or CLOSE_FALANTE) * (1.0 + 0.035 * max(0.0, min(1.0, t)))
+        z = (z_close or CLOSE_FALANTE) * (1.0 + push_do_trecho(i) * max(0.0, min(1.0, t)))
         meia = 0.5 / z
         alvo = centro_rosto if centro_rosto is not None else centro_corpo
         if alvo is None:
@@ -5583,6 +5597,11 @@ def render(pasta_partes, spec, saida, tmpdir=None, amostra=0):
                  for i in range(amostra)}
     rig_zero, cam_zero = {}, {}   # a pose do quadro 0, para o loop (14/09)
     cara_zero, pisca_zero, nivel_zero = {}, {}, {}   # e a cara, a piscada e a boca (21/09)
+    # E O LUGAR NA TELA (22/09) -- ver `x_zero` no laco. A pose volta pelo rig,
+    # mas o X final de cada ator nao e' o do rig: depois dele ainda somam o pan
+    # da caminhada (`dx_tela`) e o empurrao da guarda de colisao (`_separar`),
+    # e nenhum dos dois sabe do loop.
+    x_zero = {}
     # e o resto do quadro 0: camera, mira, terco, quem estava enquadrado, e a
     # imagem composta -- a volta do loop leva o fim ate exatamente ele
     quadro_zero = cam_q0 = centro_q0 = alvo_q0 = no_quadro_q0 = None
@@ -6045,6 +6064,33 @@ def render(pasta_partes, spec, saida, tmpdir=None, amostra=0):
                     so_dele[chave] = _transladar(so_dele[chave], dx)
                     rigs[chave]["quadril"][0] += dx
                     n_empurrados[chave] = n_empurrados.get(chave, 0) + 1
+            # O LUGAR NA TELA VOLTA AO DO QUADRO 0 (22/09), e ele e' o ULTIMO
+            # passo de posicao de proposito.
+            #
+            # Ate aqui a volta do loop era feita no RIG (`_misturar_rig`), que
+            # e' cedo demais: depois dele ainda entram o pan da caminhada
+            # (`dx_tela`, que so' existe quando alguem anda) e o empurrao da
+            # guarda de colisao (`_separar`, que so' existe quando ha dois em
+            # cena). Medido no render `serie_v02` de 22/09: o Joao voltava a
+            # pose do quadro 0 e ficava ~70 px a direita dele, porque no quadro
+            # 0 ele estava sozinho (o Pal entra no trecho 1) e no fim a colisao
+            # o empurrava -- 39,6% de pixels iguais, razao 11,55 na regua.
+            #
+            # Corrigir dentro de `_separar` nao resolveria: no quadro 0 o
+            # empurrao pode existir e ser OUTRO. O que fecha o loop e' comparar
+            # o X de chegada com o X de saida, depois de TODOS os passos que
+            # mexem em posicao -- entao a correcao mora aqui, e e' a diferenca
+            # que sobrou, pesada pela mesma janela da volta.
+            if loop_on and n == 0:
+                x_zero = {c: float(rigs[c]["quadril"][0]) for c in chaves}
+            elif loop_on and w_volta > 0.0 and x_zero:
+                for chave in chaves:
+                    if chave not in x_zero:
+                        continue
+                    dx = (x_zero[chave] - float(rigs[chave]["quadril"][0])) * w_volta
+                    if abs(dx) >= 0.5:
+                        so_dele[chave] = _transladar(so_dele[chave], dx)
+                        rigs[chave]["quadril"][0] += dx
             # NO CLOSE, QUEM NÃƒO ESTÃ SENDO ENQUADRADO NÃƒO ENTRA NO QUADRO
             # (31/08, defeito 3 dos vÃ­deos: *"quando tem dois personagens na
             # cena e dÃ¡ zoom em um Ãºnico personagem andando, o outro buga e
@@ -6140,7 +6186,7 @@ def render(pasta_partes, spec, saida, tmpdir=None, amostra=0):
                 z_close = CLOSE_FALANTE + (CLOSE_GANCHO - CLOSE_FALANTE) * u
             if fecha and pecas_falante and "cranio" in pecas_falante:
                 pers_f = posto[falante][0]
-                z_prev = z_close * (1.0 + 0.035 * max(0.0, min(1.0, t)))
+                z_prev = z_close * (1.0 + push_do_trecho(i_tr) * max(0.0, min(1.0, t)))
                 topo = (pecas_falante["cranio"][1]
                         - pers_f.altura_cranio() * pers_f.escala)
                 hjan = H / z_prev
