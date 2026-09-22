@@ -107,8 +107,11 @@ except ImportError:                                            # pragma: no cove
     _PESO_SFX = {}
 
 
-def ganho_para(nome):
-    return round(GANHO_DO_GANCHO / max(0.3, float(_PESO_SFX.get(nome, 0.7))), 2)
+def ganho_para(nome, nivel=None):
+    # `nivel` vem do estilo (`formatos.<estilo>.gancho_ganho`, fonte unica):
+    # o cartao precisa de mais que a dupla, medido em 22/09 -- ver `garantir`.
+    return round(float(nivel or GANHO_DO_GANCHO)
+                 / max(0.3, float(_PESO_SFX.get(nome, 0.7))), 2)
 
 SOM_DA_CENA = (
     # (o que tem de aparecer no cartao, efeito)
@@ -378,9 +381,19 @@ def garantir(spec, falar=print):
     posto = []
 
     # -- 1. SOM, sempre (regra 3) -----------------------------------------
+    #
+    # O NIVEL E' DO ESTILO (22/09). A regua de gancho compara a energia dos 3
+    # primeiros segundos com a dos 12 seguintes, e pede 1,15. A dupla passa
+    # folgada (mediana 1,63); a COPIA raspava -- 5 de 20 reprovaram entre 1,12
+    # e 1,14 --, porque ela troca de tela a cada 2 s e o resto do video e' um
+    # corte atras do outro, com cama de musica por baixo. O mesmo efeito, no
+    # mesmo instante, precisa de mais nivel para se destacar do que vem
+    # depois. O numero vive em `formatos.<estilo>.gancho_ganho`.
+    nivel = float((spec.get("regra_estilo") or {}).get("gancho_ganho")
+                  or GANHO_DO_GANCHO)
     if not antes["som"]["tem"] and spec.get("gancho_som") is not False:
         nome = _som_para(c)
-        g = ganho_para(nome)
+        g = ganho_para(nome, nivel)
         c.setdefault("sfx", [])
         c["sfx"] = [{"nome": nome, "em": QUANDO, "ganho": g,
                      "gancho": True}] + list(c["sfx"])
