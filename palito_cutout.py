@@ -3841,6 +3841,15 @@ def _enquadramento(i, n_trechos, n_atores, t, centro_corpo=None,
     # ele. O push-in de 3,5% continua, que Ã© o que separa vÃ­deo de foto.
     if close:
         z = (z_close or CLOSE_FALANTE) * (1.0 + push_do_trecho(i) * curva_push(i, t))
+        # O TREMOR DO IMPACTO (22/09). O snap sozinho deixou o gancho da dupla
+        # acima do piso em 5 de 11 voltas -- o resto do video tem caminhada e
+        # corte de plano, e um empurrao liso nao se destaca. Duas oscilacoes
+        # curtas de camera durante o snap (2%, morrendo junto com ele) sao o
+        # "soco" da abertura. `sin` comeca em ZERO: o quadro 0 nao muda, e o
+        # loop, que fecha nele, continua fechando.
+        if i == 0:
+            u = min(1.0, max(0.0, t) / SNAP_GANCHO_FRAC)
+            z *= 1.0 + 0.02 * math.sin(u * math.pi * 4.0) * (1.0 - u)
         meia = 0.5 / z
         alvo = centro_rosto if centro_rosto is not None else centro_corpo
         if alvo is None:
