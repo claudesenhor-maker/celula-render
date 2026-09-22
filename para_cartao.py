@@ -236,6 +236,11 @@ def _cartao_da_direcao(c, d, tr, spec, elenco, dupla):
              "x": 0.5 if len(quem_aparece) == 1 else (0.30 + 0.42 * k),
              "pose": pose,
              "expressao": expr if (not quem_fala or chave == quem_fala) else "neutro"}
+        # o figurino do papel que este ator faz na historia (22/09) -- ver
+        # `consumirCopia` (`cartao.papeis`) e `roupas.PAPEIS`
+        papel = (d.get("papeis") or {}).get(chave) if isinstance(d.get("papeis"), dict) else None
+        if papel:
+            a["papel"] = papel
         if k == 0 and obj_ok:
             a["objeto"] = obj_ok
             a["mao"] = "d"
