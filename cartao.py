@@ -40,9 +40,11 @@
         ]
       }
 """
+import copy
 import json
 import math
 import os
+import shutil
 import subprocess
 import tempfile
 import time
@@ -62,7 +64,7 @@ import sfx as SFX
 from palito_cutout import (Personagem, desenhar_personagem, pose_na_tela, colar,
                            Cenario, W, H, FPS, _reamostrar, _destacar_objeto,
                            _sombra_de_contato, _folha, _pastas, _achar_arte,
-                           _inventario)
+                           _inventario, LOOP_SOM_S)
 import cenarios as CENARIOS
 from palito_v4 import REST, merge
 
@@ -181,6 +183,19 @@ VIDA_CABECA = 1.4
 VIDA_BRACO = 2.2
 VIDA_QUADRIL = 2.5          # px
 PUSH_IN = 0.035             # zoom extra ao longo do cartao
+# O GANCHO DE CAMERA (22/09). A bancada da serie mediu o movimento dos 3
+# primeiros segundos contra os 12 seguintes (`regua_gancho`, piso 1,0) e ele
+# empatava ou perdia: 0,83 e 0,73 em duas de quatro voltas -- o resto do video
+# ja corta a cada ~2 s, entao dois cartoes de abertura com um gesto nao se
+# destacam. O gancho e' o ponto fraco declarado do canal (memoria do dono: todo
+# video precisa de barulho, fala chamativa OU acao). A linguagem de abertura
+# de Short e' o empurrao de camera: nos cartoes que COMECAM nos primeiros
+# `GANCHO_CAMERA_S`, a camera empurra ~5x mais e o pop de entrada e' mais
+# forte. O quadro 0 nao muda (o empurrao comeca em zero), entao o loop, que
+# fecha no quadro 0, continua fechando.
+GANCHO_CAMERA_S = 2.8
+GANCHO_PUSH_IN = 0.16
+GANCHO_POP_FORCA = 0.12
 POP_PLACA_S = 0.3
 POP_PLACA_FORCA = 0.08
 VOO_DUR_S = 0.45
@@ -778,11 +793,61 @@ def _fundo(ctx, cartao, i):
             if dy > 0:
                 sub = Image.new("RGBA", (W, H), (0, 0, 0, 0))
                 sub.paste(img.crop((0, dy, W, H)), (0, 0))
-                # o piso por baixo e' COR CHAPADA (a media das ultimas linhas):
-                # esticar 2 linhas de textura virava listras (folha da bet, 16/09)
-                faixa = np.asarray(img.crop((0, H - 14, W, H)).convert("RGB")).reshape(-1, 3).mean(axis=0)
-                piso = Image.new("RGBA", (W, dy), tuple(int(c) for c in faixa) + (255,))
-                sub.paste(piso, (0, H - dy))
+                # O PISO POR BAIXO E' PISO DE VERDADE, ESPELHADO (22/09).
+                #
+                # Ele era COR CHAPADA (a media das ultimas linhas) porque
+                # esticar 2 linhas de textura virava listras (folha da bet,
+                # 16/09) -- mas chapado tambem tem custo, e ele e' grande: o
+                # cenario do catalogo tem o chao a ~90% da altura e o cartao o
+                # quer a ~66%, entao `dy` passa de 400 px e um quinto do quadro
+                # sai sem desenho nenhum. Medido no video `serie_v01` de
+                # 22/09: uma faixa lisa de ~20% embaixo, em TODOS os cartoes --
+                # e' a mesma queixa que a memoria do canal registra ("nada de
+                # faixa vazia no quadro") e o oposto de "o quadro se preenche
+                # com arte de cenario de verdade".
+                #
+                # O que resolve sem esticar nada: a tira de chao que esta
+                # colada na borda de baixo do proprio cenario e' piso puro
+                # (tabua, tapete, calcada). Ela se repete para baixo
+                # ESPELHADA -- espelhar mata a emenda (a ultima linha de uma
+                # peca e a primeira da seguinte sao a mesma) e a textura
+                # continua textura. O cenario ja vai lavado a 30-62%, entao a
+                # inversao da perspectiva nao se le.
+                # UM espelho so', e ele se apaga descendo. Repetir a tira em
+                # ladrilho devolve a listra por outro caminho: na prova de
+                # 22/09 o tapete do quarto reapareceu tres vezes, uma embaixo
+                # da outra. Espelhar UMA vez continua a tabua do chao na borda
+                # de baixo -- que e' onde o olho ve -- e o desbotar para a cor
+                # media resolve os ultimos pixels, onde a perspectiva invertida
+                # comecaria a incomodar.
+                alt = H - dy
+                k = min(alt, dy)
+                espelho = sub.crop((0, alt - k, W, alt)).transpose(Image.FLIP_TOP_BOTTOM)
+                sub.paste(espelho, (0, alt))
+                if dy > k:                       # cenario curto: o resto e' cor
+                    faixa = np.asarray(img.crop((0, H - 14, W, H)).convert("RGB")) \
+                        .reshape(-1, 3).mean(axis=0)
+                    sub.paste(Image.new("RGBA", (W, dy - k),
+                                        tuple(int(c) for c in faixa) + (255,)),
+                              (0, alt + k))
+                # O CHAO PERTO DA CAMERA SAI DE FOCO, e e' isso que apaga o
+                # espelho. Num cenario de piso liso o espelho e' invisivel; num
+                # piso com desenho (o ladrilho da cozinha, o tapete) ele vira
+                # simetria -- uma borboleta na borda de baixo, que foi o que a
+                # prova do `serie_v007` mostrou. Desfocar resolve as duas
+                # coisas de uma vez: mata a simetria e e' o que uma lente faz
+                # com o chao a um palmo dela. Por cima, o veu para a cor media,
+                # de 0,2 na emenda a 0,85 na borda -- assim os ultimos pixels
+                # sao cor, e nao desenho invertido.
+                banda = sub.crop((0, alt, W, H)).filter(
+                    ImageFilter.GaussianBlur(max(3, dy // 40)))
+                media = np.asarray(banda.convert("RGB")).reshape(-1, 3).mean(axis=0)
+                veu_cor = tuple(int(c) for c in media)
+                grad = np.linspace(0.2, 0.85, dy).reshape(-1, 1)
+                alfa = Image.fromarray((np.repeat(grad, W, axis=1) * 255)
+                                       .astype(np.uint8), "L")
+                chapado = Image.new("RGBA", (W, dy), veu_cor + (255,))
+                sub.paste(Image.composite(chapado, banda, alfa), (0, alt))
                 img = sub
             elif dy < 0:
                 sub = Image.new("RGBA", (W, H), (0, 0, 0, 0))
@@ -1520,9 +1585,10 @@ def quadro_do_cartao(pronto, t, nivel=0.0, pisca=False):
     return q
 
 
-def _enquadrar(q, zoom, foco, u=0.0):
-    """Recorte do plano; `u` (0..1 no cartao) avanca a camera devagar."""
-    zoom = zoom * (1.0 + PUSH_IN * _ease(u))
+def _enquadrar(q, zoom, foco, u=0.0, push=None):
+    """Recorte do plano; `u` (0..1 no cartao) avanca a camera devagar.
+    `push` troca o empurrao padrao (o do gancho e' mais forte)."""
+    zoom = zoom * (1.0 + (PUSH_IN if push is None else push) * _ease(u))
     if zoom <= 1.001:
         return q
     jw, jh = W / zoom, H / zoom
@@ -1532,11 +1598,11 @@ def _enquadrar(q, zoom, foco, u=0.0):
     return q.crop((int(x0), int(y0), int(x0 + jw), int(y0 + jh))).resize((W, H), Image.BILINEAR)
 
 
-def _pop(q, t_s):
+def _pop(q, t_s, forca=None):
     if t_s >= POP_S:
         return q
     u = t_s / POP_S
-    esc = 1.0 - POP_FORCA * (1.0 - u) ** 2
+    esc = 1.0 - (POP_FORCA if forca is None else forca) * (1.0 - u) ** 2
     nw, nh = int(W * esc), int(H * esc)
     p = q.resize((nw, nh), Image.BILINEAR)
     fundo = Image.new(q.mode, (W, H), q.getpixel((2, 2)))
@@ -1649,12 +1715,96 @@ def desdobrar(cartoes, spec):
         a, b = _variacao(c, partes[1])
         a["texto"] = partes[0]
         a.pop("fala", None)
+        # METADE SEM NADA NAO E' CARTAO (22/09). Quando a unica coisa do
+        # cartao e' uma placa que entra depois (`entra_em > 0`), a metade A
+        # fica sem ator, sem objeto e sem placa -- um cenario vazio com
+        # legenda. Foi o primeiro quadro do video `serie_v001`: um escritorio
+        # sem ninguem, que e' justamente o quadro que decide a retencao.
+        # Nesses casos nao se parte: o cartao inteiro vale mais que duas
+        # metades, uma delas vazia.
+        if not (a.get("atores") or a.get("objetos") or a.get("placas")
+                or a.get("props")):
+            out.append(c)
+            continue
         out += [a, b]
     if len(out) != len(cartoes):
         print(f"[cartao] desdobrados: {len(cartoes)} -> {len(out)} cartoes "
               f"({sum(1 for c in out if c.get('tipo_var'))} variacoes: "
               + ", ".join(f"{k}={sum(1 for c in out if c.get('tipo_var') == k)}" for k in ("placa", "objeto", "close", "igual")) + ")")
     return _alternar_gente(out)
+
+
+def _gente_na_tela(cartoes, trechos, regra):
+    """Ninguem fica mais de `sem_gente_max_s` SEGUNDOS sem ver um personagem,
+    e o primeiro cartao nunca e' sem gente (22/09).
+
+    POR QUE ELA NAO E' A `_alternar_gente`
+        Aquela conta CARTOES ("nunca dois seguidos sem gente"), e cartao nao
+        e' unidade de tempo: na copia `serie_v011` um unico cartao sem gente
+        durou 9,4 s -- dentro da regra e insuportavel na tela. A ordem do dono
+        e' em tempo: *"nao deixar apenas objetos por tanto tempo na tela sem
+        aparecer um personagem"*.
+
+        Por isso ela roda DEPOIS da timeline da voz, que e' quando a duracao
+        de cada cartao existe de verdade, e antes do desenho.
+
+    O QUE ELA NAO FAZ
+        Nao tira o objeto nem a placa: o personagem entra EM CLOSE ao lado do
+        que ja estava ali, e o objeto solto vai para a mao dele (a mesma
+        conversao da `_alternar_gente`). O cartao sem gente continua existindo
+        -- ele e' a troca de tela do canal de referencia --, so' deixou de
+        poder virar um trecho.
+    """
+    teto = float((regra or {}).get("sem_gente_max_s") or 0.0)
+    if teto <= 0 or not cartoes:
+        return cartoes
+    ultimo_ator = None
+    for c in cartoes:
+        if c.get("atores"):
+            quem = c.get("ator")
+            ultimo_ator = next((a for a in c["atores"] if a.get("quem") == quem),
+                               c["atores"][0])
+            break
+    if ultimo_ator is None:
+        return cartoes
+    acumulado = 0.0
+    postos = []
+    for i, c in enumerate(cartoes):
+        dur = float(trechos[i]["dur"]) if i < len(trechos) else 0.0
+        if c.get("atores"):
+            quem = c.get("ator")
+            ultimo_ator = next((a for a in c["atores"] if a.get("quem") == quem),
+                               c["atores"][0])
+            acumulado = 0.0
+            continue
+        if c.get("salto"):
+            acumulado = 0.0
+            continue
+        # o PRIMEIRO cartao nunca e' sem gente: ele e' o quadro que decide a
+        # retencao, e desde 22/09 tambem e' o quadro em que o loop fecha
+        if i == 0 or acumulado + dur > teto:
+            um = dict(ultimo_ator, x=0.5)
+            um.pop("alvos", None)
+            um.pop("atras_de", None)
+            soltos = [o for o in (c.get("objetos") or [])
+                      if not (isinstance(o, dict) and o.get("tipo"))]
+            if soltos:
+                o0 = soltos[0]
+                um["objeto"] = o0["nome"] if isinstance(o0, dict) else o0
+                um.pop("mao", None)
+                c["objetos"] = [o for o in (c.get("objetos") or []) if o is not o0]
+            c["atores"] = [um]
+            c["plano"] = "close"
+            c["tipo_var"] = "close"
+            postos.append(i)
+            acumulado = 0.0
+            continue
+        acumulado += dur
+    if postos:
+        print(f"[tela] {len(postos)} cartao(oes) sem gente passaram de {teto:.1f}s "
+              f"(ou abriam o video): {ultimo_ator['quem']} entrou em "
+              + ", ".join(f"#{i}" for i in postos[:8]))
+    return cartoes
 
 
 def _alternar_gente(cartoes):
@@ -1667,7 +1817,20 @@ def _alternar_gente(cartoes):
     Quando dois seguidos vem sem ator (e nao sao salto), o segundo ganha quem
     falou por ultimo, em close, e guarda os objetos e placas que ja tinha.
     """
+    # QUEM ENTRA ANTES DE QUALQUER UM TER ENTRADO (22/09). `ultimo_ator` comeca
+    # vazio, e enquanto ele esta vazio a guarda nao tem quem por na tela --
+    # entao uma abertura em que as tres primeiras frases falam de COISAS
+    # continua sendo tres cenarios vazios seguidos. Foi o comeco do `serie_v009`
+    # (cartoes 0, 1 e 2 "sem gente"), e o primeiro quadro e' justamente o que
+    # decide a retencao. O ator de partida e' o do primeiro cartao que tem um:
+    # ele e' quem a historia vai mostrar de qualquer jeito.
     ultimo_ator = None
+    for c in cartoes:
+        if c.get("atores"):
+            quem = c.get("ator")
+            ultimo_ator = next((a for a in c["atores"] if a.get("quem") == quem),
+                               c["atores"][0])
+            break
     anterior_sem_gente = False
     for c in cartoes:
         atores = c.get("atores") or []
@@ -1720,42 +1883,100 @@ def render(pasta_partes, spec, saida, tmpdir=None, amostra=0):
         raise ValueError("spec sem `cartoes`")
     spec["cartoes"] = cartoes
     GANCHO.garantir(spec)
+    cartoes = spec["cartoes"]
+    # O LOOP DO CARTAO: O ULTIMO RECEBE A TELA DO PRIMEIRO (22/09)
+    #
+    # O cartao nunca teve loop -- `cartao.py` nao tinha a palavra em 94 KB, e
+    # 1 em 3 videos do canal sai neste estilo (§73.3). Medido no `serie_v01`:
+    # razao 24,5 e 15% de pixels iguais entre o ultimo quadro e o primeiro.
+    #
+    # ELE NAO PODE SER O DA DUPLA. La' a cena e' continua e o rig INTERPOLA de
+    # volta a pose do quadro 0 nos ultimos 2,5 s; aqui sao telas com corte seco
+    # entre elas, e nao ha o que interpolar. O que fecha um slideshow e' o que
+    # ele ja faz: TROCAR DE TELA. A ultima frase e' dita sobre a tela de
+    # abertura, e o video acaba no desenho em que comecou -- em historia
+    # narrada isso nem e' truque, e' o fecho que volta ao comeco.
+    #
+    # E TEM DE SER AQUI, e nao no `para_cartao`. Entre um e outro passam tres
+    # etapas que reescrevem justamente o primeiro e o ultimo cartao:
+    # `abrir_no_auge` (acrescenta um cartao na frente), `desdobrar` (parte os
+    # longos em dois -- o video acabaria na VARIACAO do ultimo) e `garantir`
+    # (poe acao e troca o plano do cartao 0). Na primeira versao a copia
+    # morava la' e o resultado foi razao 28: o quadro 0 era um escritorio
+    # vazio e o ultimo tinha o soldado que `_alternar_gente` havia posto.
+    _loop_cfg = spec.get("loop")
+    _loop_on = bool(_loop_cfg.get("ativo")) if isinstance(_loop_cfg, dict) else bool(_loop_cfg)
     print(f"[cartao] {len(cartoes)} cartoes; ator a {ctx.alt_frac:.0%} de H, chao em y={ctx.chao_y:.0f}")
 
     # -- voz primeiro (lei 1) -------------------------------------------------------
-    trechos = []
-    faixas, respiros, marcas_por, total = [], [], [], 0.0
     modo = spec.get("modo_tts", os.environ.get("MODO_TTS", "real"))
-    for i, c in enumerate(cartoes):
-        texto = c.get("texto") or c.get("fala") or (c.get("salto") or "")
-        if c.get("salto") and not c.get("texto") and c.get("mudo", False):
-            texto = ""
-        ator = c.get("ator")
-        narracao = not ator or bool(c.get("narracao"))
-        perfil = c.get("voz") or (ator if ator else "narrador")
-        cfg = dict(spec.get("vozes", {}).get(perfil, {}))
-        cfg = EXPR.prosodia(c.get("expressao"), c.get("intensidade", 1.0), cfg)
-        wav = os.path.join(tmp, f"c{i:02d}.wav")
-        if texto.strip():
-            marcas, dur = sintetizar(texto, cfg, wav, modo)
-            # O SILENCIO DAS PONTAS SAI (16/09, serie): o Edge devolve cada
-            # frase com 0,3-0,5 s de nada antes e depois; em 42 cartoes sao
-            # ~20 s de video parado -- a serie estava em 96 s para 250
-            # palavras, e o Madrazzo diz as mesmas 250 em 60. Apara ate' 60 ms
-            # do som e desloca as marcas de palavra junto.
-            marcas, dur = _aparar_silencio(wav, marcas, dur)
-        else:
-            marcas, dur = [], float(c.get("dur", 1.2))
-            _silencio(wav, dur)
-        respiro = float(c.get("respiro_s", RESPIRO_SALTO_S if c.get("salto") else RESPIRO_S))
-        tr = {"fala": texto, "ator": ator or "narrador", "narracao": narracao,
-              "expressao": c.get("expressao", "neutro"), "sfx": c.get("sfx") or [],
-              "acoes": [], "dur": dur + respiro, "_inicio_s": total, "_dur_voz": dur}
-        trechos.append(tr)
-        faixas.append(wav)
-        respiros.append(respiro)
-        marcas_por.append(marcas or [])
-        total += tr["dur"]
+
+    def _vozes(rate=None, respiro_fator=1.0):
+        trechos = []
+        faixas, respiros, marcas_por, total = [], [], [], 0.0
+        for i, c in enumerate(cartoes):
+            texto = c.get("texto") or c.get("fala") or (c.get("salto") or "")
+            if c.get("salto") and not c.get("texto") and c.get("mudo", False):
+                texto = ""
+            ator = c.get("ator")
+            narracao = not ator or bool(c.get("narracao"))
+            perfil = c.get("voz") or (ator if ator else "narrador")
+            cfg = dict(spec.get("vozes", {}).get(perfil, {}))
+            # o rate da copia vira o rate do PERFIL: a emocao (`prosodia`)
+            # soma o desvio dela por cima, em vez de ser apagada por ele
+            if rate:
+                cfg["rate"] = rate
+            cfg = EXPR.prosodia(c.get("expressao"), c.get("intensidade", 1.0), cfg)
+            wav = os.path.join(tmp, f"c{i:02d}.wav")
+            if texto.strip():
+                marcas, dur = sintetizar(texto, cfg, wav, modo)
+                # O SILENCIO DAS PONTAS SAI (16/09, serie): o Edge devolve cada
+                # frase com 0,3-0,5 s de nada antes e depois; em 42 cartoes sao
+                # ~20 s de video parado -- a serie estava em 96 s para 250
+                # palavras, e o Madrazzo diz as mesmas 250 em 60. Apara ate' 60 ms
+                # do som e desloca as marcas de palavra junto.
+                marcas, dur = _aparar_silencio(wav, marcas, dur)
+            else:
+                marcas, dur = [], float(c.get("dur", 1.2))
+                _silencio(wav, dur)
+            respiro = float(c.get("respiro_s", RESPIRO_SALTO_S if c.get("salto") else RESPIRO_S))
+            respiro *= respiro_fator
+            tr = {"fala": texto, "ator": ator or "narrador", "narracao": narracao,
+                  "expressao": c.get("expressao", "neutro"), "sfx": c.get("sfx") or [],
+                  "acoes": [], "dur": dur + respiro, "_inicio_s": total, "_dur_voz": dur}
+            trechos.append(tr)
+            faixas.append(wav)
+            respiros.append(respiro)
+            marcas_por.append(marcas or [])
+            total += tr["dur"]
+        return trechos, faixas, respiros, marcas_por, total
+
+    trechos, faixas, respiros, marcas_por, total = _vozes()
+    # A DURACAO DA COPIA, EM MALHA FECHADA NA VOZ GRATUITA (22/09).
+    #
+    # `para_cartao.casar_duracao` casa a copia com o original ANTES de falar:
+    # estima a fala (`wps_copia`) e, se passar de 105%, sobe o `speed` da
+    # ElevenLabs. Na voz gratuita dos testes isso nao funciona duas vezes: o
+    # Edge ignora `speed`, e o Edge em portugues e' mais lento que a estimativa
+    # (calibrada na ElevenLabs em ingles). Medido na serie de 22/09: copias em
+    # 117% e 124% da duracao original, com a estimativa dizendo "sem acelerar".
+    # Ordem do dono: *"verifique que duracao... esta fiel ao video copiado"*.
+    #
+    # Aqui a duracao REAL ja existe, entao a conta e' exata: passou de 105% do
+    # original, a voz e' refeita uma vez com o `rate` do Edge que fecha a
+    # diferenca (teto +35%, acima disso a fala atropela) e o respiro encolhe
+    # junto. So' no Edge: refazer na ElevenLabs pagaria duas vezes a mesma fala.
+    alvo = float(spec.get("copia_dur_s") or 0)
+    so_edge = all(str((v or {}).get("motor", "edge")).lower() == "edge"
+                  for v in (spec.get("vozes") or {}).values() if isinstance(v, dict))
+    if alvo > 0 and so_edge and total > 1.05 * alvo and not amostra:
+        fator = total / alvo
+        pct = int(round(min(35.0, (fator - 1.0) * 100.0 * 1.15)))
+        print(f"[copia] voz gratuita deu {total:.1f}s para {alvo:.0f}s do original "
+              f"({100 * fator:.0f}%): refazendo com rate +{pct}%")
+        trechos, faixas, respiros, marcas_por, total = _vozes(
+            rate=f"+{pct}%", respiro_fator=max(0.5, 1.0 / fator))
+        print(f"[copia] agora {total:.1f}s ({100 * total / alvo:.0f}% do original)")
     spec["trechos"] = trechos          # para sfx/legenda, no formato de sempre
     print(f"[voz] timeline real: {total:.2f}s em {len(cartoes)} cartoes "
           f"({total / len(cartoes):.2f}s por cartao)")
@@ -1780,6 +2001,43 @@ def render(pasta_partes, spec, saida, tmpdir=None, amostra=0):
     if _longos:
         print(f"[cadencia] {len(_longos)} cartao(oes) acima do teto de {_teto}s: "
               + ", ".join(f"#{i} ({d:.1f}s)" for i, d in _longos[:6]))
+    _gente_na_tela(cartoes, trechos, _re_)
+    # O LOOP DO CARTAO: O ULTIMO RECEBE A TELA DO PRIMEIRO
+    #
+    # O cartao nunca teve loop -- `cartao.py` nao tinha a palavra em 94 KB, e
+    # 1 em 3 videos do canal sai neste estilo (§73.3). Medido no `serie_v01`:
+    # razao 24,5 e 15% de pixels iguais entre o ultimo quadro e o primeiro.
+    #
+    # ELE NAO PODE SER O DA DUPLA. La' a cena e' continua e o rig INTERPOLA de
+    # volta a pose do quadro 0 nos ultimos 2,5 s; aqui sao telas com corte seco
+    # entre elas, e nao ha o que interpolar. O que fecha um slideshow e' o que
+    # ele ja faz: TROCAR DE TELA. A ultima frase e' dita sobre a tela de
+    # abertura, e o video acaba no desenho em que comecou -- em historia
+    # narrada isso nem e' truque, e' o fecho que volta ao comeco.
+    #
+    # E TEM DE SER AQUI, DEPOIS DE TUDO O QUE REESCREVE O CARTAO 0. Entre o
+    # `para_cartao` e este ponto passam `abrir_no_auge` (acrescenta um cartao
+    # na frente), `desdobrar` (parte os longos em dois -- o video acabaria na
+    # VARIACAO do ultimo), `garantir` (poe acao e troca o plano do cartao 0) e
+    # `_gente_na_tela` (poe gente no cartao 0 quando ele abria sem ninguem).
+    # Em 22/09 a copia foi feita antes desta ultima e o `serie_v013` acabou
+    # numa sala vazia: o cartao 0 ainda nao tinha o ator quando a tela dele foi
+    # copiada.
+    if _loop_on and len(cartoes) >= 4 and not amostra:
+        VISUAL = ("fundo", "atores", "objetos", "placas", "plano", "zoom",
+                  "foco", "lavar", "faixa", "props")
+        pri, ult = cartoes[0], cartoes[-1]
+        for k in VISUAL:
+            ult.pop(k, None)
+            if k in pri:
+                ult[k] = copy.deepcopy(pri[k])
+        # a placa que entra depois nao esta no quadro 0; no fim ela estaria
+        ult["placas"] = [p for p in (ult.get("placas") or [])
+                         if float(p.get("entra_em", 0.0)) <= 0.0]
+        print("[loop] o ultimo cartao recebeu a tela do primeiro: "
+              + ", ".join(k for k in VISUAL if k in ult))
+    elif _loop_on:
+        print(f"[loop] pedido, mas so' ha {len(cartoes)} cartao(oes): sem volta")
     voz = juntar_com_respiro(faixas, respiros, os.path.join(tmp, "voz.wav"), tmp)
     env = envelope(voz)
 
@@ -1800,20 +2058,39 @@ def render(pasta_partes, spec, saida, tmpdir=None, amostra=0):
             musica = {"genero": spec.get("genero", "leve"), "segmentos": SFX.segmentos_do_spec(spec),
                       "semente": spec.get("fila_id", "cartao"), "falas": [t.get("fala") for t in trechos]}
         try:
+            # A CAMA TAMBEM EMENDA NO LACO (22/09). `sfx._emendar_bed` existe
+            # desde 13/09 e o cartao nunca o pediu: `mixar` era chamado sem
+            # `loop_cauda_s`, entao a trilha do cartao terminava no decaimento
+            # do ultimo compasso e recomecava no ataque do primeiro. Medido no
+            # `serie_v009`: 0,013 no fim contra 0,026 nos respiros do proprio
+            # video (0,47 do vale). O quadro emendava e o ouvido cortava, que
+            # e' exatamente a queixa que criou a funcao.
             audio = SFX.mixar(voz, eventos, os.path.join(tmp, "mix.wav"), musica=musica,
-                              dur_s=total, bipes=bipes)
+                              dur_s=total, bipes=bipes,
+                              loop_cauda_s=(LOOP_SOM_S if _loop_on else 0.0))
         except Exception as e:                                          # noqa: BLE001
             print(f"[sfx] mixagem falhou ({e}); seguindo so' com a voz")
             audio = voz
 
+    # O LOOP DO CARTAO (22/09) -- ver `para_cartao.converter`, que ja deu ao
+    # ultimo cartao a tela do primeiro. Aqui falta o alto do quadro: sem a
+    # reprise do cartaz, o ultimo quadro tem o mesmo desenho do primeiro e
+    # NAO tem o titulo, e a regua acusa a diferenca justamente na faixa de
+    # cima. `laco=True` tambem tira o pop de entrada do quadro 0 -- com ele,
+    # o primeiro quadro seria o unico sem cartaz.
+    _loop = spec.get("loop")
+    loop_on = bool(_loop.get("ativo")) if isinstance(_loop, dict) else bool(_loop)
     titulo = None
     if spec.get("titulo") is not False:
         txt = spec.get("titulo")
         if not isinstance(txt, str) or not txt.strip():
             txt = titulo_da_esquete([t.get("fala") for t in trechos])
         if txt:
-            titulo = Titulo(W, H, txt, dur_total=0.0, laco=False)
-            print(f"[titulo] \"{txt}\" nos primeiros {titulo.ate:.1f}s")
+            titulo = Titulo(W, H, txt, dur_total=(total if loop_on else 0.0),
+                            laco=loop_on)
+            print(f"[titulo] \"{txt}\" nos primeiros {titulo.ate:.1f}s"
+                  + (f"; reprise do laco a partir de {titulo.volta:.1f}s"
+                     if loop_on and titulo.volta else ""))
     leg = None
     if spec.get("legenda", True):
         leg = Legenda(W, H, tamanho=spec.get("legenda_px") or int(H * 0.052),
@@ -1851,19 +2128,58 @@ def render(pasta_partes, spec, saida, tmpdir=None, amostra=0):
             colhidos.append(((n + f_meio) / float(FPS), q))
             n += nf
             continue
+        # OS ULTIMOS QUADROS DO VIDEO SAO O QUADRO 0 (22/09) -- a segunda
+        # metade do loop do cartao.
+        #
+        # Dar ao ultimo cartao a tela do primeiro (ver `[loop]` la' em cima)
+        # aproximou, mas nao fechou: razao 16,6 e 18,8% de pixels iguais no
+        # `serie_v003`. A causa nao e' a composicao, e' o TEMPO dentro do
+        # cartao -- `_enquadrar` recebe `f/nf` (o plano deriva do comeco ao
+        # fim do cartao) e `_pop` recebe `f/FPS` (o solavanco de entrada).
+        # O primeiro quadro do video esta em f=0 dos dois; o ultimo quadro de
+        # qualquer cartao esta em f=nf-1. Duas telas iguais, dois enquadramentos
+        # diferentes.
+        #
+        # O que fecha e' o que o proprio spec ja pedia e o cartao nunca
+        # cumpriu: `loop.segurar_s` -- segurar o primeiro quadro no fim. Ele
+        # nao ACRESCENTA tempo (isso desencontraria video e mixagem, e a copia
+        # tem de durar o que o original dura): ele ocupa o fim do respiro do
+        # ultimo cartao, onde ninguem mais fala. O quadro repetido e' o
+        # arquivo do quadro 0, byte a byte -- entao o ultimo quadro do video
+        # E' o primeiro, e nao uma reconstrucao dele.
+        eh_ultimo = (i == len(cartoes) - 1)
+        segurar = 0
+        if _loop_on and eh_ultimo and n > 0:
+            seg_s = float(_loop_cfg.get("segurar_s", 0.2)) if isinstance(_loop_cfg, dict) else 0.2
+            # nunca mais que metade do cartao: o fecho ainda e' fala
+            segurar = max(1, min(int(round(seg_s * FPS)), nf // 2))
+        # o cartao que COMECA dentro do gancho ganha a camera do gancho
+        no_gancho = (n / float(FPS)) < GANCHO_CAMERA_S and not eh_ultimo
+        push_c = GANCHO_PUSH_IN if no_gancho else None
+        pop_c = GANCHO_POP_FORCA if no_gancho else None
         for f in range(nf):
+            if segurar and f >= nf - segurar:
+                shutil.copyfile(os.path.join(fd, "00000.png"),
+                                os.path.join(fd, f"{n:05d}.png"))
+                n += 1
+                continue
             nivel = env[n] if n < len(env) else 0.0
             pisca = EXPR.piscando(n, FPS, semente=i % 5, expr_nome=tr.get("expressao", "neutro"))
             q = quadro_do_cartao(pronto, f / float(FPS), nivel if not tr["narracao"] else 0.0, pisca)
-            q = _enquadrar(q, pronto.zoom, pronto.foco, f / float(nf)).convert("RGB")
-            if spec.get("pop", True):
-                q = _pop(q, f / float(FPS))
+            q = _enquadrar(q, pronto.zoom, pronto.foco, f / float(nf), push=push_c).convert("RGB")
+            # o quadro 0 do VIDEO fica sem pop: e' nele que o loop fecha, e o
+            # ultimo quadro (a copia dele) tem de ser o mesmo desenho
+            if spec.get("pop", True) and n > 0:
+                q = _pop(q, f / float(FPS), forca=pop_c)
             if titulo is not None:
                 titulo.desenhar(q, n / float(FPS))
             if leg is not None:
                 leg.desenhar(q, n / float(FPS))
             q.save(os.path.join(fd, f"{n:05d}.png"), compress_level=1)
             n += 1
+        if segurar:
+            print(f"[loop] os ultimos {segurar} quadro(s) ({segurar / FPS:.2f}s) "
+                  "sao o quadro 0 do video")
     print(f"[cartao] {n} frames ({n / FPS:.1f}s) montados em {time.time() - t0:.0f}s")
     if amostra:
         return _folha(colhidos, saida, larg=360), round(total, 2)
