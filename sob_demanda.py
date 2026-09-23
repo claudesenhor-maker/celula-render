@@ -58,6 +58,93 @@ LARGURA, ALTURA = 2048, 1152
 # lugares, senão metade dos objetos do canal sai num traço e metade noutro.
 MODELO_OBJETO = "@cf/black-forest-labs/flux-1-schnell"
 
+# ---------------------------------------------------------------------------
+# O HUGGINGFACE, PRIMEIRO DEGRAU DESDE 22/09 (chave do dono)
+#
+# A cota gratuita de Workers AI da Cloudflare (~65 imagens/dia) acabava antes
+# do meio-dia: a fabrica de arte fechou 22/09 com 1 acerto e 31 falhas, e a
+# copia -- que pede um objeto por frase -- ia para a tela com placa de texto
+# no lugar do desenho. O dono abriu uma conta no HuggingFace e mandou usa-la.
+#
+# QUAL ROTA. O provedor `hf-inference` aposentou os modelos de imagem ("The
+# requested model is deprecated"); quem atende hoje e' o ROTEADOR, que fala
+# OpenAI (`/v1/images/generations`) e despacha para um provedor parceiro.
+# Medido nesta chave em 22/09: `nscale` com FLUX.1-schnell responde em ~5 s,
+# nos dois formatos (1024x1024 para objeto, 768x1344 para cenario); `fal-ai`,
+# `replicate`, `wavespeed` e `together` recusam o modelo ou pedem partilha de
+# dados. Por isso o provedor e' NOMEADO em vez de `auto`.
+#
+# E' o MESMO FLUX que a Cloudflare servia, entao o traco do canal nao muda --
+# a arte gerada hoje continua irma da que ja esta no bucket.
+HF_ROTEADOR = "https://router.huggingface.co/{provedor}/v1/images/generations"
+HF_PROVEDOR = os.environ.get("HF_PROVEDOR", "nscale")
+HF_MODELO = os.environ.get("HF_MODELO", "black-forest-labs/FLUX.1-schnell")
+HF_TAMANHO_OBJETO = "1024x1024"
+HF_TAMANHO_CENARIO = "768x1344"
+
+
+def _hf_token():
+    """A chave do HuggingFace: ambiente, arquivo do laboratorio ou banco.
+
+    Tres portas pela mesma razao das outras credenciais do projeto: o Action
+    tem ambiente, esta maquina tem o arquivo, e a producao tem o
+    `config_sistema` (assim o dono nao precisa mexer em segredo do GitHub
+    para a producao passar a gerar arte)."""
+    t = os.environ.get("HF_TOKEN") or os.environ.get("HUGGINGFACE_TOKEN")
+    if t:
+        return t.strip()
+    aqui = os.path.dirname(os.path.abspath(__file__))
+    for arq in (os.path.join(os.path.dirname(aqui), "lab", "chave_hf.txt"),
+                os.path.join(aqui, "chave_hf.txt")):
+        try:
+            with open(arq, encoding="utf-8") as fh:
+                s = fh.read().strip()
+            if s:
+                return s
+        except OSError:
+            pass
+    try:
+        import config as C
+        s = ((getattr(C, "CONFIG_SISTEMA", None) or {}).get("huggingface")
+             or {}).get("token")
+        if s:
+            return str(s).strip()
+    except Exception:                                               # noqa: BLE001
+        pass
+    return ""
+
+
+def _huggingface(prompt, negativa, quadrado=False):
+    """Uma imagem pelo roteador do HuggingFace, em bytes. None se nao deu."""
+    token = _hf_token()
+    if not token:
+        return None
+    url = HF_ROTEADOR.format(provedor=HF_PROVEDOR)
+    corpo = {"model": HF_MODELO, "prompt": prompt[:2040],
+             "response_format": "b64_json",
+             "size": HF_TAMANHO_OBJETO if quadrado else HF_TAMANHO_CENARIO}
+    for tentativa in range(3):
+        try:
+            r = requests.post(url, json=corpo, timeout=180,
+                              headers={"Authorization": f"Bearer {token}"})
+            if r.status_code in (429, 503):
+                print(f"[sob-demanda] HF {r.status_code} (fila/cota); tentativa "
+                      f"{tentativa + 1}/3")
+                time.sleep(15)
+                continue
+            if r.status_code != 200:
+                print(f"[sob-demanda] HF {r.status_code}: {r.text[:140]}")
+                return None
+            if r.headers.get("content-type", "").startswith("image/"):
+                return r.content
+            import base64
+            dados = (r.json().get("data") or [{}])[0].get("b64_json")
+            return base64.b64decode(dados) if dados else None
+        except Exception as e:                                      # noqa: BLE001
+            print(f"[sob-demanda] HF falhou ({e})")
+            time.sleep(8)
+    return None
+
 # Teto por vídeo. Um roteiro que pede três cenários novos trocou de lugar
 # duas vezes numa esquete de vinte segundos -- o defeito está no roteiro, e
 # gerar arte para ele só o esconderia.
@@ -461,7 +548,11 @@ def gerar_cenario(chave, pasta_destino):
         return None
     prompt = ". ".join([_BASE[0], _descricao_en(chave)] + _BASE[1:])
     print(f"[sob-demanda] gerando cenario '{chave}'...")
-    dados = _cloudflare(prompt, _NEGATIVA)
+    # A ESCADA DA ARTE (22/09): HuggingFace, Cloudflare, esteira do n8n. O
+    # primeiro degrau e' o que tem cota -- ver `_huggingface`.
+    dados = _huggingface(prompt, _NEGATIVA)
+    if not dados:
+        dados = _cloudflare(prompt, _NEGATIVA)
     if not dados:
         # SEM O TOKEN, PELA ESTEIRA (13/09) -- ver `_pela_esteira`.
         dados = _pela_esteira("cenario", chave, _descricao_en(chave))
@@ -601,10 +692,15 @@ def _descricao_objeto_en(chave):
     }
     if chave in d:
         return d[chave]
-    # A CHAVE VEM DO ROTEIRISTA, EM PORTUGUES (`situacao.chave_visual`), e o
-    # prompt e' em ingles. Solta, a palavra vira qualquer coisa; dita como o
-    # que ela e' -- o nome em portugues de um objeto de mao --, o modelo tem
-    # por onde comecar.
+    # TRADUZIR ANTES DE DESENHAR (23/09). Ver `_traduzir_objeto`: a frase
+    # "o objeto chamado X em portugues" nao ancora nada, e o gerador desenhava
+    # outra coisa -- medido nos 22 objetos do laboratorio, 8 estavam errados
+    # (a `fatura` virou uma colher; o `martelo`, uma faca com a palavra
+    # "martello" escrita nela; a `pilha_de_dinheiro`, uma MAO segurando uma
+    # placa, que e' a "mao sobreposta" que o dono viu no video).
+    traduzida = _traduzir_objeto(chave)
+    if traduzida:
+        return traduzida
     return (f"the everyday hand-held object called \"{chave.replace('_', ' ')}\" "
             f"in Brazilian Portuguese")
 
@@ -694,6 +790,86 @@ def _recortar_fundo(dados):
     return buf.getvalue()
 
 
+# ---------------------------------------------------------------------------
+# A TRADUCAO DO NOME DO OBJETO (23/09)
+#
+# O roteirista escreve o objeto em portugues (`caixa_de_dinheiro`,
+# `conta_de_luz`) e o gerador de imagem pensa em ingles. O dicionario acima
+# cobre as duas duzias de sempre; o resto -- e a copia pede um objeto POR
+# FRASE, entao o resto e' a maioria -- caia numa frase generica que nao
+# ancorava nada, e o desenho saia errado. Aqui o nome e' traduzido UMA vez,
+# por um modelo barato, e guardado: o mesmo objeto nunca se traduz duas vezes,
+# e o cache vale para a producao e para o laboratorio.
+_CACHE_EN = {}
+_ARQ_EN = os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                       "objetos_en.json")
+
+
+def _cache_en():
+    if not _CACHE_EN:
+        for arq in (_ARQ_EN, os.path.join(
+                os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+                "lab", "objetos_en.json")):
+            try:
+                with open(arq, encoding="utf-8") as fh:
+                    _CACHE_EN.update(json.load(fh))
+            except Exception:                                       # noqa: BLE001
+                pass
+        _CACHE_EN.setdefault("_", "")
+    return _CACHE_EN
+
+
+def _traduzir_objeto(chave, timeout=60):
+    """Uma frase curta em ingles para `chave`. Cache primeiro; depois o
+    modelo mecanico pela esteira do n8n. Falhou, devolve "" e quem chama usa
+    a frase generica de antes -- traducao nao pode travar um render."""
+    cache = _cache_en()
+    if chave in cache:
+        return cache[chave]
+    termo = chave.replace("_", " ")
+    try:
+        import config as C
+        url = C.INFRA["n8n_base"].rstrip("/") + "/webhook/px-groq"
+        modelo = (C.LLM.get("modelo_groq_mecanico") or C.LLM.get("modelo_groq")
+                  or "openai/gpt-oss-20b")
+        pedido = (
+            "Traduza para o ingles o nome deste objeto brasileiro e devolva "
+            "UMA frase curta (ate 12 palavras) descrevendo COMO DESENHA-LO, "
+            "no formato 'a <coisa> <detalhe visual>'. Sem aspas, sem "
+            "explicacao, sem texto escrito no desenho. Se for um papel, diga "
+            "que papel e'. Objeto: " + termo)
+        # `reasoning_effort` E `max_tokens` FOLGADO (23/09): o gpt-oss gasta a
+        # saida inteira raciocinando e devolve `content` VAZIO com 200 -- foi
+        # o que aconteceu na primeira versao desta funcao, e o objeto continuou
+        # saindo errado sem ninguem saber por que. E' a mesma lei 59/86 que o
+        # `teto_por_etapa` do roteirista documenta.
+        r = requests.post(url, timeout=timeout, json={
+            "model": modelo, "max_tokens": 400, "reasoning_effort": "low",
+            "messages": [{"role": "user", "content": pedido}]})
+        j = r.json()
+        msg = ((j.get("choices") or [{}])[0].get("message") or {})
+        txt = msg.get("content") or ""
+        if not str(txt).strip():
+            # sobrou so' o raciocinio: a ultima linha dele costuma ser a
+            # resposta ("a hammer with a wooden handle")
+            bruto = str(msg.get("reasoning") or "").strip().splitlines()
+            txt = bruto[-1] if bruto else ""
+        txt = " ".join(str(txt).strip().strip('"').split())[:120]
+        if txt and len(txt.split()) >= 2:
+            cache[chave] = txt
+            try:
+                with open(_ARQ_EN, "w", encoding="utf-8") as fh:
+                    json.dump({k: v for k, v in cache.items() if k != "_"},
+                              fh, ensure_ascii=False, indent=1, sort_keys=True)
+            except OSError:
+                pass
+            print(f"[sob-demanda] '{termo}' -> \"{txt}\"")
+            return txt
+    except Exception as e:                                          # noqa: BLE001
+        print(f"[sob-demanda] nao traduzi '{termo}' ({type(e).__name__})")
+    return ""
+
+
 def prompt_objeto(chave):
     """O pedido de imagem de um objeto -- UM lugar só, para quem gera fora do
     render (ferramentas, n8n) pedir exatamente o mesmo texto."""
@@ -712,6 +888,14 @@ def prompt_objeto(chave):
         "lying diagonally, from the lower left to the upper right",
         "no scenery, no shadow, no ground line",
         "no other object next to it, nothing else in the picture",
+        # A MAO E O TEXTO (23/09, queixa do dono: *"metade da mao sobrepoe a
+        # mao do personagem"*). A arte de `pilha_de_dinheiro` era uma MAO
+        # segurando uma placa: colada na mao do boneco, viravam duas maos. E
+        # o `martelo` saiu com a palavra "martello" escrita na lamina -- o
+        # gerador escreve o nome quando nao sabe desenhar a coisa. O rig ja
+        # poe a mao; a arte traz so' o objeto.
+        "the object alone, nobody holding it, no hand, no fingers, no arm",
+        "no writing, no letters, no numbers, no label, no logo",
         "thick uniform black outline",
         "100% flat colours, no shading, no gradient, no texture",
         "limited high-contrast palette",
@@ -729,10 +913,13 @@ def gerar_objeto(chave, pasta_destino):
         return None
     prompt = prompt_objeto(chave)
     print(f"[sob-demanda] gerando objeto '{chave}'...")
-    dados = _cloudflare(prompt, "photo, 3d render, realistic, gradient, "
-                                "shading, text, letters, watermark, frame, "
-                                "border, hands, person, background scenery, "
-                                "multiple objects", quadrado=True)
+    _NEG_OBJ = ("photo, 3d render, realistic, gradient, shading, text, "
+                "letters, watermark, frame, border, hands, person, "
+                "background scenery, multiple objects")
+    # a escada da arte (22/09): HuggingFace primeiro -- ver `_huggingface`
+    dados = _huggingface(prompt, _NEG_OBJ, quadrado=True)
+    if not dados:
+        dados = _cloudflare(prompt, _NEG_OBJ, quadrado=True)
     if not dados:
         # SEM O TOKEN, PELA ESTEIRA (13/09) -- ver `_pela_esteira`. O recorte
         # por cor continua sendo feito AQUI: o `Gerar Assets` sobe o bruto, e
