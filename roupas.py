@@ -487,7 +487,19 @@ def recolorir(pers, mapa):
     """Aplica `mapa` ({"peito": "#hex", "pernas": ..., "mangas": ...}) no
     Personagem JA CARREGADO (troca `pers.img`). Devolve os nomes trocados."""
     trocadas = []
-    for grupo, cor in (mapa or {}).items():
+    mapa = dict(mapa or {})
+    # O ABDOMEN VESTE O QUE O PEITO VESTE (22/09, queixa do dono: *"o
+    # personagem esta de terno preto e a cintura e' branca, dando um efeito
+    # estranho"*).
+    #
+    # Nenhuma paleta cita `abdomen` -- todas pintam peito, mangas e pernas --,
+    # e por isso a barriga ficava com a cor ORIGINAL da folha no meio de uma
+    # roupa inteira trocada. Camisa, jaleco, terno e avental cobrem a barriga:
+    # o abdomen segue o peito, a menos que alguem diga o contrario
+    # explicitamente (o cartao pode mandar `abdomen` no mapa).
+    if "peito" in mapa and "abdomen" not in mapa:
+        mapa["abdomen"] = mapa["peito"]
+    for grupo, cor in mapa.items():
         pecas = PECAS_DE_ROUPA.get(grupo, (grupo,))
         for nome in pecas:
             if not pers.tem(nome):
