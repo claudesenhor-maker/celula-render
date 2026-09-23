@@ -2281,6 +2281,10 @@ def render(pasta_partes, spec, saida, tmpdir=None, amostra=0):
            "-bufsize", "8M", "-pix_fmt", "yuv420p", "-c:a", "aac", "-b:a", "160k",
            "-shortest", "-movflags", "+faststart", saida]
     subprocess.run(cmd, check=True)
+    # Os quadros so servem ao ffmpeg: ~2.000 PNG (3-5 GB) por video, e a serie
+    # local chegou a 208 GB em tmp/ (23/09). GUARDAR_QUADROS=1 os mantem.
+    if os.environ.get("GUARDAR_QUADROS") != "1":
+        shutil.rmtree(fd, ignore_errors=True)
     mb = os.path.getsize(saida) / (1024 * 1024)
     print(f"[video] {mb:.1f} MB, {n / float(FPS):.1f}s, em {time.time() - t0:.0f}s")
     return saida, round(n / float(FPS), 2)
