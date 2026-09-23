@@ -109,16 +109,54 @@ def _hf_token():
     return ""
 
 
+_HF_CFG = {}
+
+
 def _hf_config():
     """O bloco `huggingface` do `config_sistema` (token, provedor, modelo).
 
-    E' funcao, e nao constante, porque `config.config_sistema()` e' funcao com
-    cache -- a producao le o banco, o laboratorio le o cache de `lab/cache/`."""
+    DUAS PORTAS, E A SEGUNDA E' A QUE VALE NA PRODUCAO (23/09).
+
+    No laboratorio existe `config.py`, que le o banco pelo proxy do n8n. No
+    REPO DE RENDER ele NAO EXISTE -- a lista de arquivos que `subir_render`
+    manda tem `config_gerado.py`, e so'. Com apenas a primeira porta, o
+    `import config` falhava dentro do Action, `_hf_token` devolvia vazio e a
+    arte caia de volta na Cloudflare (sem cota) SEM UMA LINHA DIZENDO POR QUE.
+    Era um defeito calado, do tipo que a lei 65 existe para impedir.
+
+    A segunda porta e' o mesmo REST que o `job.py` ja usa para a fila e a
+    identidade, com a chave de servico que o Action tem: uma linha de
+    `config_sistema`. Sem as duas, avisa -- e ai quem chama desce a escada.
+    """
+    if _HF_CFG:
+        return _HF_CFG
     try:
         import config as C
-        return dict(C.config_sistema().get("huggingface") or {})
+        bloco = dict(C.config_sistema().get("huggingface") or {})
+        if bloco:
+            _HF_CFG.update(bloco)
+            return _HF_CFG
     except Exception:                                               # noqa: BLE001
-        return {}
+        pass
+    if SB and KEY:
+        try:
+            r = requests.get(f"{SB}/rest/v1/config_sistema",
+                             params={"select": "config_json", "limit": 1,
+                                     "order": "id.asc"},
+                             headers={"apikey": KEY,
+                                      "Authorization": f"Bearer {KEY}"},
+                             timeout=30)
+            linhas = r.json() if r.status_code == 200 else []
+            bloco = ((linhas or [{}])[0].get("config_json") or {}).get("huggingface")
+            if bloco:
+                _HF_CFG.update(bloco)
+                return _HF_CFG
+        except Exception as e:                                      # noqa: BLE001
+            print(f"[sob-demanda] nao li config_sistema pelo REST "
+                  f"({type(e).__name__}: {str(e)[:80]})")
+    print("[sob-demanda] sem bloco `huggingface` no config_sistema e sem "
+          "HF_TOKEN no ambiente: a arte vai tentar o degrau seguinte")
+    return {}
 
 
 def _huggingface(prompt, negativa, quadrado=False):
