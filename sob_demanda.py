@@ -103,15 +103,22 @@ def _hf_token():
                 return s
         except OSError:
             pass
+    for bloco in (_hf_config(),):
+        if bloco.get("token"):
+            return str(bloco["token"]).strip()
+    return ""
+
+
+def _hf_config():
+    """O bloco `huggingface` do `config_sistema` (token, provedor, modelo).
+
+    E' funcao, e nao constante, porque `config.config_sistema()` e' funcao com
+    cache -- a producao le o banco, o laboratorio le o cache de `lab/cache/`."""
     try:
         import config as C
-        s = ((getattr(C, "CONFIG_SISTEMA", None) or {}).get("huggingface")
-             or {}).get("token")
-        if s:
-            return str(s).strip()
+        return dict(C.config_sistema().get("huggingface") or {})
     except Exception:                                               # noqa: BLE001
-        pass
-    return ""
+        return {}
 
 
 def _huggingface(prompt, negativa, quadrado=False):
@@ -119,8 +126,9 @@ def _huggingface(prompt, negativa, quadrado=False):
     token = _hf_token()
     if not token:
         return None
-    url = HF_ROTEADOR.format(provedor=HF_PROVEDOR)
-    corpo = {"model": HF_MODELO, "prompt": prompt[:2040],
+    cfg = _hf_config()
+    url = HF_ROTEADOR.format(provedor=cfg.get("provedor") or HF_PROVEDOR)
+    corpo = {"model": cfg.get("modelo") or HF_MODELO, "prompt": prompt[:2040],
              "response_format": "b64_json",
              "size": HF_TAMANHO_OBJETO if quadrado else HF_TAMANHO_CENARIO}
     for tentativa in range(3):
