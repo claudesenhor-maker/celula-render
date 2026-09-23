@@ -1611,9 +1611,20 @@ class Personagem:
             # borda macia que o resize da escala deixa.
             vao = float(self.vaos.get(nome, 0.0))
             if nome in FECHA_MESMO_SEM_MEDIDA and vao <= 0.5:
-                vao = tipico
-                print(f"[personagem] '{nome}' sem vao medido; usando o tipico "
-                      f"({tipico:.1f}px) para fechar a junta")
+                # A CINTURA PRECISA DE MAIS QUE O TIPICO (23/09, queixa do
+                # dono: *"a parte da cintura... dando um efeito estranho"*).
+                #
+                # O vao tipico e' o das JUNTAS (cotovelo, joelho): 5 a 9 px,
+                # e ali o branco entre as pecas e' assinatura do canal. Na
+                # cintura nao ha junta -- ha o encontro de tres pecas grandes
+                # (peito, abdomen e as duas coxas), e o mesmo numero deixava
+                # uma FAIXA branca de cinto atravessando o corpo, visivel em
+                # todos os quadros do `serie_v107`. `CINTURA_FOLGA` alarga so'
+                # este fechamento; os vaos medidos das juntas continuam
+                # intocados, porque eles sao o estilo (GUIA §0.5).
+                vao = tipico * CINTURA_FOLGA
+                print(f"[personagem] '{nome}' sem vao medido; fechando a junta "
+                      f"com {vao:.1f}px ({tipico:.1f} tipico x {CINTURA_FOLGA})")
             # O VÃƒO SE FECHA COM SOBRA, NÃƒO NA CONTA EXATA (01/09, volta 57).
             #
             # Era `vao/2 + 1` de cada lado: as duas vizinhas crescem metade
@@ -2088,6 +2099,21 @@ ABERTURA_MAXILAR = 0.38     # fraÃ§Ã£o da altura do queixo que a boca desce
 # engrossava para lado nenhum, deixando meio vÃ£o aberto na cintura e na
 # virilha em todos os frames.
 FECHA_MESMO_SEM_MEDIDA = ("mandibula", "abdomen")
+
+# Quanto o fechamento da CINTURA passa do vao tipico das juntas.
+#
+# ELE VOLTOU A 1,0 NO MESMO DIA EM QUE SUBIU (23/09). A queixa do dono era
+# *"o personagem esta de terno preto e a cintura e' branca"*, e a prova em
+# quadro ampliado mostrou o que a faixa branca e' de verdade: o VAO entre o
+# peito, o abdomen e as coxas -- o mesmo vao que ele proibiu de tapar em
+# 04/09 (*"isso e' parte do estilo do canal, desfaca isso"*, e seis tentativas
+# reprovadas antes dessa). Alargar o fechamento aqui seria a setima.
+#
+# O que era defeito de verdade na queixa dele e' a PINTURA: nenhuma paleta
+# pintava o abdomen, entao a barriga ficava com a cor da folha no meio de uma
+# roupa trocada. Isso esta consertado em `roupas.recolorir`, e o vao continua
+# onde sempre esteve.
+CINTURA_FOLGA = 1.0
 
 # Interior da boca: o que se vÃª quando o maxilar desce. Cor de dentro de
 # boca de desenho -- escura o bastante para ler como buraco, quente o
@@ -4108,6 +4134,21 @@ def _misturar_cam(cam, alvo, w):
     if "espelhar" in alvo and w >= 0.5:
         out["espelhar"] = alvo["espelhar"]
     return out
+
+
+# A SAIDA DO LOOP (23/09) -- ver o bloco "E ELE SAI ANDANDO, NAO DESBOTANDO".
+# `FORA_QUADRO` e' o mesmo conceito de `acoes.FORA_DO_QUADRO`: meia largura de
+# corpo alem da borda, para o personagem sumir inteiro e nao pela metade.
+FORA_QUADRO = 320
+
+
+def _suavizar_saida(w):
+    """Começa devagar e termina rapido: quem sai de cena acelera ao sair, e
+    quem chega desacelera ao parar no lugar. Com a rampa linear a troca lia
+    como deslize de slide -- e' a mesma queixa do desbotamento, em outra
+    forma."""
+    w = max(0.0, min(1.0, float(w)))
+    return w * w * (3.0 - 2.0 * w)
 
 
 def _com_alfa(camada, a):
@@ -6136,20 +6177,47 @@ def render(pasta_partes, spec, saida, tmpdir=None, amostra=0):
             no_quadro = [falante] if (fecha and falante in so_dele) \
                 else atras_na_frente
             # NA VOLTA DO LOOP, O QUADRO 0 DECIDE QUEM APARECE (14/09): quem
-            # nao estava enquadrado nele sai aos poucos, quem estava entra.
+            # nao estava enquadrado nele sai, quem estava volta.
+            #
+            # E ELE SAI ANDANDO, NAO DESBOTANDO (23/09, queixa do dono: *"um
+            # personagem ficando transparente e o outro aparecendo para forcar
+            # o loop; o correto e' o outro personagem sair da cena andando e o
+            # outro ir para a posicao que estava no comeco"*).
+            #
+            # Ate aqui a troca era de OPACIDADE: quem sobrava virava fantasma
+            # e sumia no ar, que e' um recurso de slideshow, nao de cena. A
+            # cena tem porta: quem sai, sai pela borda mais perto -- a mesma
+            # regra de `acoes._lado_de_entrada` (cada um usa o proprio lado,
+            # para nao atravessar quem fica) -- e quem volta entra pela borda
+            # dele ate' o x do quadro 0, que `x_zero` ja conhece. O corpo
+            # ainda balanca como quem anda (`_BOB_SAIDA`), porque a pose ja
+            # esta desenhada neste ponto do render e um passo de verdade
+            # exigiria a acao no spec (`sair_andando`, que o roteiro pode
+            # pedir e que continua valendo por cima desta garantia).
             alfa_ator = {}
+            desloca_ator = {}
             if w_volta > 0.0 and no_quadro_q0 is not None:
                 for chave in atras_na_frente:
                     agora, antes = chave in no_quadro, chave in no_quadro_q0
+                    if agora == antes:
+                        continue
+                    x_atual = float(rigs[chave]["quadril"][0])
+                    # a borda dele: quem esta na metade esquerda sai/entra pela
+                    # esquerda (o oposto faria a travessia por dentro do outro)
+                    borda = -FORA_QUADRO if x_atual <= W / 2 else W + FORA_QUADRO
                     if agora and not antes:
-                        alfa_ator[chave] = 1.0 - w_volta
-                    elif antes and not agora:
-                        alfa_ator[chave] = w_volta
+                        # ele sobra no fim: caminha para fora ate' sumir
+                        dx = (borda - x_atual) * _suavizar_saida(w_volta)
+                    else:
+                        # ele existia no quadro 0: vem da borda ate' o lugar dele
+                        alvo = float(x_zero.get(chave, x_atual))
+                        dx = (borda - alvo) * (1.0 - _suavizar_saida(w_volta))
+                    desloca_ator[chave] = dx
             for chave in atras_na_frente:
                 if chave == falante:
                     cam_falante = cams[chave]
                     x_falante = rigs[chave]["quadril"][0]
-                if chave not in no_quadro and chave not in alfa_ator:
+                if chave not in no_quadro and chave not in desloca_ator:
                     continue
                 lay = so_dele[chave]
                 a_lay = alfa_ator.get(chave, 1.0)
@@ -6157,6 +6225,9 @@ def render(pasta_partes, spec, saida, tmpdir=None, amostra=0):
                     continue
                 if a_lay < 0.999:
                     lay = _com_alfa(lay, a_lay)
+                dx_saida = desloca_ator.get(chave)
+                if dx_saida is not None and abs(dx_saida) >= 0.5:
+                    lay = _transladar(lay, dx_saida)
                 por_ator_camada.append(lay)
                 camada.alpha_composite(lay)
             cam = cam_falante
