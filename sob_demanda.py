@@ -874,10 +874,13 @@ def _traduzir_objeto(chave, timeout=60):
         return cache[chave]
     termo = chave.replace("_", " ")
     try:
-        import config as C
-        url = C.INFRA["n8n_base"].rstrip("/") + "/webhook/px-groq"
-        modelo = (C.LLM.get("modelo_groq_mecanico") or C.LLM.get("modelo_groq")
-                  or "openai/gpt-oss-20b")
+        # A URL SAI DE `N8N`, E NAO DE `config.py` (23/09). Ver `_hf_config`:
+        # `config.py` nao existe no repo de render, e um `import config` aqui
+        # faria a producao pular a traducao em silencio -- e' o mesmo defeito
+        # calado que a chave do HuggingFace teve, no mesmo arquivo, no mesmo
+        # dia. `N8N` ja vive neste modulo e ja e' o que `_pela_esteira` usa.
+        url = N8N + "/webhook/px-groq"
+        modelo = os.environ.get("MODELO_GROQ_MECANICO") or "openai/gpt-oss-20b"
         pedido = (
             "Traduza para o ingles o nome deste objeto brasileiro e devolva "
             "UMA frase curta (ate 12 palavras) descrevendo COMO DESENHA-LO, "
