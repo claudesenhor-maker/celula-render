@@ -823,7 +823,29 @@ def _fundo(ctx, cartao, i):
                 # e sem simetria, porque nao ha copia nenhuma -- ha' uma tira
                 # so', maior.
                 alt = H - dy
-                k = max(8, min(alt, int(dy * 0.8)))
+                # A TIRA E' FINA, E ISSO NAO E' DETALHE (22/09, noite).
+                #
+                # Ela era `dy * 0,8` -- com `dy` passando de 400 px, quase
+                # meio quadro de cenario (movel, parede, porta) era esticado
+                # para baixo e coberto pelo veu. Queixa do dono, palavra por
+                # palavra: *"todos os cenarios do estilo copy estao
+                # simplesmente dobrados, onde a parte de cima dobra a parte de
+                # baixo porem meio transparente, cortando ele em dois"*. Era
+                # isso: o vao nao estava ganhando chao, estava ganhando uma
+                # copia fantasma da cena.
+                #
+                # O que preenche o vao e' PISO, e piso mora nas ultimas linhas
+                # do cenario (tabua, tapete, calcada) -- nunca a meia altura.
+                # Uma tira fina esticada nao carrega desenho nenhum: vira
+                # textura alongada, que e' o que um chao perto da camera e'.
+                # O desfoque e o veu logo abaixo terminam o servico.
+                # `dy // 8`, e nao `dy // 20`: com a tira fina demais o vao
+                # virava COR CHAPADA (a faixa lilas do `serie_v107`), que e' a
+                # "faixa vazia no quadro" que o dono ja tinha proibido. Um
+                # oitavo do vao ainda e' so' piso -- as ultimas linhas do
+                # cenario -- e chega com textura suficiente para o alongamento
+                # nao virar tinta.
+                k = max(10, min(alt, dy // 8))
                 tira = sub.crop((0, alt - k, W, alt))
                 banda_bruta = tira.resize((W, dy), Image.BILINEAR)
                 # a EMENDA se dissolve: os primeiros pixels da banda sao a
@@ -849,7 +871,12 @@ def _fundo(ctx, cartao, i):
                     ImageFilter.GaussianBlur(4))
                 media = np.asarray(banda.convert("RGB")).reshape(-1, 3).mean(axis=0)
                 veu_cor = tuple(int(c) for c in media)
-                grad = np.linspace(0.2, 0.85, dy).reshape(-1, 1)
+                # 0,15 a 0,55 desde 23/09: com 0,85 na borda os ultimos pixels
+                # eram TINTA, e o rodape do `serie_v107` saiu como uma faixa
+                # lilas lisa -- o oposto de "o quadro se preenche com arte de
+                # cenario de verdade". O veu existe para matar a inversao de
+                # perspectiva, nao para apagar o chao.
+                grad = np.linspace(0.15, 0.55, dy).reshape(-1, 1)
                 alfa = Image.fromarray((np.repeat(grad, W, axis=1) * 255)
                                        .astype(np.uint8), "L")
                 chapado = Image.new("RGBA", (W, dy), veu_cor + (255,))
