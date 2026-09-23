@@ -6596,6 +6596,11 @@ def render(pasta_partes, spec, saida, tmpdir=None, amostra=0):
               f"reencodando com crf {crf}")
         _encodar(crf, mr)
         mb = os.path.getsize(saida) / (1024 * 1024)
+    # Os quadros so servem ao ffmpeg: ~2.000 PNG (3-5 GB) por video, e a serie
+    # local chegou a 208 GB em tmp/ (23/09). GUARDAR_QUADROS=1 os mantem.
+    if os.environ.get("GUARDAR_QUADROS") != "1":
+        import shutil
+        shutil.rmtree(fd, ignore_errors=True)
     print(f"[video] {mb:.1f} MB, {n / float(FPS):.1f}s")
     # DuraÃ§Ã£o devolvida = a do VÃDEO que saiu, nÃ£o a soma planejada. Com o
     # respiro no Ã¡udio as duas praticamente coincidem, mas `int(dur*FPS)`
