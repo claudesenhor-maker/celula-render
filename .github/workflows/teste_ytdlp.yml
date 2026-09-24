@@ -1,0 +1,20 @@
+name: teste-ytdlp
+# 23/09: o YouTube pede login ao IP da VM (Azure). Este teste diz se o runner do
+# GitHub consegue baixar a legenda -- e' o que decide se o minerar_piadas.py pode
+# rodar aqui todo domingo. Apagar depois do veredito.
+on:
+  repository_dispatch:
+    types: [teste-ytdlp]
+  workflow_dispatch:
+jobs:
+  teste:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - run: pip install -q yt-dlp && yt-dlp --version
+      - run: |
+          for v in t8ibR3vUUt0 -3NAgMz4rr0; do
+            yt-dlp --skip-download --write-auto-subs --write-subs --sub-langs 'pt.*,en.*' \
+              --sub-format vtt -o "s_$v.%(ext)s" "https://www.youtube.com/shorts/$v" 2>&1 | tail -3 || true
+          done
+          ls -la s_* 2>/dev/null && echo "VEREDITO: LEGENDA_OK" || echo "VEREDITO: BLOQUEADO"
