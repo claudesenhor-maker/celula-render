@@ -67,8 +67,9 @@ def rodar(modelo, corpo, timeout=240):
     try:
         r = requests.post(PROXY, json={"modelo": modelo, "corpo": corpo}, timeout=timeout)
         if r.status_code == 404:
-            print("[workers-ai] o proxy `lab-workers-ai` nao esta ATIVO no n8n "
-                  "(fluxo iZZpPlmgZJrgQVwD): ligar la, ou exportar CF_API_TOKEN")
+            print("[workers-ai] o proxy `lab-workers-ai` foi APAGADO em 23/09 (ordem do dono: "
+                  "inpainting de roupa abandonado; backup em tmp/backup_proxy_workers_ai.json). "
+                  "So' com CF_API_TOKEN exportado")
             return None
         r.raise_for_status()
         if r.content[:5] == b"ERRO ":
