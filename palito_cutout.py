@@ -4142,6 +4142,18 @@ def _misturar_cam(cam, alvo, w):
 FORA_QUADRO = 320
 
 
+# A TROCA ACONTECE EM PLANO ABERTO (25/09). Quando o quadro 0 e' um close, a
+# troca de quem esta em cena (um sai andando, o outro entra ate' o lugar dele
+# -- ordem do dono de 23/09) acontecia DENTRO do close: o primeiro pedaco do
+# que entrava na janela era um BRACO solto, e antes dele ~0,3 s de fundo sem
+# ninguem (10 videos de 22-25/09, todos). Agora a volta tem duas fases: ate'
+# `VOLTA_ABRE_ATE` a camera abre (zoom 1) e a troca termina ate'
+# `VOLTA_TROCA_ATE`, com os dois de corpo inteiro; depois a camera fecha no
+# enquadramento do quadro 0. O ultimo quadro continua sendo o quadro 0.
+VOLTA_ABRE_ATE = 0.4
+VOLTA_TROCA_ATE = 0.6
+
+
 def _suavizar_saida(w):
     """Começa devagar e termina rapido: quem sai de cena acelera ao sair, e
     quem chega desacelera ao parar no lugar. Com a rampa linear a troca lia
@@ -6205,13 +6217,15 @@ def render(pasta_partes, spec, saida, tmpdir=None, amostra=0):
                     # a borda dele: quem esta na metade esquerda sai/entra pela
                     # esquerda (o oposto faria a travessia por dentro do outro)
                     borda = -FORA_QUADRO if x_atual <= W / 2 else W + FORA_QUADRO
+                    # a troca termina em VOLTA_TROCA_ATE, com a camera aberta
+                    w_troca = min(1.0, w_volta / VOLTA_TROCA_ATE)
                     if agora and not antes:
                         # ele sobra no fim: caminha para fora ate' sumir
-                        dx = (borda - x_atual) * _suavizar_saida(w_volta)
+                        dx = (borda - x_atual) * _suavizar_saida(w_troca)
                     else:
                         # ele existia no quadro 0: vem da borda ate' o lugar dele
                         alvo = float(x_zero.get(chave, x_atual))
-                        dx = (borda - alvo) * (1.0 - _suavizar_saida(w_volta))
+                        dx = (borda - alvo) * (1.0 - _suavizar_saida(w_troca))
                     desloca_ator[chave] = dx
             for chave in atras_na_frente:
                 if chave == falante:
@@ -6423,6 +6437,39 @@ def render(pasta_partes, spec, saida, tmpdir=None, amostra=0):
                 centro_q0, terco_q0 = centro_x, terco
                 alvo_q0 = falante if fecha else None
                 no_quadro_q0 = list(no_quadro)
+            elif w_volta > 0.0 and cam_q0 is not None and desloca_ator:
+                # HA TROCA: abre, troca em plano aberto, fecha no quadro 0 --
+                # ver VOLTA_ABRE_ATE. O plano aberto mira o meio da tela.
+                aberta = {"zoom": 1.0, "zoom_y": 0.5,
+                          "fundo_dx": float(cam.get("fundo_dx", cam_q0["fundo_dx"]))}
+                if w_volta < VOLTA_ABRE_ATE:
+                    u = _suavizar_saida(w_volta / VOLTA_ABRE_ATE)
+                    for k in ("zoom", "zoom_y"):
+                        v = float(cam.get(k, cam_q0[k]))
+                        cam[k] = v + (aberta[k] - v) * u
+                    cam["fundo_dx"] = (aberta["fundo_dx"]
+                                       + (cam_q0["fundo_dx"] - aberta["fundo_dx"]) * w_volta)
+                    if centro_x is not None:
+                        centro_x = centro_x + (W / 2.0 - centro_x) * u
+                    # o ALVO FICA: sem ele a guarda de `montar_frame` mede os
+                    # dois juntos e derruba o zoom num quadro -- foi um corte
+                    # seco do close ao aberto no primeiro render (25/09)
+                else:
+                    u = _suavizar_saida((w_volta - VOLTA_ABRE_ATE) / (1.0 - VOLTA_ABRE_ATE))
+                    for k in ("zoom", "zoom_y"):
+                        cam[k] = aberta[k] + (cam_q0[k] - aberta[k]) * u
+                    cam["fundo_dx"] = (aberta["fundo_dx"]
+                                       + (cam_q0["fundo_dx"] - aberta["fundo_dx"]) * w_volta)
+                    if centro_q0 is not None:
+                        centro_x = W / 2.0 + (centro_q0 - W / 2.0) * u
+                    else:
+                        centro_x = None
+                    # o alvo do quadro 0 desde o comeco do fechamento, pelo
+                    # mesmo motivo -- trocar no meio faz o zoom pular
+                    alvo = so_dele.get(alvo_q0) if alvo_q0 else None
+                meia_v = 0.5 / max(cam["zoom"], 1e-6)
+                cam["zoom_y"] = max(meia_v, min(1.0 - meia_v, cam["zoom_y"]))
+                terco = terco + (terco_q0 - terco) * w_volta
             elif w_volta > 0.0 and cam_q0 is not None:
                 for k in ("zoom", "zoom_y", "fundo_dx"):
                     v = float(cam.get(k, cam_q0[k]))
