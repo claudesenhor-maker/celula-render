@@ -27,6 +27,14 @@ VERDE_NOTA = (98, 160, 92, 255)
 CINZA = (120, 120, 120, 255)
 BRANCO = (252, 252, 250, 255)
 
+# texto que nao coube na caixa da placa (lido por `ferramentas/regua_cartao.py`)
+ESTOUROS = []
+
+
+def _estourou(onde, texto, larg_texto, larg_caixa):
+    if larg_texto > larg_caixa + 1:
+        ESTOUROS.append(f"{onde} '{texto}' {larg_texto:.0f}px em {larg_caixa:.0f}px")
+
 # A LISTA DE TIPOS VIVE NO FIM DO ARQUIVO, derivada de `GERADORES` (18/09).
 #
 # Ela era escrita a mao aqui e ja estava desatualizada: `tela` e `painel`
@@ -62,27 +70,60 @@ def _texto_centrado(d, caixa, texto, tam_fonte, cor=TITULO_TINTA, negrito=True,
     ate' caber em `max_linhas`. Numeros saem na cor de destaque."""
     x0, y0, x1, y1 = caixa
     larg, alt = x1 - x0, y1 - y0
-    t = int(tam_fonte)
-    while t > 10:
-        fonte = _fonte_titulo(t) if negrito else _fonte(t)
-        linhas = _quebrar(texto, fonte, larg * 0.94)
-        alt_l = int(t * 1.12)
-        if len(linhas) <= max_linhas and alt_l * len(linhas) <= alt * 0.96 \
-                and all(fonte.getlength(l) <= larg * 0.94 for l in linhas):
-            break
-        t = int(t * 0.9)
-    y = y0 + (alt - alt_l * len(linhas)) / 2.0
+
+    def _tentar(n_max):
+        t = int(tam_fonte)
+        while True:
+            fonte = _fonte_titulo(t) if negrito else _fonte(t)
+            linhas = _quebrar(texto, fonte, larg * 0.94)
+            alt_l = int(t * 1.12)
+            if len(linhas) <= n_max and alt_l * len(linhas) <= alt * 0.96 \
+                    and all(fonte.getlength(l) <= larg * 0.94 for l in linhas):
+                return t, fonte, linhas, alt_l, True
+            if t <= 10:
+                return t, fonte, linhas, alt_l, False
+            t = max(10, int(t * 0.9))
+
+    # O TEXTO CABE NA CAIXA, SEMPRE (25/09, dono: *"muitas caixas com texto
+    # estourado"*). O laco parava na fonte 10 e desenhava o que tivesse --
+    # palavra comprida numa caixa estreita saia pela borda da placa. Agora:
+    # 1) as linhas pedidas; 2) mais duas linhas; 3) o texto e' desenhado a
+    # parte e REDUZIDO ate' caber. Estouro nunca chega a tela.
+    t, fonte, linhas, alt_l, ok = _tentar(max_linhas)
+    if not ok:
+        t, fonte, linhas, alt_l, ok = _tentar(max_linhas + 2)
+    alvo = d
+    ox, oy = x0, y0
+    tela_txt = None
+    if not ok:
+        lw = max(fonte.getlength(l) for l in linhas) if linhas else 1
+        tela_txt = Image.new("RGBA", (int(lw) + 4, alt_l * len(linhas) + 4), (0, 0, 0, 0))
+        alvo = ImageDraw.Draw(tela_txt)
+        ox, oy = 2, 2
+        larg_d, alt_d = lw, alt_l * len(linhas)
+    else:
+        larg_d, alt_d = larg, alt
+    y = oy + (alt_d - alt_l * len(linhas)) / 2.0
     esp = fonte.getlength(" ")
     for l in linhas:
         w = fonte.getlength(l)
-        x = x0 + (larg - w) / 2.0
+        x = ox + (larg_d - w) / 2.0
         for pal in l.split(" "):
             c = cor
             if destaque_numeros and any(ch.isdigit() for ch in pal):
                 c = TITULO_DESTAQUE
-            d.text((x, y), pal, font=fonte, fill=c)
+            alvo.text((x, y), pal, font=fonte, fill=c)
             x += fonte.getlength(pal) + esp
         y += alt_l
+    if tela_txt is not None:
+        k = min(larg * 0.94 / tela_txt.width, alt * 0.94 / tela_txt.height)
+        pq = tela_txt.resize((max(1, int(tela_txt.width * k)), max(1, int(tela_txt.height * k))), Image.LANCZOS)
+        base = getattr(d, "_image", None)
+        if base is not None:
+            base.alpha_composite(pq, (int(x0 + (larg - pq.width) / 2.0), int(y0 + (alt - pq.height) / 2.0)))
+        else:
+            ESTOUROS.append(f"texto '{texto}' sem tela para reduzir")
+        t = int(t * k)
     return t
 
 
@@ -287,13 +328,30 @@ def nota(texto, tam=560):
     r = int(H_ * 0.30)
     d.ellipse([m + W_ // 2 - r, m + H_ // 2 - r, m + W_ // 2 + r, m + H_ // 2 + r],
               fill=(150, 200, 150, 255), outline=(40, 90, 50, 255), width=3)
-    fonte = _fonte_titulo(int(H_ * 0.16))
-    s = texto.upper()
-    w = fonte.getlength(s)
-    for (fx, fy) in ((0.18, 0.20), (0.82, 0.20), (0.18, 0.80), (0.82, 0.80)):
-        d.text((m + W_ * fx - w / 2, m + H_ * fy - H_ * 0.09), s, font=fonte, fill=(30, 60, 35, 255))
-    _texto_centrado(d, (m + int(W_ * 0.30), m + int(H_ * 0.30), m + int(W_ * 0.70), m + int(H_ * 0.70)),
-                    texto.upper(), int(H_ * 0.34), cor=(30, 60, 35, 255), max_linhas=1,
+    # NOS CANTOS SO' O VALOR (25/09): a frase inteira nos quatro cantos saia
+    # pela borda da nota ("MUITO DINHEIRO" com 240 px numa faixa de 127).
+    # Nota de verdade traz o numero no canto; sem numero, o canto fica liso.
+    import re as _re
+    num = _re.findall(r"\d[\d.,]*", texto)
+    s = num[0] if num else ""
+    if s:
+        tf = int(H_ * 0.16)
+        fonte = _fonte_titulo(tf)
+        while fonte.getlength(s) > W_ * 0.26 and tf > 8:
+            tf = int(tf * 0.9)
+            fonte = _fonte_titulo(tf)
+        w = fonte.getlength(s)
+        _estourou("nota.canto", s, w, W_ * 0.30)
+        for (fx, fy) in ((0.18, 0.20), (0.82, 0.20), (0.18, 0.80), (0.82, 0.80)):
+            d.text((m + W_ * fx - w / 2, m + H_ * fy - tf * 0.56), s, font=fonte, fill=(30, 60, 35, 255))
+    # sem numero o TEXTO e' o dado: ocupa a nota inteira, com fundo claro
+    # ("MUITO DINHEIRO" no medalhao de 40% saia em letra de rodape)
+    caixa_c = (m + int(W_ * 0.30), m + int(H_ * 0.30), m + int(W_ * 0.70), m + int(H_ * 0.70))
+    if not s:
+        caixa_c = (m + int(W_ * 0.10), m + int(H_ * 0.18), m + int(W_ * 0.90), m + int(H_ * 0.82))
+        d.rounded_rectangle(caixa_c, radius=int(H_ * 0.12), fill=(150, 200, 150, 255), outline=(40, 90, 50, 255), width=3)
+    _texto_centrado(d, caixa_c,
+                    texto.upper(), int(H_ * 0.34), cor=(30, 60, 35, 255), max_linhas=2,
                     destaque_numeros=False)
     anc = {"pega": [m + W_ * 0.5, m + H_ * 0.8], "base": [m + W_ * 0.5, float(tela.height)],
            "gravidade": False, "z": "frente"}
@@ -403,9 +461,10 @@ def check(texto="", tam=420):
     pts = [(cx - tam * 0.25, cy), (cx - tam * 0.07, cy + tam * 0.18), (cx + tam * 0.27, cy - tam * 0.2)]
     d.line(pts, fill=BRANCO, width=max(8, int(tam * 0.09)), joint="curve")
     if texto:
-        fonte = _fonte_titulo(int(tam * 0.16))
-        w = fonte.getlength(texto.upper())
-        d.text((cx - w / 2, m + tam * 0.72), texto.upper(), font=fonte, fill=BRANCO)
+        # dentro do circulo, medido (25/09: "TUDO CERTO" com 369 px num
+        # circulo de 262 -- o texto saia pelos lados do selo)
+        _texto_centrado(d, (m + tam * 0.20, m + tam * 0.66, m + tam * 0.80, m + tam * 0.88),
+                        texto.upper(), int(tam * 0.16), cor=BRANCO, destaque_numeros=False, max_linhas=1)
     anc = {"pega": [cx, tela.height * 0.9], "base": [cx, float(tela.height)], "gravidade": True, "z": "frente"}
     return tela, anc
 
@@ -499,12 +558,219 @@ def painel(texto, tam=520, cor_fundo=(30, 30, 34, 255), cor_texto=(240, 60, 50, 
     return t, anc
 
 
+# ---------------------------------------------------------------------
+# PECAS NOVAS (25/09, dono: *"pouca variacao de pecas"*). A copia de 43
+# cartoes usava 12 pecas e o calendario 7 vezes. Estas sao as ALTERNATIVAS
+# que `cartao._variar_pecas` troca quando um tipo se repete -- e o roteiro
+# pode pedir direto: ampulheta (espera), recibo (conta, compra), envelope
+# (carta, intimacao), grafico (subiu/caiu), post_it (lembrete, bilhete),
+# alerta (perigo, aviso).
+def ampulheta(texto="", tam=460):
+    """Ampulheta com areia caindo; `texto` numa faixa embaixo (o prazo)."""
+    W_, H_ = int(tam * 0.62), int(tam)
+    m = int(tam * 0.06)
+    # a faixa do prazo e' LARGA e alta: "TRES MESES DEPOIS" numa faixa da
+    # largura do vidro saia em letra de rodape (folha da regua, 25/09)
+    faixa = int(tam * 0.36) if texto else 0
+    larg_f = int(tam * 1.0)
+    m_x = max(m, (larg_f - W_) // 2 + m // 2) if texto else m
+    tela_ = Image.new("RGBA", (W_ + 2 * m_x, H_ + 2 * m + faixa), (0, 0, 0, 0))
+    m0 = m
+    m = m_x
+    m_y = m0
+    d = ImageDraw.Draw(tela_)
+    c = _cont(tam)
+    madeira = (150, 96, 52, 255)
+    tampa = int(H_ * 0.09)
+    for y in (m_y, m_y + H_ - tampa):
+        d.rounded_rectangle([m, y, m + W_, y + tampa], radius=int(tampa * 0.3), fill=madeira,
+                            outline=TITULO_CONTORNO, width=c)
+    cx = m + W_ / 2.0
+    ya, yb = m_y + tampa, m_y + H_ - tampa
+    ym = (ya + yb) / 2.0
+    lv = W_ * 0.40
+    vidro = [(cx - lv, ya), (cx + lv, ya), (cx + W_ * 0.05, ym), (cx + lv, yb), (cx - lv, yb), (cx - W_ * 0.05, ym)]
+    d.polygon(vidro, fill=(226, 240, 246, 255))
+    areia = (236, 190, 90, 255)
+    d.polygon([(cx - lv * 0.55, ya + (ym - ya) * 0.45), (cx + lv * 0.55, ya + (ym - ya) * 0.45),
+               (cx + W_ * 0.04, ym - 2), (cx - W_ * 0.04, ym - 2)], fill=areia)
+    d.polygon([(cx - lv * 0.92, yb - 2), (cx + lv * 0.92, yb - 2), (cx, yb - (yb - ym) * 0.55)], fill=areia)
+    d.line([(cx, ym), (cx, yb - (yb - ym) * 0.5)], fill=areia, width=max(3, c // 2))
+    d.line(vidro + [vidro[0]], fill=TITULO_CONTORNO, width=c, joint="curve")
+    for sx in (-1, 1):
+        d.rectangle([cx + sx * W_ * 0.46 - c, ya, cx + sx * W_ * 0.46 + c, yb], fill=madeira,
+                    outline=TITULO_CONTORNO, width=max(2, c // 2))
+    if texto:
+        yf = m_y + H_ + int(tam * 0.02)
+        fx0, fx1 = 4, tela_.width - 4
+        d.rounded_rectangle([fx0, yf, fx1, yf + faixa - 4], radius=int(faixa * 0.2),
+                            fill=TITULO_PAPEL, outline=TITULO_CONTORNO, width=c)
+        _texto_centrado(d, (fx0 + 10, yf + 6, fx1 - 10, yf + faixa - 10), texto.upper(), int(faixa * 0.40), max_linhas=2)
+    anc = {"pega": [tela_.width / 2.0, tela_.height * 0.9], "base": [tela_.width / 2.0, float(tela_.height)],
+           "gravidade": True, "z": "frente"}
+    return tela_, anc
+
+
+def recibo(texto, tam=520):
+    """Cupom fiscal comprido, borda serrilhada, TOTAL no pe'."""
+    W_, H_ = int(tam * 0.56), int(tam)
+    m = int(tam * 0.06)
+    tela_ = Image.new("RGBA", (W_ + 2 * m, H_ + 2 * m), (0, 0, 0, 0))
+    tela_.alpha_composite(_sombra(tela_, (m, m, m + W_, m + H_), 4, int(tam * 0.02)))
+    d = ImageDraw.Draw(tela_)
+    dente = max(6, int(W_ / 12))
+    pts = [(m, m)]
+    for k in range(12):
+        pts += [(m + dente * k + dente / 2.0, m + dente * 0.5), (m + dente * (k + 1), m)]
+    pts += [(m + W_, m + H_)]
+    for k in range(12):
+        pts += [(m + W_ - dente * k - dente / 2.0, m + H_ - dente * 0.5), (m + W_ - dente * (k + 1), m + H_)]
+    d.polygon(pts, fill=BRANCO)
+    d.line(pts + [pts[0]], fill=TITULO_CONTORNO, width=_cont(tam), joint="curve")
+    y = m + H_ * 0.10
+    for k in range(6):
+        larg = W_ * (0.70 if k % 2 else 0.50)
+        d.line([(m + W_ * 0.12, y), (m + W_ * 0.12 + larg, y)], fill=(120, 120, 120, 255), width=max(3, _cont(tam) - 2))
+        d.line([(m + W_ * 0.80, y), (m + W_ * 0.88, y)], fill=(120, 120, 120, 255), width=max(3, _cont(tam) - 2))
+        y += H_ * 0.075
+    d.line([(m + W_ * 0.08, m + H_ * 0.60), (m + W_ * 0.92, m + H_ * 0.60)], fill=TITULO_TINTA, width=3)
+    _texto_centrado(d, (m + W_ * 0.08, m + H_ * 0.62, m + W_ * 0.92, m + H_ * 0.90), texto.upper(),
+                    int(tam * 0.10), max_linhas=2)
+    anc = {"pega": [tela_.width / 2.0, m + H_ * 0.9], "base": [tela_.width / 2.0, float(tela_.height)],
+           "gravidade": True, "z": "frente"}
+    return tela_, anc
+
+
+def envelope(texto, tam=520):
+    """Envelope fechado com selo; `texto` e' o remetente/assunto."""
+    W_, H_ = int(tam), int(tam * 0.62)
+    m = int(tam * 0.06)
+    tela_ = Image.new("RGBA", (W_ + 2 * m, H_ + 2 * m), (0, 0, 0, 0))
+    tela_.alpha_composite(_sombra(tela_, (m, m, m + W_, m + H_), int(tam * 0.02), int(tam * 0.025)))
+    d = ImageDraw.Draw(tela_)
+    papel = (244, 232, 206, 255)
+    c = _cont(tam)
+    d.rounded_rectangle([m, m, m + W_, m + H_], radius=int(tam * 0.02), fill=papel, outline=TITULO_CONTORNO, width=c)
+    d.line([(m, m), (m + W_ / 2.0, m + H_ * 0.52), (m + W_, m)], fill=TITULO_CONTORNO, width=c, joint="curve")
+    r = int(H_ * 0.10)
+    d.ellipse([m + W_ / 2.0 - r, m + H_ * 0.52 - r, m + W_ / 2.0 + r, m + H_ * 0.52 + r],
+              fill=VERMELHO, outline=TITULO_CONTORNO, width=max(3, c - 2))
+    _texto_centrado(d, (m + W_ * 0.10, m + H_ * 0.66, m + W_ * 0.90, m + H_ * 0.94), texto.upper(),
+                    int(H_ * 0.18), max_linhas=1)
+    anc = {"pega": [tela_.width / 2.0, m + H_ * 0.9], "base": [tela_.width / 2.0, float(tela_.height)],
+           "gravidade": True, "z": "frente"}
+    return tela_, anc
+
+
+def grafico(texto="", tam=520, sentido=None):
+    """Quadro com barras e a linha: sobe (verde) ou cai (vermelho). O
+    sentido sai do texto (cai/caiu/perde/down) quando nao vem."""
+    if sentido is None:
+        t_ = str(texto).lower()
+        sentido = "cai" if any(p in t_ for p in ("cai", "caiu", "desc", "perd", "queda", "down", "drop", "fall", "lost")) \
+            else "sobe"
+    W_, H_ = int(tam), int(tam * 0.78)
+    m = int(tam * 0.06)
+    tela_ = Image.new("RGBA", (W_ + 2 * m, H_ + 2 * m), (0, 0, 0, 0))
+    tela_.alpha_composite(_sombra(tela_, (m, m, m + W_, m + H_), int(tam * 0.02), int(tam * 0.025)))
+    d = ImageDraw.Draw(tela_)
+    c = _cont(tam)
+    d.rounded_rectangle([m, m, m + W_, m + H_], radius=int(tam * 0.03), fill=BRANCO, outline=TITULO_CONTORNO, width=c)
+    cor = VERDE if sentido == "sobe" else VERMELHO
+    alt_t = int(H_ * 0.24) if texto else 0
+    base_y = m + H_ * 0.90
+    topo = m + H_ * 0.08 + alt_t
+    alturas = (0.30, 0.48, 0.62, 0.88) if sentido == "sobe" else (0.88, 0.62, 0.42, 0.20)
+    lb = W_ * 0.13
+    pts = []
+    for k, h in enumerate(alturas):
+        x = m + W_ * (0.16 + 0.21 * k)
+        y = base_y - (base_y - topo) * h
+        d.rectangle([x, y, x + lb, base_y], fill=cor, outline=TITULO_CONTORNO, width=max(3, c - 2))
+        pts.append((x + lb / 2.0, y - H_ * 0.04))
+    d.line(pts, fill=TITULO_CONTORNO, width=c + 2, joint="curve")
+    d.line([(m + W_ * 0.08, base_y), (m + W_ * 0.94, base_y)], fill=TITULO_CONTORNO, width=c)
+    if texto:
+        _texto_centrado(d, (m + W_ * 0.06, m + H_ * 0.04, m + W_ * 0.94, m + H_ * 0.04 + alt_t), texto.upper(),
+                        int(alt_t * 0.7), max_linhas=1)
+    anc = {"pega": [tela_.width / 2.0, m + H_ * 0.9], "base": [tela_.width / 2.0, float(tela_.height)],
+           "gravidade": True, "z": "frente"}
+    return tela_, anc
+
+
+def post_it(texto, tam=460, cor=(252, 226, 90, 255)):
+    """Bilhete adesivo meio torto, escrito a mao (fonte comum)."""
+    L = int(tam)
+    m = int(tam * 0.08)
+    tela_ = Image.new("RGBA", (L + 2 * m, L + 2 * m), (0, 0, 0, 0))
+    tela_.alpha_composite(_sombra(tela_, (m, m, m + L, m + L), 4, int(tam * 0.03)))
+    d = ImageDraw.Draw(tela_)
+    dobra = int(L * 0.16)
+    pts = [(m, m), (m + L, m), (m + L, m + L - dobra), (m + L - dobra, m + L), (m, m + L)]
+    d.polygon(pts, fill=cor)
+    d.polygon([(m + L, m + L - dobra), (m + L - dobra, m + L - dobra), (m + L - dobra, m + L)],
+              fill=tuple(int(v * 0.8) for v in cor[:3]) + (255,))
+    d.line(pts + [pts[0]], fill=TITULO_CONTORNO, width=_cont(tam), joint="curve")
+    _texto_centrado(d, (m + L * 0.08, m + L * 0.10, m + L * 0.92, m + L * 0.82), texto.upper(),
+                    int(L * 0.18), negrito=False, max_linhas=3)
+    tela_ = tela_.rotate(4.0, resample=Image.BICUBIC, expand=True)
+    anc = {"pega": [tela_.width / 2.0, tela_.height * 0.9], "base": [tela_.width / 2.0, float(tela_.height)],
+           "gravidade": True, "z": "frente"}
+    return tela_, anc
+
+
+def alerta(texto="", tam=460):
+    """Triangulo de perigo amarelo com '!'; `texto` numa faixa embaixo."""
+    L = int(tam)
+    m = int(tam * 0.08)
+    faixa = int(tam * 0.22) if texto else 0
+    tela_ = Image.new("RGBA", (L + 2 * m, int(L * 0.88) + 2 * m + faixa), (0, 0, 0, 0))
+    d = ImageDraw.Draw(tela_)
+    c = _cont(tam)
+    tri = [(m + L / 2.0, m), (m + L, m + L * 0.88), (m, m + L * 0.88)]
+    d.polygon(tri, fill=AMARELO)
+    d.line(tri + [tri[0]], fill=TITULO_CONTORNO, width=c + 3, joint="curve")
+    cx = m + L / 2.0
+    d.rounded_rectangle([cx - L * 0.05, m + L * 0.30, cx + L * 0.05, m + L * 0.62], radius=int(L * 0.04),
+                        fill=TITULO_CONTORNO)
+    d.ellipse([cx - L * 0.055, m + L * 0.68, cx + L * 0.055, m + L * 0.79], fill=TITULO_CONTORNO)
+    if texto:
+        yf = m + int(L * 0.88) + int(tam * 0.03)
+        d.rounded_rectangle([m, yf, m + L, yf + faixa - 6], radius=int(faixa * 0.25), fill=TITULO_PAPEL,
+                            outline=TITULO_CONTORNO, width=c)
+        _texto_centrado(d, (m + L * 0.05, yf + 4, m + L * 0.95, yf + faixa - 10), texto.upper(),
+                        int(faixa * 0.6), max_linhas=1)
+    anc = {"pega": [tela_.width / 2.0, tela_.height * 0.9], "base": [tela_.width / 2.0, float(tela_.height)],
+           "gravidade": True, "z": "frente", "sem_contorno": True}
+    return tela_, anc
+
+
 GERADORES = {
     "documento": documento, "carimbo": carimbo, "letreiro": letreiro,
     "calendario": calendario, "relogio": relogio, "nota": nota,
     "etiqueta": etiqueta, "balao": balao, "x": x, "interrogacao": interrogacao,
     "exclamacao": exclamacao, "check": check, "seta": seta, "cartaz": cartaz,
     "tela": tela, "painel": painel,
+    "ampulheta": ampulheta, "recibo": recibo, "envelope": envelope,
+    "grafico": grafico, "post_it": post_it, "alerta": alerta,
+}
+
+# quando um tipo se repete no video, a peca que entra no lugar dele e diz a
+# mesma coisa (`cartao._variar_pecas`)
+ALTERNATIVAS = {
+    "calendario": ("ampulheta", "post_it"),     # relogio nao: "4 MESES" num relogio nao le
+    "relogio": ("ampulheta",),
+    "etiqueta": ("recibo", "nota", "letreiro"),
+    "nota": ("recibo", "etiqueta"),
+    "carimbo": ("documento", "envelope", "alerta"),
+    "documento": ("envelope", "recibo"),
+    "seta": ("grafico",),
+    "exclamacao": ("alerta",),
+    "interrogacao": ("balao", "post_it"),
+    "cartaz": ("post_it", "letreiro"),
+    "x": ("carimbo", "alerta"),
+    "check": ("carimbo",),
+    "balao": ("post_it", "cartaz"),
 }
 
 # o que o motor SABE desenhar -- ver o comentario no lugar em que esta tupla
