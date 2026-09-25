@@ -291,6 +291,8 @@ Z = {"fundo": 0, "faixa": 5, "prop_tras": 10, "ator_atras": 20, "prop_entre": 30
 # e apontar para fora do quadro (visto na folha de 15/09, cartoes 00 e 05) e'
 # o que le como "boneco colado". Quando o outro esta' a esquerda, o braco
 # apontado passa para o `braco_e`, refletido.
+LOCOMOCAO_NO_CARTAO = {"entrar_andando": "gesticular", "entrar_correndo": "susto", "sair_andando": "dar_de_ombros_virando",
+                       "andar": "gesticular", "aproximar": "inclinar_para", "afastar": "recuar", "correr": "susto"}
 POSES_PARA_O_OUTRO = frozenset(("apontar", "apresentar"))   # as de interacao ja leem `lado_alvo`
 
 
@@ -520,6 +522,14 @@ class Ator:
         for p in poses:
             a = dict(p) if isinstance(p, dict) else {"nome": p}
             nome = a.get("nome")
+            # NO CARTAO NINGUEM ANDA (25/09). `entrar_andando` no pico (u=0,5)
+            # deixa o corpo NO MEIO DO CAMINHO, metade fora do quadro -- o Pal
+            # cortado na borda do cartao 14 do `serie_v101`. A entrada do
+            # cartao ja' e' o movimento; a pose e' o gesto de quem chegou.
+            if nome in LOCOMOCAO_NO_CARTAO:
+                print(f"[pose] {self.quem}: '{nome}' e' locomocao; no cartao vira '{LOCOMOCAO_NO_CARTAO[nome]}'")
+                nome = LOCOMOCAO_NO_CARTAO[nome]
+                a = {"nome": nome}
             f = ACOES.CATALOGO.get(nome)
             if f is None:
                 print(f"[pose] {self.quem}: '{nome}' nao existe no catalogo; ignorada")
@@ -723,7 +733,14 @@ class Ator:
                 else:
                     ang_obj = ang.get("mao_" + mao, 0.0)
                 colar(camada, img, (float(pega[0]), float(pega[1])), palma, ang_obj)
-                self._mao_por_cima(camada, pos, ang, mao, frac=0.5)
+                # A MAO INTEIRA POR CIMA (25/09, dono: *"metade da mao do
+                # personagem aparece, outra nao"*). Era so' a metade distal
+                # (`frac=0,5`): no cabo de uma chave isso le como dedos
+                # fechando, mas no objeto CHATO e largo do cartao (carta,
+                # boleto, celular) o papel cortava a mao ao meio -- palma
+                # sumida atras, dedos boiando na frente. A mao toda sobre o
+                # objeto le como "segurando pela frente" em qualquer forma.
+                self._mao_por_cima(camada, pos, ang, mao, frac=0.0)
                 self.objeto_mao = (img, anc, palma)
         # acessorios por cima de tudo
         if self.acessorios:
@@ -937,7 +954,7 @@ def compor(ctx, cartao, i):
     # que sai pelo alto): ai' props e atores sao montados de novo, uma vez.
     cfgs = cartao.get("atores") or []
     fatores = {}
-    for tentativa in range(3):
+    for tentativa in range(4):
         props, camadas_props = _montar_props(ctx, cartao, chao_y, fatores)
         atores = [Ator(ctx, _cfg_com_fator(c, fatores), k, len(cfgs), props, cartao) for k, c in enumerate(cfgs)]
         _montar_atores(atores)
@@ -1085,6 +1102,16 @@ def compor(ctx, cartao, i):
     pronto.placas = [(z, im, _longe_das_caras(_dentro(centro, im, caixa), im, caixa, cabecas), e)
                      for z, im, centro, e in pronto.placas]
     pronto.placas = _sem_se_cobrir(pronto.placas, caixa)
+    if atores:
+        antes = list(pronto.placas)
+        pronto.placas, pior = _fora_dos_corpos(antes, caixa, atores, i)
+        # no plano FECHADO nao ha onde por a placa sem tapar o boneco: o plano
+        # abre (a placa e' o dado da frase, o close e' so' enquadramento)
+        if pior > PLACA_COBRE_MAX and pronto.foco is not None:
+            print(f"[cartao {i:02d}] placa cobre {pior:.0%} do corpo no plano fechado: abrindo o plano")
+            pronto.zoom, pronto.foco = 1.0, None
+            caixa = (MARGEM_JANELA * W, max(MARGEM_JANELA * H, H * 0.13), W * (1 - MARGEM_JANELA), min(H * (1 - MARGEM_JANELA), y_leg))
+            pronto.placas, pior = _fora_dos_corpos(antes, caixa, atores, i)
     if not cfgs:
         pronto.estaticas = [(z, im, _dentro_canto(canto, im, caixa))
                             if z == Z["objeto_solto"] else (z, im, canto)
@@ -1133,6 +1160,11 @@ def _montar_props(ctx, cartao, chao_y, fatores):
 
 def _cfg_com_fator(cfg, fatores):
     """O cfg do ator com o objeto de mao encolhido, se a guarda pediu."""
+    if fatores.get("fechar:" + str(cfg.get("quem"))):
+        # a guarda pediu pose fechada: `escutar`, sem alvo, o objeto fica
+        cfg = {k: v for k, v in cfg.items() if k not in ("pose", "poses", "alvos")}
+        cfg["pose"] = "escutar"
+        cfg["_fechado"] = True
     f = fatores.get("objeto:" + str(cfg.get("quem")))
     if not f or not cfg.get("objeto"):
         return cfg
@@ -1353,7 +1385,23 @@ def _afastar(atores, props, i):
                     # -- nucleo livre, braco pode cruzar -- em vez de empurrar
                     # alguem para fora do quadro ou cortar o que esta' na mao
                     sobra = (sa[0] - MARGEM_QUADRO) + ((W - MARGEM_QUADRO) - sb[1])
+                    # SEM ESPACO, QUEM ABRE MAIS OS BRACOS FECHA A POSE (25/09).
+                    # Aceitar o braco cruzando era a "sobreposicao errada" que o
+                    # dono viu: o braco do Pal passando por cima da Maria no
+                    # cartao de abertura. Antes de ceder, o ator de gesto mais
+                    # largo (silhueta menos nucleo) e que nao fala passa a
+                    # `escutar` -- uma vez so'; se ainda faltar, a regra velha.
                     if sobra < falta:
+                        def _abre(a):
+                            s_, n_ = _extremos(_colunas(a.layer_desenhada)), _extremos(_colunas(a.layer_desenhada, nucleo=True))
+                            return (s_[1] - s_[0]) - (n_[1] - n_[0]) if s_ and n_ else 0
+                        cands = [a for a in (A, B) if not a.cfg.get("_fechado") and "fechar:" + a.quem not in pedidos]
+                        if cands:
+                            X = max(cands, key=lambda a: (not getattr(a, "fala", False), _abre(a)))
+                            pedidos["fechar:" + X.quem] = 1.0
+                            print(f"[cartao {i:02d}] {A.quem} e {B.quem}: faltam {falta - sobra:.0f}px no quadro; "
+                                  f"{X.quem} fecha a pose (escutar) em vez de cruzar o braco")
+                            return pedidos
                         A._so_nucleo = True
                         print(f"[cartao {i:02d}] {A.quem} e {B.quem}: faltam {falta - sobra:.0f}px no quadro "
                               f"para as silhuetas; aceitando braco cruzando (nucleos livres)")
@@ -1452,6 +1500,80 @@ def _longe_das_caras(centro, im, caixa, cabecas):
         else:
             cy = max(y0 + hh, acima)
     return _dentro((cx, cy), im, caixa)
+
+
+PLACA_COBRE_MAX = 0.02      # fracao da placa que pode cair sobre um corpo
+PLACA_ENCOLHE_MIN = 0.52    # a placa encolhe ate' isto antes de aceitar cobrir
+
+
+def _fora_dos_corpos(placas, caixa, atores, i=0):
+    """A PLACA NAO COBRE CORPO NENHUM (25/09, dono: *"muitos objetos com
+    sobreposicao errada, metade aparece outra nao"*). `_longe_das_caras` so'
+    olhava a CABECA: o selo "TUDO CERTO" caia no peito do Pal (33% da placa
+    sobre ele), o "?" gigante do close tapava o tronco inteiro, o carimbo
+    ficava atras do braco erguido. Aqui a mascara e' a silhueta DESENHADA de
+    todos os atores (a pose final, que e' a que fica na tela) e a placa
+    procura, na janela do plano, o lugar de menor cobertura -- e, empatado,
+    o mais perto de onde o roteiro a pediu. Se nenhum lugar fica abaixo de
+    `PLACA_COBRE_MAX`, a placa ENCOLHE (ate' `PLACA_ENCOLHE_MIN`) e procura
+    de novo. Cada placa posta entra na mascara: duas placas nao se cobrem."""
+    if not placas:
+        return placas, 0.0
+    red = 4
+    mask = np.zeros((H // red, W // red), bool)
+    for a in atores:
+        if a.layer_desenhada is not None:
+            al = np.asarray(a.layer_desenhada.resize((W // red, H // red), Image.NEAREST))[..., 3] > 48
+            mask |= al
+    x0, y0, x1, y1 = caixa
+    saida = []
+    pior = 0.0
+    for z, im, centro, e in placas:
+        esc = 1.0
+        melhor = None
+        while True:
+            cand = im if esc == 1.0 else im.resize((max(1, int(im.width * esc)), max(1, int(im.height * esc))),
+                                                   Image.LANCZOS)
+            pw, ph = cand.width / red, cand.height / red
+            pa = np.asarray(cand.resize((max(1, int(pw)), max(1, int(ph))), Image.NEAREST))[..., 3] > 48
+            area = max(1, int(pa.sum()))
+            hw, hh = cand.width / 2.0, cand.height / 2.0
+            xs = np.linspace(x0 + hw, max(x0 + hw, x1 - hw), 9)
+            ys = np.linspace(y0 + hh, max(y0 + hh, y1 - hh), 11)
+            pedidos = [_dentro(centro, cand, caixa)] + [(float(cx), float(cy)) for cy in ys for cx in xs]
+            diag = math.hypot(W, H)
+            for cx, cy in pedidos:
+                gx, gy = int((cx - hw) / red), int((cy - hh) / red)
+                ph_, pw_ = pa.shape
+                sx0, sy0 = max(0, gx), max(0, gy)
+                sx1, sy1 = min(mask.shape[1], gx + pw_), min(mask.shape[0], gy + ph_)
+                cob = 0
+                if sx1 > sx0 and sy1 > sy0:
+                    cob = int((pa[sy0 - gy:sy1 - gy, sx0 - gx:sx1 - gx] & mask[sy0:sy1, sx0:sx1]).sum())
+                frac = cob / area
+                custo = (max(0.0, frac - PLACA_COBRE_MAX) * 10.0 + frac * 0.5
+                         + math.hypot(cx - centro[0], cy - centro[1]) / diag * 0.2)
+                if melhor is None or custo < melhor[0]:
+                    melhor = (custo, frac, cand, (cx, cy), esc)
+            if melhor[1] <= PLACA_COBRE_MAX or esc * 0.86 < PLACA_ENCOLHE_MIN:
+                break
+            # o melhor de TODAS as escalas continua valendo: a menor so'
+            # ganha se de fato cobrir menos
+            esc *= 0.86
+        _, frac, cand, pos, esc_f = melhor
+        if esc_f < 1.0 or frac > PLACA_COBRE_MAX or math.hypot(pos[0] - centro[0], pos[1] - centro[1]) > 40:
+            print(f"[cartao {i:02d}] placa fora dos corpos: ({centro[0]:.0f},{centro[1]:.0f}) -> "
+                  f"({pos[0]:.0f},{pos[1]:.0f}), escala {esc_f:.2f}, cobre {frac:.0%}")
+        # a placa posta vira obstaculo para a proxima
+        gx, gy = int((pos[0] - cand.width / 2.0) / red), int((pos[1] - cand.height / 2.0) / red)
+        pa = np.asarray(cand.resize((max(1, cand.width // red), max(1, cand.height // red)), Image.NEAREST))[..., 3] > 48
+        sx0, sy0 = max(0, gx), max(0, gy)
+        sx1, sy1 = min(mask.shape[1], gx + pa.shape[1]), min(mask.shape[0], gy + pa.shape[0])
+        if sx1 > sx0 and sy1 > sy0:
+            mask[sy0:sy1, sx0:sx1] |= pa[sy0 - gy:sy1 - gy, sx0 - gx:sx1 - gx]
+        saida.append((z, cand, pos, e))
+        pior = max(pior, frac)
+    return saida, pior
 
 
 def _sem_se_cobrir(placas, caixa):
@@ -1618,6 +1740,53 @@ def quadro_do_cartao(pronto, t, nivel=0.0, pisca=False):
     return q
 
 
+def _push_que_cabe(pronto, push, i=0):
+    """O EMPURRAO DO GANCHO NAO CORTA NINGUEM (25/09). Com dois em cena o
+    plano e' aberto (`foco=None`) e os 16% de empurrao cortavam PELO CENTRO:
+    na copia `serie_v101` o Pal saiu pela metade na borda esquerda do quadro
+    de abertura e a cabeca dele subiu para baixo do cartaz de titulo. Aqui o
+    empurrao mira no CENTRO DO GRUPO (atores + placas) e para no maior valor
+    em que ninguem sai pelos lados e o alto das cabecas fica abaixo da faixa
+    do titulo (14% da janela). Devolve (push, foco)."""
+    caixas = []
+    topo = None
+    for a in pronto.atores or []:
+        bb = a.layer_desenhada.getbbox() if a.layer_desenhada is not None else None
+        if bb:
+            caixas.append(bb)
+            cab = _cabeca(a)
+            t_ = cab[1] if cab else bb[1]
+            topo = t_ if topo is None else min(topo, t_)
+    for z, im, c, e in pronto.placas or []:
+        caixas.append((c[0] - im.width / 2.0, c[1] - im.height / 2.0, c[0] + im.width / 2.0, c[1] + im.height / 2.0))
+    if not caixas:
+        return push, None
+    ux0 = min(b[0] for b in caixas)
+    ux1 = max(b[2] for b in caixas)
+    z0 = pronto.zoom or 1.0
+    cx = (ux0 + ux1) / 2.0
+    cy0 = pronto.foco[1] if pronto.foco else H / 2.0
+    p = push
+    while p > 0.0:
+        z = z0 * (1.0 + p)
+        jw, jh = W / z, H / z
+        x0 = max(0.0, min(W - jw, cx - jw / 2.0))
+        cy = cy0
+        if topo is not None:
+            # a janela desce ate' a cabeca ficar abaixo do titulo
+            cy = max(cy, (topo - 0.14 * jh) + jh / 2.0)
+        y0 = max(0.0, min(H - jh, cy - jh / 2.0))
+        cabe_lados = ux0 >= x0 + 8 and ux1 <= x0 + jw - 8
+        cabe_topo = topo is None or topo >= y0 + 0.14 * jh
+        if cabe_lados and cabe_topo:
+            if p < push:
+                print(f"[cartao {i:02d}] gancho: empurrao {push:.2f} -> {p:.2f} para ninguem sair do quadro")
+            return p, (x0 + jw / 2.0, y0 + jh / 2.0)
+        p = round(p - 0.02, 3)
+    print(f"[cartao {i:02d}] gancho: sem empurrao que caiba; so' o pop")
+    return 0.0, pronto.foco
+
+
 def _enquadrar(q, zoom, foco, u=0.0, push=None):
     """Recorte do plano; `u` (0..1 no cartao) avanca a camera devagar.
     `push` troca o empurrao padrao: o do gancho e' mais forte e e' SNAP --
@@ -1740,6 +1909,64 @@ def _variacao(c, texto_b):
                  plano="close" if plano != "close" else "medio", tipo_var="close")
         return dict(c, texto=None), b
     return dict(c, texto=None), dict(base, placas=placas, objetos=c.get("objetos"), tipo_var="igual")
+
+
+PECA_REPETE_MAX = 2         # um tipo de placa aparece no maximo isto por video
+_SALTO_ALTERNATIVAS = {"calendario": ("ampulheta", "post_it"), "relogio": ("ampulheta",)}
+_TEXTO_DO_SIMBOLO = {"interrogacao": "?", "exclamacao": "!", "check": "OK", "x": "NAO"}
+
+
+def _variar_pecas(cartoes, falar=print):
+    """POUCA VARIACAO DE PECAS (25/09, dono). A copia `serie_v101` usou 12
+    pecas em 43 cartoes e o CALENDARIO 7 vezes (todo salto de tempo e todo
+    prazo), o "?" duas vezes seguidas. O roteiro escolhe a placa frase a
+    frase e nao ve as outras; aqui o video inteiro e' visto de uma vez: um
+    tipo que ja' saiu `PECA_REPETE_MAX` vezes, ou que repete o cartao
+    anterior, troca pela alternativa menos usada que diz a mesma coisa
+    (`placas.ALTERNATIVAS`: prazo -> ampulheta/post-it, valor -> recibo,
+    veredito -> documento/envelope/alerta, subir -> grafico). Muda o spec no
+    lugar e devolve quantas trocas fez."""
+    uso = {}
+    ultimo = None
+    trocas = 0
+
+    def _escolher(tipo, opcoes):
+        livres = [o for o in opcoes if o in PLACAS.GERADORES and o != ultimo]
+        if not livres:
+            return tipo
+        return min(livres, key=lambda o: (uso.get(o, 0), opcoes.index(o)))
+
+    for i, c in enumerate(cartoes):
+        tipos_aqui = []
+        for pc in c.get("placas") or []:
+            if not isinstance(pc, dict):
+                continue
+            tipo = str(pc.get("tipo") or "cartaz")
+            if uso.get(tipo, 0) >= PECA_REPETE_MAX or tipo == ultimo:
+                novo = _escolher(tipo, PLACAS.ALTERNATIVAS.get(tipo, ()))
+                if novo != tipo:
+                    if not str(pc.get("texto") or "").strip():
+                        pc["texto"] = _TEXTO_DO_SIMBOLO.get(tipo, "")
+                    if str(pc.get("texto") or "").strip() or novo in ("ampulheta", "grafico", "alerta"):
+                        falar(f"[pecas] cartao {i:02d}: {tipo} ja' saiu {uso.get(tipo, 0)}x -> {novo}")
+                        pc["tipo"] = novo
+                        tipo = novo
+                        trocas += 1
+            uso[tipo] = uso.get(tipo, 0) + 1
+            tipos_aqui.append(tipo)
+        if c.get("salto") and not (c.get("atores") or []) and not c.get("placas"):
+            tipo = str(c.get("salto_tipo") or ler_salto(c["salto"])["tipo"])
+            if uso.get(tipo, 0) >= PECA_REPETE_MAX or tipo == ultimo:
+                novo = _escolher(tipo, _SALTO_ALTERNATIVAS.get(tipo, ()))
+                if novo != tipo:
+                    falar(f"[pecas] cartao {i:02d}: salto em {tipo} ja' saiu {uso.get(tipo, 0)}x -> {novo}")
+                    c["salto_tipo"] = novo
+                    tipo = novo
+                    trocas += 1
+            uso[tipo] = uso.get(tipo, 0) + 1
+            tipos_aqui.append(tipo)
+        ultimo = tipos_aqui[-1] if tipos_aqui else None
+    return trocas
 
 
 def desdobrar(cartoes, spec):
@@ -1950,6 +2177,7 @@ def render(pasta_partes, spec, saida, tmpdir=None, amostra=0):
     spec["cartoes"] = cartoes
     GANCHO.garantir(spec)
     cartoes = spec["cartoes"]
+    _variar_pecas(cartoes)
     # O LOOP DO CARTAO: O ULTIMO RECEBE A TELA DO PRIMEIRO (22/09)
     #
     # O cartao nunca teve loop -- `cartao.py` nao tinha a palavra em 94 KB, e
@@ -2223,6 +2451,10 @@ def render(pasta_partes, spec, saida, tmpdir=None, amostra=0):
         no_gancho = (n / float(FPS)) < GANCHO_CAMERA_S and not eh_ultimo
         push_c = GANCHO_PUSH_IN if no_gancho else None
         pop_c = GANCHO_POP_FORCA if no_gancho else None
+        if no_gancho:
+            push_c, foco_g = _push_que_cabe(pronto, push_c, i)
+            if foco_g is not None:
+                pronto.foco = foco_g
         for f in range(nf):
             if segurar and f >= nf - segurar:
                 shutil.copyfile(os.path.join(fd, "00000.png"),
