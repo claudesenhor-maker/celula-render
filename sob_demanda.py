@@ -709,7 +709,7 @@ def _descricao_objeto_en(chave):
                         "a big orange fruit on the sign",
         "caixa_registradora": "a dark green cash register with a drawer "
                               "open and banknotes inside",
-        "documento": "a white paper document with black lines of text and "
+        "documento": "a light cream paper document with black lines of text and "
                      "a red seal",
         "contrato": "a white paper contract with black lines of text and a "
                     "signature line",
@@ -735,6 +735,45 @@ def _descricao_objeto_en(chave):
         "conta": "a long white paper bill with a barcode and a red 'due' stamp",
         "cartao": "a blue plastic credit card",
         "maquininha": "a small black card payment machine with a screen",
+        # OS QUE SAIRAM ERRADOS NO CATALOGO (25/09, folha dos 60 objetos):
+        # a traducao sem contexto fez de `folhas` uma folha de ARVORE (o
+        # video das "400 sheets" do EN mostrou uma folha verde), e o resto
+        # virou talher ou veio com mao. Nome ambiguo se resolve aqui.
+        "folhas": "a tall stack of white paper sheets",
+        "folha": "a single white sheet of paper with printed lines",
+        "papelada": "a tall messy stack of white paper documents",
+        "pilha_de_papel": "a tall stack of white paper sheets",
+        "pilha_de_folhas": "a tall stack of white paper sheets",
+        "chave_de_carro": "a black car key with a grey metal blade",
+        "oculos": "a pair of black-framed eyeglasses",
+        "meia": "a single striped sock",
+        "meias": "a pair of striped socks",
+        "lupa": "a magnifying glass with a round black frame and a light blue lens",
+        "garrafa": "a green glass bottle with a cap",
+        "martelo": "a hammer with a wooden handle and a grey metal head",
+        "fatura": "a long white paper invoice with printed lines and a total",
+        "escova_de_dentes": "one single plastic toothbrush with a thick blue handle and a small head of white bristles",
+        "impressora": "a white office printer with a paper tray",
+        "cubo_magico": "a colourful Rubik's cube",
+        "bilhete_de_onibus": "a small rectangular paper bus ticket",
+        "picole": "a red ice pop on a wooden stick",
+        "sorvete": "an ice cream cone with a pink scoop",
+        "lanche": "a hamburger with lettuce and cheese in a bun",
+        "dinheiro_sujo": "a crumpled stack of green banknotes with brown stains",
+        "maco_de_notas": "a thick stack of green banknotes with a rubber band",
+        "urna_de_voto": "a grey ballot box with a slot on top",
+        "janela": "a small house window with a wooden frame and blue glass",
+        "porta_trancada": "a brown wooden door with a big padlock",
+        "banco_de_praca": "a green wooden park bench with a solid seat and backrest, nothing around it",
+        "recibo_de_cafe": "a small white paper receipt",
+        "documento_imposto": "a white paper tax form with printed boxes",
+        "flores": "a bouquet of red and yellow flowers wrapped in brown paper",
+        "comida": "a plate of rice, beans and a steak",
+        "escada": "a grey metal step ladder",
+        "pacote_de_votos": "a thick bundle of white paper ballots tied with string",
+        "predio_do_governo": "a white government building with columns and a flag",
+        "barraca_de_lanche": "a small street snack stall with a striped awning",
+        "receipt": "a small white paper receipt",
     }
     if chave in d:
         return d[chave]
@@ -886,7 +925,11 @@ def _traduzir_objeto(chave, timeout=60):
             "UMA frase curta (ate 12 palavras) descrevendo COMO DESENHA-LO, "
             "no formato 'a <coisa> <detalhe visual>'. Sem aspas, sem "
             "explicacao, sem texto escrito no desenho. Se for um papel, diga "
-            "que papel e'. Objeto: " + termo)
+            "que papel e'. O objeto aparece numa esquete de humor sobre a "
+            "vida comum (casa, escritorio, loja, banco, rua): se o nome "
+            "tiver dois sentidos, escolha o objeto do dia a dia -- 'folhas' "
+            "sao folhas de PAPEL, 'chave' e' chave de porta, 'conta' e' "
+            "conta a pagar. Objeto: " + termo)
         # `reasoning_effort` E `max_tokens` FOLGADO (23/09): o gpt-oss gasta a
         # saida inteira raciocinando e devolve `content` VAZIO com 200 -- foi
         # o que aconteceu na primeira versao desta funcao, e o objeto continuou
@@ -934,8 +977,14 @@ def prompt_objeto(chave):
         # "with a clear handle" fez de um envelope uma ESPÁTULA, e "the part a
         # hand would hold" desenhou a MÃO segurando -- o modelo desenha o
         # substantivo que aparece, e a negação "no hands" não o apaga.
-        "lying diagonally, from the lower left to the upper right",
+        # SEM DIAGONAL (25/09). "lying diagonally" fazia o gerador desenhar
+        # TALHER: no catalogo de 60 objetos, fatura, garrafa, lupa e
+        # dinheiro_sujo sairam colher/espatula e martelo e lanche, faca. A
+        # coisa certa inteira vale mais que a ponta para a pega.
+        "the whole object fully visible, upright, filling most of the picture",
         "no scenery, no shadow, no ground line",
+        # a `chave_de_carro` veio dentro de um cartao branco (25/09)
+        "no frame, no border, no card or sticker shape around it",
         "no other object next to it, nothing else in the picture",
         # A MAO E O TEXTO (23/09, queixa do dono: *"metade da mao sobrepoe a
         # mao do personagem"*). A arte de `pilha_de_dinheiro` era uma MAO
