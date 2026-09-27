@@ -985,6 +985,12 @@ def prompt_objeto(chave):
         "no scenery, no shadow, no ground line",
         # a `chave_de_carro` veio dentro de um cartao branco (25/09)
         "no frame, no border, no card or sticker shape around it",
+        # NADA BRANCO (25/09). O recorte e' por cor a partir das quinas, e
+        # papel branco sobre fundo branco some: `termo`, `quadro_branco`,
+        # `clipboard`, `carta` e `papel_banimento` falharam no render e os
+        # videos sairam sem o objeto (`assets_pendentes`, 11-24/09).
+        "every surface clearly coloured: paper is light cream or pale yellow, "
+        "never pure white",
         "no other object next to it, nothing else in the picture",
         # A MAO E O TEXTO (23/09, queixa do dono: *"metade da mao sobrepoe a
         # mao do personagem"*). A arte de `pilha_de_dinheiro` era uma MAO
