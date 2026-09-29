@@ -918,9 +918,9 @@ def _traduzir_objeto(chave, timeout=60):
         # faria a producao pular a traducao em silencio -- e' o mesmo defeito
         # calado que a chave do HuggingFace teve, no mesmo arquivo, no mesmo
         # dia. `N8N` ja vive neste modulo e ja e' o que `_pela_esteira` usa.
-        # 27/09: `px-groq` e' so' o nome antigo do webhook -- desde a ordem
-        # "tudo para o sonnet" ele chama o agente da VM (Sonnet, assinatura)
-        url = N8N + "/webhook/px-groq"
+        # `px-traduzir` repassa ao agente da VM (Sonnet, assinatura). Ate'
+        # 29/09 era o `px-groq`, nome que sobrou da Groq (HISTORICO §84).
+        url = N8N + "/webhook/px-traduzir"
         modelo = os.environ.get("MODELO_TRADUCAO") or "claude-sonnet-5"
         pedido = (
             "Traduza para o ingles o nome deste objeto brasileiro e devolva "
