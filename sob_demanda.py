@@ -774,6 +774,11 @@ def _descricao_objeto_en(chave):
         "predio_do_governo": "a white government building with columns and a flag",
         "barraca_de_lanche": "a small street snack stall with a striped awning",
         "receipt": "a small white paper receipt",
+        # 30/09 (§86): era uma sacola de FEIRA com cenouras para fora, e o
+        # vestido EN de 29/09 foi devolvido dentro dela. Neutra serve a loja
+        # e a mercado.
+        "sacola_de_compras": ("a plain light brown paper shopping bag with two twisted paper "
+                              "handles, standing upright, closed and empty, nothing sticking out"),
     }
     if chave in d:
         return d[chave]
