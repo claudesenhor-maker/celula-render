@@ -761,7 +761,11 @@ def entrar_correndo(u, rig, dur, a):
 def apontar(u, rig, dur, a):
     """Aponta e SEGURA. Gesto que volta ao neutro no meio da frase lê
     como tique nervoso; gesto que fica lê como ênfase."""
-    alvo = float(a.get("altura", -8.0))        # -90 = apontando para cima
+    # 30/09 (HISTORICO §87): o padrao era -8 (horizontal, um pouco acima) --
+    # a altura do ROSTO de quem esta ao lado. Nos videos de 30/09 o braco
+    # atravessava a cara do outro (o Pal na vo; o Joao no Pal). 25 abaixo da
+    # horizontal aponta para o peito ou para a coisa e continua lendo apontar.
+    alvo = float(a.get("altura", 25.0))        # -90 = apontando para cima
     k = _suave(min(1.0, u * 3.0))              # sobe rápido, segura o resto
     rig["braco_d"] = [90.0 + (alvo - 90.0) * k, -6.0 * k]
     return {}
