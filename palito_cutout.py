@@ -6370,6 +6370,19 @@ def render(pasta_partes, spec, saida, tmpdir=None, amostra=0):
                     u = t / max(jan, 1e-6)
                     forca = PUNCH_FORCA * (2.0 if _volta_do_flash else 1.0)
                     cam["zoom"] *= 1.0 + forca * (1.0 - u) ** 2
+            # O RITMO DE 2 s (30/09, HISTORICO §87 -- experimento, `spec.ritmo_2s`).
+            # O Analytics mostrou que 80-90% do feed desliza antes de o video
+            # contar (engajadas / views = 11-26%), e a referencia de Shorts de
+            # 2026 e' uma mudanca visual a cada 1,5-2 s. Os cortes daqui caem
+            # entre falas, a cada ~3-4 s. Em trecho de 3 s ou mais, um punch no
+            # MEIO da fala. So' nos videos que o `Montar Spec` marcou (metade),
+            # para a medida decidir.
+            _dur_tr = float(tr.get("dur") or 0)
+            if spec.get("ritmo_2s") and _dur_tr >= 3.0 and i_tr > 0:
+                jan = PUNCH_S / max(_dur_tr, 0.2)
+                if 0.5 <= t < 0.5 + jan:
+                    u = (t - 0.5) / max(jan, 1e-6)
+                    cam["zoom"] *= 1.0 + PUNCH_FORCA * (1.0 - u) ** 2
             # O COLD OPEN (04/09, item 4 do dono do projeto: *"colocar um
             # elemento muito aleatÃ³rio, ou uma primeira cena muito aleatÃ³ria no
             # comeÃ§o pode ser suficiente pra manter alguÃ©m assistindo"*).
