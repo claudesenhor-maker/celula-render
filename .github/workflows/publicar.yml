@@ -1,0 +1,28 @@
+name: publicar-youtube
+
+# O UPLOAD DO CANAL EN SAI DOS EUA (30/09, HISTORICO §87). A VM do n8n fica
+# em Joanesburgo e o YouTube testava cada Short do EN primeiro na Africa do
+# Sul. Os runners do GitHub ficam nos EUA; o `Adapter YouTube` dispara este
+# job (repository_dispatch `publicar`) e espera o id no `resume_url`.
+on:
+  repository_dispatch:
+    types: [publicar]
+
+jobs:
+  publicar:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Dependencias
+        run: pip install --quiet requests
+      - name: Upload
+        env:
+          PAYLOAD:          ${{ toJSON(github.event.client_payload) }}
+          YT_CLIENT_ID:     ${{ secrets.YT2_CLIENT_ID }}
+          YT_CLIENT_SECRET: ${{ secrets.YT2_CLIENT_SECRET }}
+          YT_REFRESH_TOKEN: ${{ secrets.YT2_REFRESH_TOKEN }}
+        run: python publicar_youtube.py
