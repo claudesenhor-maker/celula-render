@@ -194,10 +194,12 @@ CONFIG = {'formato': {'beats_max': 4,
                         'titulo_max_palavras': 8,
                         'tolerancia_dur': 0.3,
                         'tolerancia_dur_acima': 0.1,
-                        'wps': 2.6}}}
+                        'wps': 2.6}},
+ 'quadro': {'altura_alvo_px': 1150, 'max_em_cena': 2}}
 
 FORMATO = CONFIG["formato"]
 FORMATOS = CONFIG["formatos"]
+QUADRO = CONFIG["quadro"]
 ESTILO_PADRAO = "dupla"
 
 
