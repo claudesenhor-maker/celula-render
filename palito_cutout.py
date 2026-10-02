@@ -78,8 +78,10 @@ EXPR_ZERO = EXPR.CATALOGO["neutro"]
 
 W, H, FPS = 1080, 1920, 24
 
-# altura de referencia do personagem no quadro; objetos sao medidos contra ela
-ALTURA_ALVO_PX = 1150
+# altura de referencia do personagem no quadro; objetos sao medidos contra ela.
+# QUADRO vem de lab-celula/config.json > quadro (02/10; eram 5 copias)
+from config_gerado import QUADRO
+ALTURA_ALVO_PX = QUADRO["altura_alvo_px"]
 
 # TAMANHO DE CADA OBJETO, em fraÃ§Ã£o da altura do ator
 # ---------------------------------------------------------------------
@@ -138,7 +140,7 @@ PONTOS_DE_CORTE = (0.50, 0.18, 0.74, 0.34, 0.90, 0.08, 0.62, 0.26,
 # quantos personagens cabem no quadro ao mesmo tempo. Dois Ã© o teto do
 # formato: no 9:16 o terceiro sÃ³ entra encolhendo todo mundo atÃ© a cara
 # sumir, e cara Ã© onde a piada acontece.
-MAX_EM_CENA = 2
+MAX_EM_CENA = QUADRO["max_em_cena"]
 
 
 # =====================================================================
