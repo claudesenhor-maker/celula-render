@@ -144,7 +144,9 @@ def _baixar_para(url, pasta, nome):
         return None
 
 
-MAX_EM_CENA = 2
+# teto do quadro (lei 10): lab-celula/config.json > quadro, via config_gerado (02/10)
+from config_gerado import QUADRO as _QUADRO
+MAX_EM_CENA = _QUADRO["max_em_cena"]
 
 
 def baixar_zip(url, tentativas=4):
