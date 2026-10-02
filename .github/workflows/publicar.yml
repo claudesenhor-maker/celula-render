@@ -1,9 +1,13 @@
 name: publicar-youtube
 
-# O UPLOAD DO CANAL EN SAI DOS EUA (30/09, HISTORICO §87). A VM do n8n fica
-# em Joanesburgo e o YouTube testava cada Short do EN primeiro na Africa do
-# Sul. Os runners do GitHub ficam nos EUA; o `Adapter YouTube` dispara este
-# job (repository_dispatch `publicar`) e espera o id no `resume_url`.
+# O UPLOAD SAI PELO PAIS DO PUBLICO DE CADA CANAL (30/09 EN pelos EUA, HISTORICO
+# §87; 02/10 por canal, §93). A VM do n8n fica em Joanesburgo. O `Adapter
+# YouTube` dispara este job (repository_dispatch `publicar`) com `canal` e
+# `saida` = identidade_json.publicacao.saida, e espera o id no `resume_url`.
+#   canal     escolhe os segredos YT<canal>_CLIENT_ID/_SECRET/_REFRESH_TOKEN
+#   saida.metodo  direto (o runner, EUA) | wireguard (segredo = config wg-quick)
+#                 | proxy (segredo = URL http:// ou socks5h://)
+# O `publicar_youtube.py` confere o pais da saida antes de subir.
 on:
   repository_dispatch:
     types: [publicar]
@@ -12,17 +16,35 @@ jobs:
   publicar:
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    env:
+      CANAL: ${{ github.event.client_payload.canal || '2' }}
+      METODO: ${{ github.event.client_payload.saida.metodo || 'direto' }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
           python-version: '3.11'
       - name: Dependencias
-        run: pip install --quiet requests
+        run: pip install --quiet "requests[socks]"
+      - name: Tunel WireGuard
+        if: ${{ github.event.client_payload.saida.metodo == 'wireguard' }}
+        env:
+          WG_CONF: ${{ secrets[github.event.client_payload.saida.segredo] }}
+        run: |
+          set -e
+          if [ -z "$WG_CONF" ]; then echo "segredo do tunel vazio"; exit 0; fi
+          sudo apt-get -qq update >/dev/null && sudo apt-get -qq install -y wireguard-tools openresolv >/dev/null
+          printf '%s\n' "$WG_CONF" | sudo tee /etc/wireguard/wg0.conf >/dev/null
+          sudo chmod 600 /etc/wireguard/wg0.conf
+          sudo wg-quick up wg0 || echo "tunel nao subiu; o publicar_youtube.py confere o pais"
       - name: Upload
         env:
           PAYLOAD:          ${{ toJSON(github.event.client_payload) }}
-          YT_CLIENT_ID:     ${{ secrets.YT2_CLIENT_ID }}
-          YT_CLIENT_SECRET: ${{ secrets.YT2_CLIENT_SECRET }}
-          YT_REFRESH_TOKEN: ${{ secrets.YT2_REFRESH_TOKEN }}
+          YT_CLIENT_ID:     ${{ secrets[format('YT{0}_CLIENT_ID', github.event.client_payload.canal || '2')] }}
+          YT_CLIENT_SECRET: ${{ secrets[format('YT{0}_CLIENT_SECRET', github.event.client_payload.canal || '2')] }}
+          YT_REFRESH_TOKEN: ${{ secrets[format('YT{0}_REFRESH_TOKEN', github.event.client_payload.canal || '2')] }}
+          PROXY_URL:        ${{ github.event.client_payload.saida.metodo == 'proxy' && secrets[github.event.client_payload.saida.segredo] || '' }}
         run: python publicar_youtube.py
+      - name: Fechar tunel
+        if: ${{ always() && github.event.client_payload.saida.metodo == 'wireguard' }}
+        run: sudo wg-quick down wg0 || true
