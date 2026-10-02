@@ -87,7 +87,8 @@ PARTES_MINIMAS = PARTES_ESSENCIAIS
 # Altura do personagem no quadro de 1080x1920. 1150px ~= 60% da altura:
 # corpo inteiro visivel com folga em cima e embaixo para o personagem
 # pular e agachar sem sair do quadro.
-ALTURA_ALVO_PX = 1150
+from config_gerado import QUADRO   # lab-celula/config.json > quadro (02/10)
+ALTURA_ALVO_PX = QUADRO["altura_alvo_px"]
 
 
 def listar(prefixo):
