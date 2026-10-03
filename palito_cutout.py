@@ -3562,13 +3562,49 @@ def montar_frame(camada, cenario, cam, quadril_x=W / 2, camadas=None,
     # push-in de 3,5% chega a 1,345), entÃ£o o foco nÃ£o pisca no meio de uma
     # fala. Quem mexer no ciclo de planos precisa refazer esta conta.
     borrar = z >= 1.35
+    janela = _janela_do_plano(z, centro_x, camada_alvo, terco, nucleo, nucleo_lat, cam)
+    # NADA FLUTUA NA BORDA (02/10, HISTORICO §95; Pix de 28/09, 16-26 s). Num
+    # plano fechado com os dois na composicao, quem tem o NUCLEO inteiro fora
+    # da janela so' deixaria entrar a ponta de um gesto: um braco sem dono
+    # cruzando a borda. Esse ator sai do composto deste frame. Corpo cortado
+    # pela borda continua (e' o corte do close); so' some quem nao tem corpo
+    # nenhum na tela. A janela nao depende do composto -- so' do nucleo de
+    # quem e' enquadrado --, por isso ela e' calculada antes.
+    if janela is not None and camadas and len(camadas) > 1:
+        x0j, x1j = janela[0], janela[0] + janela[2]
+        vivas = []
+        for c in camadas:
+            if c is camada_alvo:
+                vivas.append(c)
+                continue
+            nb = caixa_do_nucleo(c)
+            if nb and (nb[2] <= x0j or nb[0] >= x1j):
+                continue
+            vivas.append(c)
+        if len(vivas) < len(camadas):
+            camada = Image.new("RGBA", (W, H), (0, 0, 0, 0))
+            for c in vivas:
+                camada.alpha_composite(c)
+            camadas = vivas
     quadro = cenario.quadro(cam.get("fundo_dx", 0.0), borrado=borrar).convert("RGBA")
     if cam.get("chao_y"):
         for c in (camadas or [camada]):
             _sombra_de_contato(quadro, c, float(cam["chao_y"]))
     quadro.alpha_composite(camada)
     quadro = quadro.convert("RGB")
+    if janela is not None:
+        x0, y0, lw, lh = janela
+        # ampliacao: BILINEAR, senao o zoom desenha um fio branco em volta
+        # de cada traco preto do quadro (ver _reamostrar)
+        quadro = _reamostrar(
+            quadro.crop((int(x0), int(y0), int(x0 + lw), int(y0 + lh))), (W, H))
+    return quadro
 
+
+def _janela_do_plano(z, centro_x, camada_alvo, terco, nucleo, nucleo_lat, cam):
+    """A janela de recorte (x0, y0, largura, altura) do plano `z`, ou None sem
+    zoom. Separada do `montar_frame` em 02/10 para ser calculada ANTES do
+    composto (ver "nada flutua na borda"); a conta e' a mesma de antes."""
     if abs(z - 1.0) > 0.002:
         lw, lh = W / z, H / z
         # ONDE A CÃ‚MERA CENTRA NA HORIZONTAL. Era o meio do quadro, sempre,
@@ -3649,11 +3685,8 @@ def montar_frame(camada, cenario, cam, quadril_x=W / 2, camadas=None,
             cy = min(cy, bba[1] - 0.03 * lh + lh / 2)
         x0 = min(max(cx - lw / 2, 0), W - lw)
         y0 = min(max(cy - lh / 2, 0), H - lh)
-        # ampliaÃ§Ã£o: BILINEAR, senÃ£o o zoom desenha um fio branco em volta
-        # de cada traÃ§o preto do quadro (ver _reamostrar)
-        quadro = _reamostrar(
-            quadro.crop((int(x0), int(y0), int(x0 + lw), int(y0 + lh))), (W, H))
-    return quadro
+        return (x0, y0, lw, lh)
+    return None
 
 
 # O CLOSE EM QUEM FALA (31/08, volta 6 do ciclo de vÃ­deo).
