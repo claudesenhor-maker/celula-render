@@ -763,6 +763,66 @@ def titulo_da_esquete(falas, max_palavras=9):
     return " ".join(palavras).strip(".,!?;: ")
 
 
+class RotuloFalante:
+    """QUEM E' QUEM, ESCRITO (03/10, HISTORICO §98).
+
+    A avaliacao do dono ("fica muita coisa subentendida") e o ouvinte cego
+    apontaram a mesma deducao em quase todo video: a relacao entre os dois
+    ("o espectador teve de supor que sao neto e avo"). Dizer isso numa fala
+    custa palavras que a estrutura padrao nao tem; escrever custa zero. Na
+    PRIMEIRA fala de cada personagem, uma etiqueta de papel com o papel dele
+    ("A AVO", "O NETO") sobe logo acima da legenda -- a convencao de legenda
+    com falante, no mesmo material do cartaz do titulo.
+
+    `janelas`: lista de (inicio_s, fim_s, texto)."""
+
+    SEGUNDOS = 2.4
+
+    def __init__(self, largura, altura, janelas, y_rel=None):
+        self.W, self.H = largura, altura
+        self.janelas = [(float(a), float(b), str(t).strip().upper()) for a, b, t in janelas if str(t).strip()]
+        self.tam = int(altura * 0.030)
+        self.fonte = _fonte_titulo(self.tam)
+        self.y = altura * (float(y_rel) if y_rel else Y_RELATIVO) - altura * 0.075
+        self._cache = {}
+
+    def _etiqueta(self, texto):
+        e = self._cache.get(texto)
+        if e is not None:
+            return e
+        texto = so_ascii_tipografico(texto)
+        larg = int(self.fonte.getlength(texto)) + self.tam
+        alt = int(self.tam * 1.45)
+        img = Image.new("RGBA", (larg + 8, alt + 8), (0, 0, 0, 0))
+        d = ImageDraw.Draw(img)
+        d.rounded_rectangle([4, 4, 4 + larg, 4 + alt], radius=max(3, self.tam // 5),
+                            fill=TITULO_PAPEL, outline=TITULO_CONTORNO, width=max(2, self.tam // 9))
+        d.text((4 + self.tam // 2, 4 + int(self.tam * 0.18)), texto, font=self.fonte, fill=TITULO_TINTA)
+        e = img.rotate(TITULO_INCLINACAO / 2, resample=Image.BICUBIC, expand=True)
+        self._cache[texto] = e
+        return e
+
+    def desenhar(self, quadro, t):
+        for a, b, texto in self.janelas:
+            if a <= t <= b:
+                et = self._etiqueta(texto)
+                # entra em pop curto, como o cartaz (lei 76)
+                u = min(1.0, (t - a) / TITULO_ENTRADA_S) if TITULO_ENTRADA_S > 0 else 1.0
+                if u < 1.0:
+                    esc = 0.85 + 0.15 * u
+                    et = et.resize((max(1, int(et.width * esc)), max(1, int(et.height * esc))), Image.BILINEAR)
+                px = int(self.W / 2 - et.width / 2)
+                py = int(self.y - et.height / 2)
+                rx0, ry0 = max(0, px), max(0, py)
+                rx1, ry1 = min(self.W, px + et.width), min(self.H, py + et.height)
+                if rx1 > rx0 and ry1 > ry0:
+                    fundo = quadro.crop((rx0, ry0, rx1, ry1)).convert("RGBA")
+                    pedaco = et.crop((rx0 - px, ry0 - py, rx1 - px, ry1 - py))
+                    quadro.paste(Image.alpha_composite(fundo, pedaco).convert(quadro.mode), (rx0, ry0))
+                break
+        return quadro
+
+
 class Legenda:
     """Pre-monta os blocos e desenha o que estiver no ar em cada instante.
 
