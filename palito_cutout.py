@@ -5658,6 +5658,25 @@ def render(pasta_partes, spec, saida, tmpdir=None, amostra=0):
         print(f"[legenda] {len(leg.blocos)} blocos"
               + ("" if any(marcas_por_trecho) else " (sem WordBoundary: tempo repartido)"))
 
+    # QUEM E' QUEM (03/10, §98): na primeira fala de cada um, o papel escrito
+    # acima da legenda (ver `legendas.RotuloFalante`). `spec.rotulos` = {ator: "A AVO"}.
+    rotulo = None
+    _rotulos = spec.get("rotulos") or {}
+    if isinstance(_rotulos, dict) and _rotulos:
+        from legendas import RotuloFalante
+        janelas, vistos = [], set()
+        for tr in spec["trechos"]:
+            ator = tr.get("ator")
+            if not ator or ator in vistos or not _rotulos.get(ator):
+                continue
+            vistos.add(ator)
+            ini = float(tr.get("_inicio_s") or 0.0)
+            fim = ini + min(RotuloFalante.SEGUNDOS, max(1.0, float(tr.get("_dur_voz") or RotuloFalante.SEGUNDOS)))
+            janelas.append((ini, fim, _rotulos[ator]))
+        if janelas:
+            rotulo = RotuloFalante(W, H, janelas, y_rel=spec.get("legenda_y"))
+            print("[rotulo] " + "; ".join(f"{t} em {a:.1f}s" for a, _, t in janelas))
+
     # (a altura do ator e a linha dos pÃ©s jÃ¡ foram medidas lÃ¡ em cima, no
     # carregamento: o tamanho dos objetos depende delas)
 
@@ -6541,6 +6560,8 @@ def render(pasta_partes, spec, saida, tmpdir=None, amostra=0):
             # coexistir, e o de baixo Ã© o que acompanha a boca.
             if titulo is not None:
                 titulo.desenhar(quadro, n / float(FPS))
+            if rotulo is not None:
+                rotulo.desenhar(quadro, n / float(FPS))
             if leg is not None:
                 # por cima de tudo, e no tempo GLOBAL: o Ã­ndice do frame Ã©
                 # contÃ­nuo entre trechos, entÃ£o n/FPS Ã© o relÃ³gio do vÃ­deo
