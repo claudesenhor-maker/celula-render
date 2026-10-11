@@ -5468,6 +5468,31 @@ def render(pasta_partes, spec, saida, tmpdir=None, amostra=0):
     # a Ãºltima prosÃ³dia de CADA perfil de voz, para a rampa do item 7
     prosodia_ant = {}
     n_trechos = len(spec["trechos"])
+    # VOZ DIRIGIDA (11/10, HISTORICO §102): o dialogo inteiro numa chamada,
+    # cortado por fala -- a emenda de falas gravadas separadas se ouvia. So'
+    # quando TODA fala tem voz da ElevenLabs; senao (ou se a API falhar) segue
+    # fala por fala, com `tr["fala"]`, que nunca tem tag.
+    dialogo = None
+    try:
+        from palito_v5 import sintetizar_dialogo, mesma_fala
+        from config_gerado import FORMATO as _FMT
+        _vd = dict(_FMT.get("voz_dirigida") or {})
+        _modo = spec.get("modo_tts", os.environ.get("MODO_TTS", "real"))
+        if _vd.get("ativo") and _modo == "real" and spec.get("voz_dirigida", True):
+            _vd["language_code"] = str(spec.get("idioma") or "")[:2].lower()
+            _itens = []
+            for tr in spec["trechos"]:
+                _cfg = spec.get("vozes", {}).get(tr.get("perfil_voz") or tr.get("ator") or "narrador", {})
+                _dir = tr.get("fala_dirigida") or tr["fala"]
+                if not mesma_fala(_dir, tr["fala"]):            # a dirigida tem de ser a MESMA fala
+                    print(f"[voz] fala_dirigida difere da fala no trecho {len(_itens)}; usando a fala")
+                    _dir = tr["fala"]
+                _itens.append({"texto": _dir, "voice_id": _cfg.get("eleven_voice_id")
+                               if (_cfg.get("motor") or "").lower() in ("eleven", "elevenlabs") else None})
+            dialogo = sintetizar_dialogo(_itens, tmp, _vd)
+    except Exception as e:                                    # noqa: BLE001
+        print(f"[voz] dialogo falhou ({type(e).__name__}: {e}); fala por fala")
+        dialogo = None
     for i, tr in enumerate(spec["trechos"]):
         wav = os.path.join(tmp, f"v{i:02d}.wav")
         perfil = tr.get("perfil_voz") or tr.get("ator") or "narrador"
@@ -5488,11 +5513,16 @@ def render(pasta_partes, spec, saida, tmpdir=None, amostra=0):
                 cfg[k] = tr[k]
         # as MARCAS de palavra deixam de ser descartadas: sao elas que dao
         # o tempo exato de cada palavra para a legenda (ver legendas.py)
-        marcas, dur = sintetizar(tr["fala"], cfg, wav,
-                                 spec.get("modo_tts", os.environ.get("MODO_TTS", "real")))
+        if dialogo:
+            wav, marcas, dur = dialogo[i]
+        else:
+            marcas, dur = sintetizar(tr["fala"], cfg, wav,
+                                     spec.get("modo_tts", os.environ.get("MODO_TTS", "real")))
         # pausa depois da fala: a longa Ã© a que separa a montagem da piada
         # da piada (expressao.respiro_sugerido)
-        respiro = float(tr.get("respiro_s", EXPR.respiro_sugerido(i, n_trechos)))
+        # no dialogo a pausa natural ja esta no corte: respiro artificial
+        # reintroduziria a emenda que ele existe para tirar
+        respiro = 0.0 if dialogo else float(tr.get("respiro_s", EXPR.respiro_sugerido(i, n_trechos)))
         tr["dur"] = dur + respiro
         tr["_inicio_s"] = total          # tempo global em que este trecho comeÃ§a
         tr["_dur_voz"] = dur             # sem o respiro: Ã© o que tem som
