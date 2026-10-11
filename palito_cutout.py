@@ -1918,6 +1918,8 @@ class Personagem:
                  round(float(ex.get("olho_sx", 1.0)), 2),
                  round(float(ex.get("olho_sy", 1.0)), 2),
                  round(float(ex.get("olho_dy", 0.0)), 3),
+                 round(float(ex.get("olhar_dx", 0.0)), 1),
+                 round(float(ex.get("olhar_dy", 0.0)), 1),
                  bool(piscando))
         if chave in self._cache_cara:
             return self._cache_cara[chave], base_piv
@@ -1949,6 +1951,11 @@ class Personagem:
                     d.line([(1, im.height // 2), (im.width - 2, im.height // 2)],
                            fill=_cor_da_casca(spr["img"]) + (255,), width=esp)
                 else:
+                    # o OLHAR antes da escala: a pupila anda dentro da arte
+                    # original, e a escala da emocao vem depois (§104)
+                    ox, oy = float(ex.get("olhar_dx", 0.0)), float(ex.get("olhar_dy", 0.0))
+                    if abs(ox) > 0.05 or abs(oy) > 0.05:
+                        im = _mover_pupila(im, ox, oy)
                     sx, sy = float(ex.get("olho_sx", 1.0)), float(ex.get("olho_sy", 1.0))
                     if abs(sx - 1) > 0.02 or abs(sy - 1) > 0.02:
                         im = _reamostrar(im, (max(2, int(im.width * sx)),
@@ -5326,6 +5333,59 @@ def _dx_de_aproximacao(nome, chave, outro, posto):
     return round(x - x_eu, 1)
 
 
+_CACHE_PUPILA = {}
+
+
+def _mover_pupila(im, fx, fy):
+    """O OLHAR (11/10, HISTORICO §104, dono: "mais expressoes faciais, para
+    melhorar a comunicacao com o terceiro"). A peca do olho e' um desenho so'
+    (esclera, pupila e contorno); aqui a pupila -- os pixels escuros do MIOLO,
+    longe do contorno -- sai do lugar e anda `fx`/`fy` (fracao de -1 a 1 do
+    quanto cabe) dentro da esclera. Nada e' desenhado: o branco que cobre o
+    lugar antigo e' o da propria esclera, e a pupila e' a mesma, deslocada.
+    Olho sem miolo claro (pupila nao separavel) volta como veio."""
+    chave = (id(im), round(fx, 1), round(fy, 1))
+    if chave in _CACHE_PUPILA:
+        return _CACHE_PUPILA[chave]
+    a = np.asarray(im.convert("RGBA")).copy()
+    alfa = a[..., 3] > 128
+    h, w = alfa.shape
+    if h < 8 or w < 8 or not alfa.any():
+        return im
+    # o miolo: o olho encolhido pelo contorno (~14% do lado menor)
+    borda = max(2, int(min(h, w) * 0.14))
+    miolo = np.asarray(Image.fromarray((alfa * 255).astype(np.uint8))
+                       .filter(ImageFilter.MinFilter(borda * 2 + 1))) > 128
+    luma = a[..., :3].astype(np.float32) @ np.array([0.299, 0.587, 0.114], np.float32)
+    # a pupila COM a borda suavizada (o anti-alias entre 125 e 185 ficava como
+    # um anel fantasma no lugar antigo)
+    pupila = miolo & (luma < 185)
+    esclera = miolo & (luma > 200)
+    if pupila.sum() < 4 or esclera.sum() < pupila.sum():
+        _CACHE_PUPILA[chave] = im
+        return im
+    branco = np.median(a[esclera][:, :3], axis=0).astype(np.uint8)
+    ys, xs = np.nonzero(pupila)
+    # quanto cabe: da borda da pupila ate' a borda do miolo, em cada eixo
+    myx = np.nonzero(miolo)
+    folga_x = max(0, min(xs.min() - myx[1].min(), myx[1].max() - xs.max()))
+    folga_y = max(0, min(ys.min() - myx[0].min(), myx[0].max() - ys.max()))
+    dx = int(round(max(-1.0, min(1.0, fx)) * folga_x))
+    dy = int(round(max(-1.0, min(1.0, fy)) * folga_y))
+    if dx == 0 and dy == 0:
+        _CACHE_PUPILA[chave] = im
+        return im
+    cores = a[ys, xs].copy()
+    a[pupila, :3] = branco
+    ny, nx = ys + dy, xs + dx
+    ok = (ny >= 0) & (ny < h) & (nx >= 0) & (nx < w)
+    ok &= miolo[np.clip(ny, 0, h - 1), np.clip(nx, 0, w - 1)]
+    a[ny[ok], nx[ok]] = cores[ok]
+    saida = Image.fromarray(a, "RGBA")
+    _CACHE_PUPILA[chave] = saida
+    return saida
+
+
 def _folha(colhidos, saida, larg=300):
     """Os quadros da amostra numa grade, com o segundo de cada um."""
     if not colhidos:
@@ -6126,6 +6186,23 @@ def render(pasta_partes, spec, saida, tmpdir=None, amostra=0):
                     else:
                         cara = EXPR.obter(tr.get("expressao_ouvinte") or "neutro",
                                           EXPR.REACAO_INTENSIDADE)
+                # O OLHAR (11/10, HISTORICO §104 -- "comunicacao com o
+                # terceiro"): quem escuta olha para quem fala e quem fala olha
+                # para o outro; no close, quem fala olha para a CAMERA (fala
+                # com quem assiste); no fim do remate, quem escuta olha para a
+                # camera -- a "olhada para o publico" que divide a piada com o
+                # espectador. O olhar proprio da expressao (pensando para
+                # cima, triste para baixo) ganha no eixo dele.
+                _outros = [c for c in chaves if c != chave]
+                if not _outros or (chave == quem_fala and str(tr.get("enquadramento") or "").startswith("close")):
+                    _olhar = 0.0
+                elif i_tr == n_trechos - 1 and chave != quem_fala and t > 0.55:
+                    _olhar = 0.0
+                else:
+                    _alvo = quem_fala if (quem_fala and quem_fala != chave and quem_fala in posto) else _outros[0]
+                    _olhar = 0.7 if posto[_alvo][1] > posto[chave][1] else -0.7
+                if abs(float(cara.get("olhar_dx", 0.0))) < 0.05:
+                    cara = dict(cara, olhar_dx=_olhar)
                 pisca = EXPR.piscando(n, FPS, semente=chaves.index(chave),
                                       expr_nome=tr.get("expressao", "neutro")
                                       if chave == quem_fala else "neutro")
