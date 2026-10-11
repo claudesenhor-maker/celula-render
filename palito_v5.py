@@ -26,6 +26,7 @@ Uso:
 """
 import argparse, asyncio, json, math, os, subprocess, sys, tempfile, wave
 import struct, random
+import base64, re, urllib.error, urllib.request
 # cairosvg e importado DENTRO de render_spec, nao aqui: ele exige libcairo
 # do sistema, e palito_cutout importa deste modulo `sintetizar` e `envelope`
 # -- duas funcoes de audio que nao tem nada com SVG. Com o import no topo,
@@ -764,6 +765,119 @@ def sintetizar(texto, cfg, destino, modo):
             raise RuntimeError(f"TTS devolveu audio vazio para: {texto[:40]!r}")
         return marcas, dur
     return _demo(texto, cfg, destino)
+
+
+# A VOZ DIRIGIDA (11/10, HISTORICO §102). Ordem do dono depois de ouvir
+# `lab/voz_emocao`: o eleven_v4 com audio tags ("[sarcastic] Paga com que?")
+# tem a expressao certa, e a emenda entre falas gravadas SEPARADAS se ouve --
+# cada clipe acaba no seu proprio silencio e o ouvido pega o corte. O dialogo
+# inteiro sai numa chamada so' (/text-to-dialogue/with-timestamps) e e'
+# cortado nos `voice_segments`: os trechos, a camera e a legenda continuam por
+# fala, e o som emendado de volta e' o mesmo arquivo continuo.
+TAG_RE = re.compile(r"\[[^\]\[]{1,40}\]")
+
+
+def sem_tags(texto):
+    """A fala que vai na legenda e na aderencia: sem tag, espacos como antes."""
+    return re.sub(r"\s+", " ", TAG_RE.sub(" ", texto or "")).strip()
+
+
+def mesma_fala(a, b):
+    """`a` e `b` sao a mesma fala tirando tags, acento, caixa e pontuacao -- a
+    mesma regra do `Montar Spec` (ele acentua a fala; a dirigida vem do contrato)."""
+    import unicodedata
+
+    def n(t):
+        t = unicodedata.normalize("NFKD", sem_tags(t).lower())
+        t = "".join(ch for ch in t if not unicodedata.combining(ch))
+        return re.sub(r"[^a-z0-9]+", " ", t).split()
+    return n(a) == n(b)
+
+
+def _alinhamento_sem_tags(chars, ini, fim):
+    """Tira do alinhamento os caracteres de dentro de `[...]` (a tag vem no
+    texto alinhado e entraria na legenda como palavra)."""
+    out_c, out_i, out_f, dentro = [], [], [], False
+    for c, a, b in zip(chars, ini, fim):
+        if c == "[":
+            dentro = True
+            continue
+        if dentro:
+            if c == "]":
+                dentro = False
+            continue
+        out_c.append(c); out_i.append(a); out_f.append(b)
+    return out_c, out_i, out_f
+
+
+def sintetizar_dialogo(itens, tmp, vd):
+    """O dialogo inteiro numa chamada; devolve [(wav, marcas, dur)] por fala,
+    ou None (o chamador cai no caminho fala por fala, sem as tags).
+
+    `itens` = [{"texto": fala com tags, "voice_id": ...}]; `vd` =
+    `config formato.voz_dirigida`. Mesmas guardas de `sintetizar`: voz paga so'
+    em PRODUCAO, contas na ordem de `_chaves_eleven`."""
+    if os.environ.get("PRODUCAO") != "1":
+        print("[voz] dialogo: render de TESTE, a voz paga fica de fora")
+        return None
+    chaves = _chaves_eleven()
+    if not chaves or not itens or any(not it.get("voice_id") for it in itens):
+        print("[voz] dialogo: falta chave ou voice_id; fala por fala")
+        return None
+    if sum(len(it["texto"]) for it in itens) > int(vd.get("max_chars", 2000)):
+        print("[voz] dialogo: texto acima do teto da API; fala por fala")
+        return None
+    corpo = json.dumps({"inputs": [{"text": it["texto"], "voice_id": it["voice_id"]} for it in itens],
+                        "model_id": vd.get("modelo", "eleven_v4"),
+                        "language_code": (vd.get("language_code") or "").strip() or None,
+                        "settings": {"stability": float(vd.get("stability", 0.5))}}).encode()
+    resp = None
+    for i, ch in enumerate(chaves, 1):
+        req = urllib.request.Request("https://api.elevenlabs.io/v1/text-to-dialogue/with-timestamps",
+                                     data=corpo, method="POST",
+                                     headers={"xi-api-key": ch, "Content-Type": "application/json"})
+        try:
+            with urllib.request.urlopen(req, timeout=300) as r:
+                resp = json.loads(r.read().decode())
+            break
+        except urllib.error.HTTPError as e:
+            print(f"[voz] dialogo: conta {i} recusou (HTTP {e.code}: {e.read().decode('utf-8', 'replace')[:200]})")
+        except Exception as e:                                 # noqa: BLE001
+            print(f"[voz] dialogo: conta {i} falhou ({e})")
+    if not resp or not resp.get("audio_base64"):
+        return None
+    segs = sorted(resp.get("voice_segments") or [], key=lambda s: s.get("start_time_seconds", 0))
+    if [s.get("dialogue_input_index") for s in segs] != list(range(len(itens))):
+        print(f"[voz] dialogo: {len(segs)} segmentos para {len(itens)} falas (fora de ordem ou faltando); fala por fala")
+        return None
+    mp3 = os.path.join(tmp, "dialogo.mp3")
+    wav_todo = os.path.join(tmp, "dialogo.wav")
+    with open(mp3, "wb") as f:
+        f.write(base64.b64decode(resp["audio_base64"]))
+    subprocess.run(["ffmpeg", "-y", "-v", "error", "-i", mp3, "-ar", str(SR), "-ac", "1", wav_todo], check=True)
+    with wave.open(wav_todo) as w:
+        quadros = w.readframes(w.getnframes())
+        total_s = w.getnframes() / float(SR)
+    al = resp.get("alignment") or {}
+    c, a, b = _alinhamento_sem_tags(al.get("characters") or [], al.get("character_start_times_seconds") or [],
+                                    al.get("character_end_times_seconds") or [])
+    palavras = _palavras_do_alinhamento("", c, a, b)
+    # o corte: do inicio de um segmento ao inicio do seguinte (a pausa natural
+    # entre as falas fica no fim da fala de antes); a ultima vai ate o fim
+    cortes = [0.0] + [float(s["start_time_seconds"]) for s in segs[1:]] + [total_s]
+    saida = []
+    for k in range(len(itens)):
+        t0, t1 = cortes[k], max(cortes[k + 1], cortes[k] + 0.05)
+        wav = os.path.join(tmp, f"dlg{k:02d}.wav")
+        with wave.open(wav, "w") as w:
+            w.setnchannels(1); w.setsampwidth(2); w.setframerate(SR)
+            w.writeframes(quadros[int(round(t0 * SR)) * 2:int(round(t1 * SR)) * 2])
+        marcas = [dict(m, inicio_s=max(0.0, m["inicio_s"] - t0), fim_s=max(0.0, m["fim_s"] - t0))
+                  for m in palavras if t0 - 0.01 <= m["inicio_s"] < t1]
+        saida.append((wav, marcas, t1 - t0))
+    USOU_MOTOR["usou_eleven_dialogo"] = USOU_MOTOR.get("usou_eleven_dialogo", 0) + len(itens)
+    print(f"[voz] dialogo {vd.get('modelo')}: {len(itens)} falas, {total_s:.1f}s, {len(palavras)} palavras alinhadas")
+    return saida
 
 
 # =====================================================================
