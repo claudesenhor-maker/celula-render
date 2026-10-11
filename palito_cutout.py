@@ -5520,6 +5520,22 @@ def render(pasta_partes, spec, saida, tmpdir=None, amostra=0):
                                      spec.get("modo_tts", os.environ.get("MODO_TTS", "real")))
         # pausa depois da fala: a longa Ã© a que separa a montagem da piada
         # da piada (expressao.respiro_sugerido)
+        # A CARA SEGUE A VOZ (11/10, HISTORICO §104): as tags da fala dirigida
+        # dao a cara de quem fala (trocando NA PALAVRA em que cada tag cai, pelas
+        # marcas da voz) e a reacao de quem escuta. So' completa o que o spec
+        # nao cravou: expressao do trecho diferente de neutro fica.
+        if tr.get("fala_dirigida"):
+            try:
+                _base, _jan, _reacao = EXPR.da_fala_dirigida(tr["fala_dirigida"], marcas, dur)
+                if _base and (tr.get("expressao") or "neutro") == "neutro":
+                    tr["expressao"] = _base[0]
+                    tr.setdefault("intensidade", _base[1])
+                if _jan:
+                    tr["expressoes"] = list(tr.get("expressoes") or []) + _jan
+                if _reacao:
+                    tr.setdefault("expressao_ouvinte", _reacao)
+            except Exception as e:                            # noqa: BLE001
+                print(f"[rosto] tags da fala {i} nao lidas ({e}); fica a cara do spec")
         # no dialogo a pausa natural ja esta no corte: respiro artificial
         # reintroduziria a emenda que ele existe para tirar
         respiro = 0.0 if dialogo else float(tr.get("respiro_s", EXPR.respiro_sugerido(i, n_trechos)))
@@ -6103,7 +6119,13 @@ def render(pasta_partes, spec, saida, tmpdir=None, amostra=0):
                     # estatico" por outro caminho
                     cara = EXPR.obter(tr.get("expressao", "neutro"))
                 else:
-                    cara = EXPR.obter(tr.get("expressao_" + chave, "neutro"))
+                    # quem escuta: a reacao do ator, se o spec der; senao a
+                    # reacao ao tom de quem fala (voz dirigida, §104)
+                    if tr.get("expressao_" + chave):
+                        cara = EXPR.obter(tr["expressao_" + chave])
+                    else:
+                        cara = EXPR.obter(tr.get("expressao_ouvinte") or "neutro",
+                                          EXPR.REACAO_INTENSIDADE)
                 pisca = EXPR.piscando(n, FPS, semente=chaves.index(chave),
                                       expr_nome=tr.get("expressao", "neutro")
                                       if chave == quem_fala else "neutro")
