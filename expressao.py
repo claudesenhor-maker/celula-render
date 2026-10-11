@@ -121,8 +121,13 @@ _PARTEM_DE_UM = ("olho_sx", "olho_sy")
 #
 # O tamanho da boca ABERTA foi tratado onde ele mora: `BOCA_ABERTURA_MAX` em
 # `palito_cutout`, que caiu de 0,55 para 0,30 da largura.
-_ARTE_DO_DESENHISTA = ("sobrancelha_dy", "sobrancelha_rot",
-                       "olho_sx", "olho_sy", "olho_dy", "cabeca_rot")
+# 11/10 (HISTORICO §104, dono: "as expressoes faciais precisam evoluir, para
+# acompanhar a evolucao da voz, deixando tudo mais expressivo"): GIRAR uma peca
+# nao deforma a arte -- a sobrancelha girada e a cabeca inclinada continuam
+# sendo o desenho do desenhista. O que deforma e' ESTICAR (escala do olho) e
+# EMPURRAR para fora do lugar (a sobrancelha que subia para o cabelo). So'
+# esses continuam amortecidos; `sobrancelha_rot` e `cabeca_rot` saem inteiros.
+_ARTE_DO_DESENHISTA = ("sobrancelha_dy", "olho_sx", "olho_sy", "olho_dy")
 
 
 def _e(**kw):
@@ -186,7 +191,111 @@ CATALOGO = {
     "desdem":     _e(sobrancelha_dy=-0.025, sobrancelha_rot=5.0,
                      olho_sy=0.78, mandibula_dx=0.016, cabeca_rot=-4.0,
                      boca_curva=0.35),
+
+    # 11/10 (§104): as caras que a VOZ DIRIGIDA pede e o catalogo nao tinha
+    # (ver DA_TAG). Sarcasmo e' o desdem com a sobrancelha de quem duvida.
+    "sarcastico": _e(sobrancelha_dy=-0.035, sobrancelha_rot=10.0,
+                     olho_sy=0.80, mandibula_dx=0.018, cabeca_rot=-6.0,
+                     boca_curva=0.30),
+    # riso: olho fechando de baixo para cima, boca aberta e curva
+    "rindo":      _e(sobrancelha_dy=-0.020, sobrancelha_rot=-5.0,
+                     olho_sy=0.70, cabeca_rot=7.0, boca_min=0.30,
+                     boca_curva=1.0),
+    # nervoso de quem foi pego: olho aberto, ponta interna da sobrancelha em
+    # cima (aflicao), boca torta para baixo
+    "ansioso":    _e(sobrancelha_dy=-0.040, sobrancelha_rot=-12.0,
+                     olho_sx=1.08, olho_sy=1.10, mandibula_dx=0.010,
+                     cabeca_rot=-3.0, boca_min=0.08, boca_curva=-0.35),
+    # o sorriso amarelo: sobrancelha de suplica, cabeca de lado, boca quase reta
+    "sem_graca":  _e(sobrancelha_dy=-0.010, sobrancelha_rot=-10.0,
+                     olho_sy=0.86, olho_dy=0.006, cabeca_rot=7.0,
+                     mandibula_dx=0.012, boca_curva=0.15),
+    # o deadpan: olho meio fechado, nada se mexe -- e' o que vende a frase seca
+    "inexpressivo": _e(sobrancelha_dy=0.012, olho_sy=0.78, boca_curva=0.0),
+    "empolgado":  _e(sobrancelha_dy=-0.060, sobrancelha_rot=-4.0,
+                     olho_sx=1.12, olho_sy=1.16, cabeca_rot=4.0,
+                     boca_min=0.25, boca_curva=0.90),
+    "serio":      _e(sobrancelha_dy=0.015, sobrancelha_rot=8.0,
+                     olho_sy=0.88, boca_curva=-0.15),
+    # suspiro, gemido: olho caido, cabeca pendendo
+    "cansado":    _e(sobrancelha_rot=-8.0, olho_sy=0.72, olho_dy=0.008,
+                     cabeca_rot=5.0, boca_curva=-0.30),
 }
+
+# A CARA QUE A VOZ PEDE (11/10, HISTORICO §104). A emocao do video passou a
+# ser escrita UMA vez, nas tags da `fala_dirigida` (`[sarcastic] Paga com
+# que?`), e a voz do eleven_v4 obedece a elas. A cara le as MESMAS tags -- se
+# tivesse vocabulario proprio, voz e cara divergiriam (o mesmo motivo de
+# PROSODIA morar aqui). Tag desconhecida = sem mudanca de cara.
+DA_TAG = {
+    "surprised": ("surpreso", 1.0), "proud": ("confiante", 1.0), "confident": ("confiante", 1.0),
+    "sighs": ("cansado", 1.0), "serious": ("serio", 1.0), "nervous": ("ansioso", 1.0),
+    "sheepish": ("sem_graca", 1.0), "sarcastic": ("sarcastico", 1.0), "laughs": ("rindo", 1.0),
+    "angry": ("bravo", 1.0), "annoyed": ("irritado", 1.0), "excited": ("empolgado", 1.0),
+    "happily": ("sorrindo", 1.0), "sad": ("triste", 1.0), "curious": ("pensando", 1.0),
+    "whispers": ("duvida", 0.7), "shouting": ("bravo", 1.3), "deadpan": ("inexpressivo", 1.0),
+    "smug": ("desdem", 1.0), "panicked": ("desesperado", 1.0), "frustrated": ("irritado", 1.2),
+    "relieved": ("sorrindo", 0.7), "disappointed": ("triste", 0.8), "embarrassed": ("sem_graca", 1.2),
+    "mocking": ("sarcastico", 1.2), "laughs softly": ("sorrindo", 0.9), "gasps": ("chocado", 1.0),
+    "groans": ("cansado", 1.2),
+}
+
+# QUEM ESCUTA REAGE (11/10, §104). Ate aqui o ouvinte ficava neutro o video
+# inteiro (`expressao_<ator>` nunca vinha preenchida): metade da tela parada.
+# A reacao e' a do lado de la' da piada -- o sarcasmo do outro irrita, a bronca
+# deixa sem graca --, mais fraca que a de quem fala (REACAO_INTENSIDADE).
+REACAO = {
+    "bravo": "sem_graca", "irritado": "duvida", "sarcastico": "irritado", "desdem": "irritado",
+    "rindo": "sem_graca", "confiante": "duvida", "surpreso": "duvida", "chocado": "sem_graca",
+    "ansioso": "duvida", "sem_graca": "desdem", "triste": "inexpressivo", "desesperado": "inexpressivo",
+    "empolgado": "duvida", "serio": "inexpressivo", "inexpressivo": "duvida", "cansado": "inexpressivo",
+    "sorrindo": "duvida", "pensando": "duvida", "duvida": "inexpressivo",
+}
+REACAO_INTENSIDADE = 0.7
+
+
+def da_fala_dirigida(texto, marcas=None, dur=0.0):
+    """(cara_base, janelas, cara_do_ouvinte) a partir das tags da fala.
+
+    A primeira tag da a cara do trecho; cada tag seguinte abre uma janela
+    `expressoes` que comeca NA PALAVRA em que ela cai (pelas `marcas` da voz;
+    sem marcas, pela fracao de caracteres) e vai ate a proxima tag. O ouvinte
+    reage a' cara dominante (a ultima, que e' a que fecha a fala)."""
+    import re
+    texto = str(texto or "")
+    tags, limpo_ate = [], []
+    pos, limpo = 0, ""
+    for m in re.finditer(r"\[([^\]\[]{1,40})\]", texto):
+        limpo += texto[pos:m.start()]
+        pos = m.end()
+        nome = m.group(1).strip().lower()
+        if nome in DA_TAG:
+            tags.append((len(re.sub(r"\s+", " ", limpo).strip()), DA_TAG[nome]))
+    limpo += texto[pos:]
+    total = max(1, len(re.sub(r"\s+", " ", limpo).strip()))
+    if not tags:
+        return None, [], None
+
+    def fracao(ch):
+        # a palavra em que o caractere `ch` cai, pelo tempo dela na voz
+        if marcas and dur > 0.05:
+            inicio = 0                       # onde a palavra comeca no texto limpo
+            for w in marcas:
+                if inicio >= ch:
+                    return max(0.0, min(1.0, float(w.get("inicio_s", 0.0)) / dur))
+                inicio += len(str(w.get("palavra", ""))) + 1
+        return ch / total
+
+    base_nome, base_k = tags[0][1]
+    janelas = []
+    for i, (ch, (nome, k)) in enumerate(tags[1:], start=1):
+        de = fracao(ch)
+        ate = fracao(tags[i + 1][0]) if i + 1 < len(tags) else 1.0
+        if ate - de > 0.02:
+            janelas.append({"de": round(de, 3), "ate": round(ate, 3), "nome": nome, "intensidade": k,
+                            "motivo": "voz dirigida"})
+    dominante = tags[-1][1][0]
+    return (base_nome, base_k), janelas, REACAO.get(dominante, "duvida")
 
 # Apelidos: o roteirista e a identidade do canal usam rótulos que não são
 # exatamente estes. Mapear é mais barato do que exigir que todo mundo mude
@@ -338,6 +447,15 @@ PROSODIA = {
     "pensando":    (-12, -2, -2),
     # desdém é a piada dita como quem não quer nada -- é o timing seco
     "desdem":      (-6, -8, -2),
+    # 11/10 (§104): as caras novas, na voz de reserva (Edge/Azure)
+    "sarcastico":  (-6, -8, -2),
+    "rindo":       (+6, +8, +2),
+    "ansioso":     (+10, +6, 0),
+    "sem_graca":   (-4, -2, -3),
+    "inexpressivo": (-6, -6, -2),
+    "empolgado":   (+12, +12, +5),
+    "serio":       (-4, -6, +2),
+    "cansado":     (-12, -10, -4),
 }
 
 
