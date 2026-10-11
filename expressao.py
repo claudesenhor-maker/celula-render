@@ -62,9 +62,15 @@ import math
 # boca_curva       -1..+1. Positivo curva a boca para cima (sorriso),
 #                  negativo para baixo. Vale para a boca desenhada; com uma
 #                  folha de queixo articulado, é ignorado.
+# olhar_dx/olhar_dy  -1..+1: para onde a PUPILA anda dentro do olho (11/10,
+#                  §104). 0 = olha para a camera (o personagem e' frontal).
+#                  O render decide o lado (quem escuta olha para quem fala);
+#                  a expressao so' traz o que e' dela: quem pensa olha para
+#                  cima, quem esta triste ou sem graca olha para baixo.
 _Z = {"cabeca_rot": 0.0, "sobrancelha_dy": 0.0, "sobrancelha_rot": 0.0,
       "olho_sx": 1.0, "olho_sy": 1.0, "olho_dy": 0.0,
-      "boca_min": 0.0, "mandibula_dx": 0.0, "boca_curva": 0.0}
+      "boca_min": 0.0, "mandibula_dx": 0.0, "boca_curva": 0.0,
+      "olhar_dx": 0.0, "olhar_dy": 0.0}
 
 
 # QUANTO DA EXPRESSÃO DE FATO CHEGA AO ROSTO (03/09).
@@ -167,7 +173,7 @@ CATALOGO = {
     # ponta interna para cima é o desenho de tristeza em qualquer escola
     "triste":     _e(sobrancelha_dy=0.008, sobrancelha_rot=-15.0,
                      olho_sy=0.88, olho_dy=0.006, cabeca_rot=3.0,
-                     boca_curva=-0.85),
+                     boca_curva=-0.85, olhar_dy=0.6),
     "desesperado": _e(sobrancelha_dy=-0.055, sobrancelha_rot=-18.0,
                       olho_sx=1.18, olho_sy=1.24, boca_min=0.40,
                       cabeca_rot=-3.0, boca_curva=-0.55),
@@ -187,7 +193,7 @@ CATALOGO = {
                      boca_curva=-0.25),
     "pensando":   _e(sobrancelha_dy=-0.015, sobrancelha_rot=6.0,
                      olho_sy=0.86, olho_dy=-0.006, cabeca_rot=6.0,
-                     boca_curva=-0.20),
+                     boca_curva=-0.20, olhar_dx=0.5, olhar_dy=-0.8),
     "desdem":     _e(sobrancelha_dy=-0.025, sobrancelha_rot=5.0,
                      olho_sy=0.78, mandibula_dx=0.016, cabeca_rot=-4.0,
                      boca_curva=0.35),
@@ -209,7 +215,7 @@ CATALOGO = {
     # o sorriso amarelo: sobrancelha de suplica, cabeca de lado, boca quase reta
     "sem_graca":  _e(sobrancelha_dy=-0.010, sobrancelha_rot=-10.0,
                      olho_sy=0.86, olho_dy=0.006, cabeca_rot=7.0,
-                     mandibula_dx=0.012, boca_curva=0.15),
+                     mandibula_dx=0.012, boca_curva=0.15, olhar_dy=0.6),
     # o deadpan: olho meio fechado, nada se mexe -- e' o que vende a frase seca
     "inexpressivo": _e(sobrancelha_dy=0.012, olho_sy=0.78, boca_curva=0.0),
     "empolgado":  _e(sobrancelha_dy=-0.060, sobrancelha_rot=-4.0,
@@ -219,7 +225,7 @@ CATALOGO = {
                      olho_sy=0.88, boca_curva=-0.15),
     # suspiro, gemido: olho caido, cabeca pendendo
     "cansado":    _e(sobrancelha_rot=-8.0, olho_sy=0.72, olho_dy=0.008,
-                     cabeca_rot=5.0, boca_curva=-0.30),
+                     cabeca_rot=5.0, boca_curva=-0.30, olhar_dy=-0.5),
 }
 
 # A CARA QUE A VOZ PEDE (11/10, HISTORICO §104). A emocao do video passou a
