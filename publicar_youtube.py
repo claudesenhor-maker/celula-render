@@ -127,8 +127,10 @@ def main():
             "snippet": {"title": p["titulo"][:100], "description": p.get("descricao") or "",
                         "tags": [t for t in str(p.get("tags") or "").split(",") if t.strip()][:30],
                         "categoryId": "23", "defaultLanguage": idioma, "defaultAudioLanguage": idioma},
+            # embeddable explicito (11/10, HISTORICO §107): todos desde 19/09
+            # subiram com a incorporacao desligada (oEmbed 401, nao toca fora do YouTube)
             "status": {"privacyStatus": "private" if p.get("publicar_em") else "public",
-                       "selfDeclaredMadeForKids": False},
+                       "selfDeclaredMadeForKids": False, "embeddable": True},
         }
         if p.get("publicar_em"):
             meta["status"]["publishAt"] = p["publicar_em"]
