@@ -1,0 +1,1 @@
+{"name":"motor-web","private":true,"type":"module","dependencies":{"puppeteer-core":"22.15.0","three":"0.128.0"}}
