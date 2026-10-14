@@ -757,7 +757,13 @@ CONFIG = {'formato': {'abertura': {'cartaz_max_palavras': 5,
                                                                     'passaros',
                                                                     'vagalumes',
                                                                     'fogueira',
-                                                                    'estrelas_cadentes']}}}},
+                                                                    'estrelas_cadentes']}}},
+               'producao': {'antecedencia_min': 40,
+                            'esforco': 'medium',
+                            'modelo': 'modelo_agente',
+                            'temperatura': 0.8,
+                            'tentativas_roteiro': 3,
+                            'titulos_recentes': 40}},
  'quadro': {'altura_alvo_px': 1150, 'max_em_cena': 2}}
 
 FORMATO = CONFIG["formato"]
