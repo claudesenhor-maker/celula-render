@@ -1172,9 +1172,28 @@ def _orgao(f, dur, sr=SR, brilho=0.30):
     return x * 0.4 * np.minimum(env, 1.0)
 
 
+def _quadrada(f, dur, sr=SR, brilho=0.30):
+    """Onda quadrada de console de 8 bits (13/10, HISTORICO §109 -- canal de
+    pixel art). Pulso de 25% e queda curta: o som de chip que o estilo pede."""
+    t = _t(dur, sr)
+    x = np.where((f * t) % 1.0 < 0.25, 1.0, -1.0)
+    env = np.minimum(1.0, t / 0.004) * np.maximum(0.25, _exp(t, 0.35))
+    solta = np.minimum(1.0, np.maximum(0.0, (dur - t) / 0.01))
+    return x * 0.22 * env * solta
+
+
+def _piano_velho(f, dur, sr=SR, brilho=0.30):
+    """Piano de bar desafinado (13/10, §109 -- canal de mangueira anos 30):
+    duas cordas levemente fora de afinacao batem entre si (o 'honky-tonk')."""
+    t = _t(dur, sr)
+    x = (np.sin(2 * np.pi * f * t) + np.sin(2 * np.pi * f * 1.006 * t)
+         + 0.35 * np.sin(2 * np.pi * 2 * f * t) + 0.15 * np.sin(2 * np.pi * 3 * f * t))
+    return x * 0.28 * np.minimum(1.0, t / 0.003) * _exp(t, 0.45)
+
+
 TIMBRES = {"marimba": _nota, "cordas": _corda, "pluck": _pluck,
            "eletrico": _eletrico, "guitarra": _guitarra, "sino": _sino,
-           "orgao": _orgao}
+           "orgao": _orgao, "quadrada": _quadrada, "piano_velho": _piano_velho}
 
 
 # ---------------------------------------------------------------------
@@ -1396,6 +1415,13 @@ GENEROS = {
     # esquetes deste canal acontecendo
     "espera":       {"bpm": 96, "timbre": "orgao", "levada": "lofi",
                      "baixo": "colcheias", "peso": 0.55, "oitava": 0},
+    # 13/10 (HISTORICO §109): os canais dos motores web. So' os estilos que os
+    # pedem os usam (`formatos.<estilo>.trilha` no config); a dupla nao os ve
+    # porque nao estao em GENEROS_CAMA.
+    "chiptune":     {"bpm": 132, "timbre": "quadrada", "levada": "pop",
+                     "baixo": "colcheias", "peso": 0.95, "oitava": 12},
+    "ragtime":      {"bpm": 150, "timbre": "piano_velho", "levada": "marcha",
+                     "baixo": "colcheias", "peso": 1.05, "oitava": 0},
 }
 GENERO_PADRAO = "comedia_leve"
 
