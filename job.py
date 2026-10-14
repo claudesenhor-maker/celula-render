@@ -596,7 +596,11 @@ def main():
     else:
         spec = requests.get(os.environ["SPEC_URL"], timeout=60).json()
     fila_id = spec.get("fila_id", "sem-id")
-    print(f"[job] fila_id={fila_id}  trechos={len(spec['trechos'])}")
+    print(f"[job] fila_id={fila_id}  trechos={len(spec.get('trechos') or spec.get('cenas') or [])}")
+    # O MOTOR WEB (13/10, HISTORICO §109): os 4 canais de arte por codigo tem
+    # spec proprio (`cenas`, nao `trechos`) e render proprio (Chrome headless).
+    if spec.get("motor") == "web":
+        return motor_web(spec, fila_id, t0)
 
     # O ELEVENLABS E EXCLUSIVO DO CANAL (05/09, decisao do dono do projeto)
     #
@@ -745,6 +749,32 @@ def main():
     avisar({"fila_id": fila_id, "status": "ok", "video_url": url,
             "duracao_s": dur, "render_s": round(time.time() - t0),
             "estilo": estilo, "estilo_por": porque_estilo, "motor": motor})
+
+
+def motor_web(spec, fila_id, t0):
+    """Render dos canais do motor web (13/10, §109): `motor_web/montar_web.py`
+    faz voz, quadros (Chrome headless) e som; daqui em diante e' igual ao
+    motor do recorte -- sobe o MP4, devolve o item a fila e avisa o n8n.
+    A guarda da voz paga e' a mesma de `main`: so' item de producao (uuid)."""
+    import subprocess
+    eh_producao = bool(UUID_RE.match(str(fila_id)))
+    os.environ["PRODUCAO"] = "1" if eh_producao else "0"
+    voz = spec.get("voz") or {}
+    if not eh_producao and str(voz.get("motor", "")).lower() in ("eleven", "elevenlabs"):
+        voz["motor"] = "edge"
+        print("[voz] render de TESTE: narrador eleven -> edge")
+    entrada, out = "/tmp/spec_web.json", "/tmp/final.mp4"
+    json.dump(spec, open(entrada, "w", encoding="utf-8"), ensure_ascii=False)
+    aqui = os.path.dirname(os.path.abspath(__file__))
+    subprocess.run([sys.executable, os.path.join(aqui, "motor_web", "montar_web.py"), "--spec", entrada, "--saida", out,
+                    "--modo-tts", os.environ.get("MODO_TTS", "real")], check=True)
+    sp = json.load(open(os.path.splitext(out)[0] + "_spec_render.json", encoding="utf-8"))
+    dur = float(sp.get("dur_s") or 0)
+    url = subir(out, f"videos/{fila_id}.mp4")
+    print(f"[ok] {url}  {dur}s  render={time.time() - t0:.0f}s  motor=web/{spec.get('estilo')}")
+    atualizar_fila(fila_id, {"status": "pronto_para_publicar", "video_url": url, "atualizado_em": "now()"})
+    avisar({"fila_id": fila_id, "status": "ok", "video_url": url, "duracao_s": dur, "render_s": round(time.time() - t0),
+            "estilo": spec.get("estilo"), "estilo_por": "canal", "motor": "web"})
 
 
 RENDER_TENTATIVAS = 2     # quantas vezes um item volta para a fila depois de falhar
