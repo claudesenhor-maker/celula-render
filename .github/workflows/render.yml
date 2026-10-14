@@ -53,6 +53,19 @@ jobs:
       - name: Dependencias Python
         run: pip install --quiet -r requirements.txt
 
+      - name: Dependencias do motor web
+        # 13/10 (HISTORICO §109): so' quando o spec e' do motor web (os 4
+        # canais de arte por codigo). O Node e o Google Chrome ja vem no
+        # ubuntu-latest; aqui entram so' o puppeteer-core e o three.js.
+        env:
+          SPEC_JSON: ${{ toJSON(github.event.client_payload.spec) }}
+        run: |
+          if printf '%s' "$SPEC_JSON" | grep -Eq '"motor": *"web"'; then
+            cd motor_web && npm ci --no-audit --no-fund
+          else
+            echo "spec nao e' do motor web: nada a instalar"
+          fi
+
       - name: Render
         env:
           SUPABASE_URL:         ${{ secrets.SUPABASE_URL }}
