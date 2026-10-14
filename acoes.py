@@ -1496,6 +1496,18 @@ def mostrar_objeto(u, rig, dur, a):
     lado = a.get("mao", "d")
     k = _suave(min(1.0, u * 2.4))
     alt = float(a.get("altura", 34.0))    # quanto acima da horizontal
+    # PERTO DO ROSTO (13/10, HISTORICO §108 -- abertura nova): no close do
+    # gancho o braco esticado para o lado leva a mao (e o objeto) para fora do
+    # quadro. Cotovelo junto ao corpo, antebraco para cima: o objeto fica ao
+    # lado da cara, dentro do close.
+    if a.get("perto"):
+        sup, ante = 70.0, -80.0
+        if lado == "d":
+            _braco(rig, "d", sup, ante, -8.0, k)
+        else:
+            _braco(rig, "e", 180.0 - sup, 180.0 - ante, 8.0, k)
+        rig["tronco"] = -90.0 - 1.0 * k
+        return {}
     if lado == "d":
         _braco(rig, "d", -alt, -alt - 30.0, -8.0, k)
     else:
