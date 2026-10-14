@@ -3841,6 +3841,14 @@ PUSH_GANCHO = 0.12
 # O quadro 0 continua em zoom 0 (o loop fecha nele).
 SNAP_GANCHO_FRAC = 0.2
 
+# A ABERTURA NOVA (13/10, HISTORICO §108 -- experimento `spec.abertura_nova`,
+# numeros em `config.json > formato.abertura`). `render` preenche no comeco de
+# cada video; vazio = video do lado de sempre. Os quadros de 12/10 abriam em
+# close e com cartaz, mas com a cara neutra, o objeto da briga fora da tela e
+# o plano do par parado no corte de ~2 s. Aqui: cara forte e objeto ja' erguido
+# no quadro 0, e no trecho 1 quem escuta reage cheio e a camera da um empurrao.
+ABERTURA = {}
+
 
 def push_do_trecho(i):
     return PUSH_GANCHO if i == 0 else PUSH_TRECHO
@@ -3968,6 +3976,11 @@ def _enquadramento(i, n_trechos, n_atores, t, centro_corpo=None,
             # o degrau ABERTO: 1,20 quando a largura do par o comporta, e o
             # que ela comportar quando nÃ£o (ver PISO_PAR_ABERTO)
             z = min(PISO_PAR_ABERTO, max(1.0, float(teto_par)))
+        # o corte do gancho para o par (abertura nova, §108): o empurrao vem
+        # no snap, como o do gancho, e segura -- o plano nao chega parado
+        if ABERTURA and i == 1:
+            return z * (1.0 + float(ABERTURA.get("push_corte", 0.05)) * curva_push(0, t)), \
+                (0.5 if centro_corpo is None else max(0.0, min(1.0, float(centro_corpo))))
         return z * (1.0 + 0.035 * max(0.0, min(1.0, t))), \
             (0.5 if centro_corpo is None else
              max(0.0, min(1.0, float(centro_corpo))))
@@ -5114,6 +5127,38 @@ def _gancho_em_andamento(por_ator, falante):
           f"(u={u0:.2f} no quadro 0; de={a['de']:.3f})")
 
 
+def _abertura_objeto_erguido(por_ator, falante, u0):
+    """ABERTURA NOVA (13/10, §108): o objeto da briga ja' esta erguido no
+    quadro 0. O contrato da abertura nova poe o objeto da disputa na mao de
+    quem diz a fala 0, com `mostra`; aqui o gesto comeca ANTES do video, como
+    o do gancho (`_gancho_em_andamento`), para o quadro 0 -- a capa do feed --
+    ja' ter o objeto na altura do rosto (`mostrar_objeto` chega ao alto em
+    u~0,42). A acao e' copiada, nunca alterada no spec. Devolve True se moveu:
+    nesse caso o gesto de objeto E' a acao do gancho, e o susto injetado por
+    cima esconderia o braco."""
+    if not falante or falante not in por_ator:
+        return False
+    acoes = list(por_ator.get(falante) or [])
+    for k, a in enumerate(acoes):
+        if a.get("nome") in ("mostrar_objeto", "usar_objeto") and float(a.get("de", 0.0)) <= 0.5:
+            b = dict(a)
+            ate = float(b.get("ate", 1.0))
+            if ate <= 0.0:
+                ate = 1.0
+            b["de"] = -u0 * ate / (1.0 - u0)
+            b["ate"] = ate
+            # no close o braco esticado leva o objeto para fora do quadro
+            if b.get("nome") == "mostrar_objeto":
+                b["perto"] = True
+            acoes[k] = b
+            por_ator[falante] = acoes
+            print(f"[abertura] trecho 0: {b.get('nome')}({b.get('objeto') or ''}) de {falante} "
+                  f"ja erguido no quadro 0 (u={u0:.2f}; de={b['de']:.3f})")
+            return True
+    print(f"[abertura] trecho 0: {falante} sem mostrar/usar objeto -- fica o gancho de sempre")
+    return False
+
+
 def _quem_recebe(por_ator, na_mao, t, objetos):
     """Entregar Ã© PASSAR: o que sai de uma mÃ£o entra na outra.
 
@@ -5428,6 +5473,17 @@ def render(pasta_partes, spec, saida, tmpdir=None, amostra=0):
     from palito_v5 import sintetizar, envelope, juntar_com_respiro
     tmp = tmpdir or tempfile.mkdtemp()
     fd = os.path.join(tmp, "frames"); os.makedirs(fd, exist_ok=True)
+    # A ABERTURA NOVA (13/10, §108) -- ver ABERTURA. Por video: o modulo vive
+    # entre renders no mesmo processo, entao zera antes de ler o spec.
+    ABERTURA.clear()
+    if spec.get("abertura_nova"):
+        try:
+            from config_gerado import FORMATO as _FMT_AB
+            ABERTURA.update(dict(_FMT_AB.get("abertura") or {}))
+        except Exception as e:                                # noqa: BLE001
+            print(f"[abertura] config sem `formato.abertura` ({e}); valores padrao")
+        ABERTURA["ativo"] = True
+        print(f"[abertura] NOVA: cara forte e objeto no quadro 0, reacao e empurrao no corte ({ABERTURA})")
 
     elenco = _carregar_elenco(spec, pasta_partes)
     padrao_ator = list(elenco)[0]
@@ -5606,6 +5662,13 @@ def render(pasta_partes, spec, saida, tmpdir=None, amostra=0):
         marcas_por_trecho.append(marcas or [])
         total += tr["dur"]
     print(f"[voz] timeline real: {total:.2f}s")
+    # ABERTURA NOVA (§108): a cara do trecho 0 ja' vem da tag forte da voz
+    # (o contrato exige); aqui ela sobe de intensidade, para ler no quadro 0
+    if ABERTURA and spec["trechos"]:
+        _t0 = spec["trechos"][0]
+        _k0 = max(float(_t0.get("intensidade", 1.0)), float(ABERTURA.get("intensidade_cara", 1.3)))
+        _t0["intensidade"] = _k0
+        print(f"[abertura] trecho 0: cara '{_t0.get('expressao', 'neutro')}' a {_k0:.2f}")
     # O PLACAR DE MOTOR DE VOZ (03/09, item 6). Ver `palito_v5.USOU_MOTOR`:
     # a queda do ElevenLabs para o Edge sempre avisou numa linha perdida do
     # log. Aqui ela vira uma linha que se procura, e um alarme quando TODAS as
@@ -6021,7 +6084,9 @@ def render(pasta_partes, spec, saida, tmpdir=None, amostra=0):
         # O PRIMEIRO QUADRO JA TEM ACAO (11/09) -- ver `_gancho_em_andamento`.
         # `GANCHO_EM_ANDAMENTO=0` desliga, para a previa A/B poder mostrar o
         # antes (o mesmo recurso de `GANCHO_ENTRA`).
-        if i_tr == 0 and os.environ.get("GANCHO_EM_ANDAMENTO") != "0":
+        _objeto_e_o_gancho = (i_tr == 0 and bool(ABERTURA) and _abertura_objeto_erguido(
+            por_ator, falante, float(ABERTURA.get("pre_roll_objeto_u", 0.45))))
+        if i_tr == 0 and os.environ.get("GANCHO_EM_ANDAMENTO") != "0" and not _objeto_e_o_gancho:
             _gancho_em_andamento(por_ator, falante)
         # E A REGRA GERAL, PARA OS OUTROS TRECHOS: a cÃ¢mera nÃ£o fecha em quem
         # estÃ¡ entrando. O trecho 0 Ã© o caso caro (Ã© o gancho, e a correÃ§Ã£o
@@ -6184,8 +6249,11 @@ def render(pasta_partes, spec, saida, tmpdir=None, amostra=0):
                     if tr.get("expressao_" + chave):
                         cara = EXPR.obter(tr["expressao_" + chave])
                     else:
+                        # no corte do gancho para o par (abertura nova, §108)
+                        # a reacao vem cheia: e' o 2o ponto em que se passa reto
                         cara = EXPR.obter(tr.get("expressao_ouvinte") or "neutro",
-                                          EXPR.REACAO_INTENSIDADE)
+                                          float(ABERTURA.get("reacao_corte", 1.1))
+                                          if (ABERTURA and i_tr == 1) else EXPR.REACAO_INTENSIDADE)
                 # O OLHAR (11/10, HISTORICO §104 -- "comunicacao com o
                 # terceiro"): quem escuta olha para quem fala e quem fala olha
                 # para o outro; no close, quem fala olha para a CAMERA (fala
