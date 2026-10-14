@@ -6,7 +6,8 @@
 # cairosvg precisa do libcairo2 do sistema, instalado via apt no render.yml.
 requests>=2.31
 cairosvg>=2.7
-edge-tts>=6.1
+# 13/10: a 7.2.8 tomava 403 do servidor da Microsoft (token de cliente velho)
+edge-tts>=7.3.1
 # Pillow: composicao do cut-out (girar e colar as pecas do personagem)
 # e a montagem do fundo gerado por IA sob o SVG.
 Pillow>=10.0
