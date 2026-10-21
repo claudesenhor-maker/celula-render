@@ -60,7 +60,7 @@
         if (cen === 'vulcao') { const v = new T.Mesh(new T.ConeGeometry(4, 5, 8, 1, true), M('#4A3038')); v.position.set(0, 2.5, -5); sc.add(v); const lava = new T.Mesh(new T.CylinderGeometry(0.9, 0.9, 0.3, 8), M('#FF6A2A', '#FF4A00')); lava.position.set(0, 5, -5); sc.add(lava); obj.extras.push(lava); }
         if (cen === 'oceano' || cn.acao === 'inunda') { const ag = new T.Mesh(new T.PlaneGeometry(40, 40, 30, 30), new T.MeshToonMaterial({ color: '#3C9BD6', gradientMap: gm, transparent: true, opacity: 0.88 })); ag.rotation.x = -Math.PI / 2; ag.position.y = cen === 'oceano' ? 0.05 : -0.2; obj.agua = ag; obj.aguaBase = ag.geometry.attributes.position.array.slice(); sc.add(ag); }
         const n = cn.acao === 'multidao' ? 14 : (cn.atores || ['pessoa']).length;
-        for (let i = 0; i < Math.min(14, n); i++) { const p = pessoa(['#E46A86', '#3E7CB1', '#F2B705', '#5DAA5A'][i % 4]); p.position.set(i === 0 ? 0 : (r() - 0.5) * 8, 0, i === 0 ? 1.5 : (r() - 0.5) * 4); p.rotation.y = i === 0 ? 0 : (r() - 0.5) * 2; sc.add(p); obj.gente.push(p); }
+        for (let i = 0; i < Math.min(14, n); i++) { const p = pessoa(['#E46A86', '#3E7CB1', '#F2B705', '#5DAA5A'][i % 4]); p.position.set(i === 0 ? 0 : (r() - 0.5) * 8, 0, i === 0 ? 1.5 : (r() - 0.5) * 4); p.rotation.y = i === 0 ? 0 : (r() - 0.5) * 2; p.userData.xInicial = p.position.x; sc.add(p); obj.gente.push(p); }
       }
       if (cn.acao === 'chuva_meteoros') { for (let i = 0; i < 14; i++) { const m = new T.Mesh(new T.IcosahedronGeometry(0.3 + r() * 0.3, 0), M('#8A6A55', '#FF5A1F')); m.userData = { x: (r() - 0.5) * 16, z: (r() - 0.5) * 10 - 2, fase: r() }; sc.add(m); obj.meteoros.push(m); } }
       if (cn.acao === 'gravidade_zero') { for (let i = 0; i < 18; i++) { const m = new T.Mesh(new T.BoxGeometry(0.5, 0.5, 0.5), M(['#E2574C', '#F2B705', '#3E7CB1', '#5DAA5A'][i % 4])); m.userData = { x: (r() - 0.5) * 10, z: (r() - 0.5) * 8, fase: r() }; sc.add(m); obj.meteoros.push(m); } }
@@ -104,7 +104,7 @@
         if (j === 0 && acao === 'cresce') p.scale.setScalar(U.lerp(1, 3.2, U.saida(k)));
         if (j === 0 && acao === 'encolhe') p.scale.setScalar(U.lerp(1, 0.25, U.saida(k)));
         if (acao === 'gravidade_zero') { p.position.y = U.saida(k) * (2 + j * 0.4); p.rotation.x = k * (j % 2 ? 1 : -1); }
-        if (acao === 'para_de_girar' && k > 0.3) { p.position.x += (k - 0.3) * 0.2; p.rotation.z = -0.5 * U.saida((k - 0.3) / 0.7); }
+        if (acao === 'para_de_girar') { p.position.x = p.userData.xInicial + Math.max(0, k - 0.3) * 0.2; p.rotation.z = -0.5 * U.saida(U.clamp((k - 0.3) / 0.7, 0, 1)); }
       });
       if (o.agua) { const a = o.agua.geometry.attributes.position, base = o.aguaBase; for (let j = 0; j < a.count; j++) a.setZ(j, base[j * 3 + 2] + Math.sin(base[j * 3] * 0.8 + t * 2) * 0.12 + Math.cos(base[j * 3 + 1] * 0.7 + t * 1.6) * 0.1); a.needsUpdate = true;
         if (acao === 'inunda') o.agua.position.y = U.lerp(-0.2, 2.2, U.suave(k)); }
