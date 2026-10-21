@@ -266,8 +266,9 @@
         if (o) { o.x = XO + 80; if (k > bate) { o.boca = 'risada'; o.olhos = 'feliz'; o.sq = 1 + 0.08 * Math.sin(t * 28); o.bD = { x: -80, y: 120 }; } else quicar(o, t); }
       },
       ri_apontando(h, o, k, l, t) {
-        h.x = XH; h.boca = 'triste'; h.olhos = 'normal'; h.olhar = 1; h.sq = 0.92 + 0.02 * Math.sin(t * 4);
-        if (o) { o.x = XO; o.boca = 'risada'; o.olhos = 'feliz'; o.sq = 1 + 0.1 * Math.sin(t * 26); o.y = Math.abs(Math.sin(t * 13)) * 30; o.bD = { x: 120, y: 160 }; o.bE = { x: -330, y: 30 }; o.dir = -1; o.extras.push('lagrimas'); }
+        // O primeiro de atores executa a acao; o segundo recebe a provocacao.
+        h.x = XH; h.boca = 'risada'; h.olhos = 'feliz'; h.sq = 1 + 0.1 * Math.sin(t * 26); h.y = Math.abs(Math.sin(t * 13)) * 30; h.bE = { x: -120, y: 160 }; h.bD = { x: 330, y: 30 }; h.extras.push('lagrimas');
+        if (o) { o.x = XO; o.boca = 'triste'; o.olhos = 'normal'; o.olhar = 1; o.dir = -1; o.sq = 0.92 + 0.02 * Math.sin(t * 4); }
       },
       chora_cachoeira(h, o, k, l, t) { h.x = 540; h.olhos = 'chorando'; h.boca = 'triste'; h.sq = 1 + 0.05 * Math.sin(t * 18); h.bE = { x: -60, y: -60 }; h.bD = { x: 60, y: -60 }; h.extras.push('lagrimas'); if (o) { o.x = 900; o.esc = 0.85; o.olhos = 'arregalado'; quicar(o, t); } },
       come_rapido(h, o, k, l, t, cena) {
