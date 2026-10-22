@@ -71,7 +71,7 @@ MOTORES = ("chatterbox", "kokoro")
 #                      ANTES do Azure (que tem as mesmas vozes do Edge).
 # Vazias = desligadas. Ligar e' trocar aqui depois de ouvir o ensaio.
 EDGE_VIRA = ""
-RESERVA_DO_ELEVEN = ""
+RESERVA_DO_ELEVEN = "chatterbox"   # 22/10: ligado depois dos ensaios (Tiny, How it works)
 
 # Versoes travadas: um motor que muda sozinho no meio da producao e' o tipo de
 # surpresa de domingo que o resto da cadeia de voz foi escrito para evitar.
