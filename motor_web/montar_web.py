@@ -68,6 +68,10 @@ EFEITO_DA_ACAO = {
                 "seca": [("whoosh", 0.1, 0.5)], "brota": [("pop", 0.25, 0.6), ("pop", 0.45, 0.6), ("pop", 0.65, 0.6)],
                 "gravidade_zero": [("whoosh", 0.1, 0.6)], "aurora": [("plim", 0.3, 0.6)], "amanhece": [("plim", 0.4, 0.6)],
                 "derrete": [("gole", 0.5, 0.5)], "compara": [("pop", 0.3, 0.7)], "mostra": [("pop", 0.08, 0.5)]},
+    # 22/10: "como funciona" (estilos/mecanismo.js)
+    "mecanismo": {"explode": [("whoosh", 0.05, 0.8)], "monta": [("clique", 0.4, 0.8), ("clique", 0.55, 0.8)],
+                  "corte": [("whoosh", 0.05, 0.6)], "destaque": [("plim", 0.15, 0.7)], "gira": [("rangido", 0.1, 0.5)],
+                  "move": [("clique", 0.3, 0.8), ("clique", 0.8, 0.8)], "fluxo": [("whoosh", 0.1, 0.5)]},
 }
 CPS_LEITURA = 14.0      # caracteres por segundo que alguem le no celular
 PAUSA_NARRADO = 0.22    # respiro entre cenas narradas (a voz nao emenda)

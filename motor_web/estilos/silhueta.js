@@ -160,7 +160,7 @@
       // vinheta de cinema
       const v = c.createRadialGradient(W / 2, H / 2, H * 0.35, W / 2, H / 2, H * 0.8); v.addColorStop(0, 'rgba(0,0,0,0)'); v.addColorStop(1, 'rgba(0,0,0,.5)'); c.fillStyle = v; c.fillRect(0, 0, W, H);
       U.cartaz(c, spec, t, { fonte: '700 76px Cinzel, serif', y: 170, cor: '#F3E7D0', contorno: 14, cor_contorno: 'rgba(0,0,0,.85)', altura_linha: 96, dur: 3.2 });
-      U.legenda(c, spec, t, { fonte: '600 92px Oswald, sans-serif', y: H * 0.86, cor: '#FFFFFF', cor_ativa: '#FFC94A', contorno: 16, caixa: true, por_vez: 3 });
+      U.legenda(c, spec, t, { fonte: '600 92px Oswald, sans-serif', y: H * 0.70, cor: '#FFFFFF', cor_ativa: '#FFC94A', contorno: 16, caixa: true, por_vez: 3 });
     }
     return { quadro };
   }

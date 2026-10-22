@@ -808,7 +808,7 @@
       seloTempo(cn, t);
       cartaoNumero(cn, t);
       U.cartaz(c, spec, t, { fonte: '84px "Lilita One", sans-serif', y: 170, fundo: '#FFD23F', borda: '#1B1B1B', cor: '#1B1B1B', altura_linha: 100, dur: 3.0 });
-      U.legenda(c, spec, t, { fonte: '104px "Lilita One", sans-serif', y: H * 0.80, cor: '#FFFFFF', cor_ativa: '#FFD23F', contorno: 18, caixa: true, por_vez: 3 });
+      U.legenda(c, spec, t, { fonte: '104px "Lilita One", sans-serif', y: H * 0.70, cor: '#FFFFFF', cor_ativa: '#FFD23F', contorno: 18, caixa: true, por_vez: 3 });
     }
     return { quadro };
   }
