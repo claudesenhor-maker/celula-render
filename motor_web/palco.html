@@ -24,7 +24,9 @@ window.preparar = async function (spec) {
   const m = MOTORES[spec.estilo];
   if (!m) throw new Error('estilo desconhecido: ' + spec.estilo + ' (tem: ' + Object.keys(MOTORES).join(', ') + ')');
   MOTOR = m.criar(tela, spec, U);
-  return { ok: true, fontes: fontes.map((f) => document.fonts.check(f)) };
+  // `acoes`: o evento que o estilo DESENHA em cada cena (o lowpoly troca a acao
+  // que contradiz a frase); o montar_web poe o som do evento desenhado.
+  return { ok: true, fontes: fontes.map((f) => document.fonts.check(f)), acoes: spec.cenas.map((c) => c.acaoV2 || null) };
 };
 window.quadro = function (t, formato, qualidade) {
   MOTOR.quadro(t);

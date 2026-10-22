@@ -1873,6 +1873,69 @@ def _emendar_bed(faixa, cauda_s, sr):
     return saida
 
 
+class _FaixaReal(Exception):
+    """Sinal interno: a cama vem da biblioteca, nao do sintetizador."""
+
+
+# A FAIXA REAL NA MISTURA (22/10). Numeros de mixagem de narracao com cama:
+# a faixa vem com RMS em -14 dBFS (`trilha_biblioteca.normalizar`), entra
+# `GANHO_FAIXA_DB` abaixo disso nas pausas e afunda mais `DUCK_FAIXA_DB`
+# embaixo da fala. A cama sintetica tinha -18/-11 porque o RMS dela e' baixo;
+# a faixa gravada e' densa, e com o mesmo numero cobriria a voz.
+GANHO_FAIXA_DB = -9.0
+GANHO_FAIXA_SEM_VOZ_DB = -2.0
+DUCK_FAIXA_DB = -9.0
+SR_SAIDA = 48000
+
+
+def _mixar_faixa_real(mix, voz, sr, real, destino, n, loop_cauda_s):
+    """Voz+efeitos (no sr da voz) + faixa real (48 kHz) -> WAV de 48 kHz.
+
+    A voz e os efeitos sao REAMOSTRADOS pelo ffmpeg (filtro de verdade, nao
+    interpolacao linear) e a faixa entra inteira, com o brilho acima de 12 kHz
+    que a mistura a 24 kHz cortava."""
+    import subprocess
+    import trilha_biblioteca as TB
+    arq, rot, cfg = real
+    tmp24, tmp48 = destino + ".vs24.wav", destino + ".vs48.wav"
+    _escrever_wav(tmp24, np.clip(mix, -1.0, 1.0), sr)
+    subprocess.run(["ffmpeg", "-y", "-v", "error", "-i", tmp24, "-af", "aresample=resampler=soxr",
+                    "-ar", str(SR_SAIDA), tmp48], check=False)
+    if not os.path.exists(tmp48):
+        subprocess.run(["ffmpeg", "-y", "-v", "error", "-i", tmp24, "-ar", str(SR_SAIDA), tmp48], check=True)
+    vs, _ = _ler_wav(tmp48)
+    m = int(round(n * SR_SAIDA / float(sr)))
+    vs = _ajustar(vs, m)
+    faixa, _ = _ler_wav(arq)
+    faixa = _ajustar(TB.normalizar(faixa), m)
+    tem_voz = float(np.max(np.abs(voz))) > 0.02 if len(voz) else False
+    if tem_voz:
+        faixa = TB.cavar_voz(faixa, SR_SAIDA)
+    if loop_cauda_s > 0:
+        faixa = _emendar_bed(faixa, loop_cauda_s, SR_SAIDA)
+    g = _db(float(cfg.get("ganho_faixa_db", GANHO_FAIXA_DB if tem_voz else GANHO_FAIXA_SEM_VOZ_DB)))
+    duck = _ducking(_ajustar(voz, n), sr)
+    # a curva de ducking foi feita no sr da voz: leva para 48 kHz
+    duck = 1.0 + (duck - 1.0) * (_db(DUCK_FAIXA_DB) - 1.0) / (_db(DUCK_DB) - 1.0)
+    duck48 = np.interp(np.arange(m) * (sr / float(SR_SAIDA)), np.arange(len(duck)), duck).astype(np.float32)
+    # 1,2 s de fade no fim (o laco, quando ha, ja' emendou a cama no comeco)
+    if loop_cauda_s <= 0:
+        f = min(m, int(1.2 * SR_SAIDA))
+        faixa[m - f:] *= np.linspace(1.0, 0.0, f, dtype=np.float32)
+    out = vs + faixa * g * duck48
+    pico = float(np.max(np.abs(out))) if len(out) else 0.0
+    if pico > 0.98:
+        out = np.tanh(out * 0.9) / np.tanh(0.9)
+    for t in (tmp24, tmp48, arq):
+        try:
+            os.remove(t)
+        except OSError:
+            pass
+    print(f"[musica] mistura a {SR_SAIDA} Hz com faixa real ({rot}), "
+          f"cama {20 * math.log10(max(g, 1e-6)):.0f} dB, ducking {DUCK_FAIXA_DB:.0f} dB")
+    return _escrever_wav(destino, out, SR_SAIDA)
+
+
 def mixar(voz_wav, eventos, destino, musica=None, dur_s=None, sr=SR, bipes=None,
           loop_cauda_s=0.0):
     """Voz + efeitos + trilha -> um WAV só, que é o que o ffmpeg recebe.
@@ -1925,6 +1988,7 @@ def mixar(voz_wav, eventos, destino, musica=None, dur_s=None, sr=SR, bipes=None,
     if usados:
         print(f"[sfx] {len(usados)} efeitos: {', '.join(usados)}")
 
+    real = None
     if musica:
         cfg = musica if isinstance(musica, dict) else {}
         try:
@@ -1951,6 +2015,23 @@ def mixar(voz_wav, eventos, destino, musica=None, dur_s=None, sr=SR, bipes=None,
                                                por=cfg.get("por", ""))
                 if motivo != "pedido":
                     print(f"[musica] '{cfg.get('genero')}' -> '{gen}': {motivo}")
+                # A FAIXA DE VERDADE PRIMEIRO (22/10, ver trilha_biblioteca):
+                # com faixa do genero, a cama sai de la, a 48 kHz, e entra
+                # depois (`_mixar_faixa_real`); sem faixa, a sintetica de sempre.
+                if not cfg.get("so_sintetica"):
+                    try:
+                        import trilha_biblioteca as TB
+                        arq, rot = TB.faixa_para(gen or GENERO_PADRAO, cfg.get("semente", 3), n / float(sr),
+                                                 destino + ".faixa.wav")
+                        if arq:
+                            real = (arq, rot, cfg)
+                            print(f"[musica] faixa real: {rot}")
+                        else:
+                            print(f"[musica] biblioteca: {rot}; usando a sintetizada")
+                    except Exception as e:                    # noqa: BLE001
+                        print(f"[musica] biblioteca indisponivel ({e}); usando a sintetizada")
+                if real:
+                    raise _FaixaReal()
                 # SEMENTE POR VÍDEO: duas esquetes do mesmo gênero não podem
                 # sair com o arpejo idêntico nota por nota. O fila_id é o que
                 # há de único em cada vídeo, e ele já está no spec.
@@ -1993,8 +2074,16 @@ def mixar(voz_wav, eventos, destino, musica=None, dur_s=None, sr=SR, bipes=None,
                 print(f"[musica] cama emendada no laco: os ultimos "
                       f"{loop_cauda_s:.2f}s dissolvem no comeco dela")
             mix += bed * g * _ajustar(duck, n)
+        except _FaixaReal:
+            pass
         except Exception as e:
             print(f"[musica] falhou ({e}); seguindo sem trilha")
+
+    if real:
+        try:
+            return _mixar_faixa_real(mix, voz, sr, real, destino, n, loop_cauda_s)
+        except Exception as e:                                # noqa: BLE001
+            print(f"[musica] faixa real falhou na mixagem ({e}); seguindo sem trilha")
 
     # LIMITADOR, não normalizador. Escalar a mistura inteira para caber
     # abaixaria a voz sempre que houvesse um efeito alto -- e a voz é o que

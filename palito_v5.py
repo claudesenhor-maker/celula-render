@@ -629,6 +629,29 @@ def placar_de_voz():
     return d
 
 
+def _motor_livre(motor):
+    """O motor livre a usar para este pedido, ou None."""
+    try:
+        import voz_livre
+    except Exception:                                          # noqa: BLE001
+        return None
+    if motor in voz_livre.MOTORES:
+        return motor
+    vira = (os.environ.get("VOZ_EDGE_VIRA") or getattr(voz_livre, "EDGE_VIRA", "") or "").lower()
+    if motor == "edge" and vira in voz_livre.MOTORES:
+        return vira
+    return None
+
+
+def _reserva_livre():
+    try:
+        import voz_livre
+        r = (os.environ.get("VOZ_RESERVA_LIVRE") or getattr(voz_livre, "RESERVA_DO_ELEVEN", "") or "").lower()
+        return r if r in voz_livre.MOTORES else None
+    except Exception:                                          # noqa: BLE001
+        return None
+
+
 def sintetizar(texto, cfg, destino, modo):
     if modo == "real":
         mp3 = destino + ".mp3"
@@ -650,6 +673,26 @@ def sintetizar(texto, cfg, destino, modo):
         # job inteiro.
         motor = (cfg.get("motor") or os.environ.get("MOTOR_TTS") or "edge").lower()
         marcas = None
+        # A VOZ LIVRE (22/10, ordem do dono: "nosso maior ponto fraco e' a voz
+        # de IA"). `voz_livre.py`: chatterbox (MIT, clona a voz de uma
+        # referencia, emocao) e kokoro (Apache), na CPU do runner, sem chave.
+        # Pedida pelo perfil (`motor: chatterbox|kokoro`) ou no lugar do Edge
+        # quando `voz_livre.EDGE_VIRA` diz qual. Gratis: vale para teste e
+        # producao. Falhou = segue a cadeia de sempre, ate o Edge.
+        livre = _motor_livre(motor)
+        if livre:
+            try:
+                from voz_livre import sintetizar_livre
+                marcas = sintetizar_livre(texto, cfg, destino, motor=livre)
+                USOU_MOTOR[f"pedido_{motor}"] = USOU_MOTOR.get(f"pedido_{motor}", 0) + 1
+                USOU_MOTOR[f"usou_{livre}"] = USOU_MOTOR.get(f"usou_{livre}", 0) + 1
+                dur = _duracao_wav(destino)
+                if dur > 0.05:
+                    return marcas, dur
+                print(f"[voz] {livre} devolveu audio vazio; seguindo a cadeia")
+            except Exception as e:                             # noqa: BLE001
+                print(f"[voz] {livre} falhou ({type(e).__name__}: {e}); seguindo a cadeia")
+            marcas = None
         if motor in ("eleven", "elevenlabs"):
             tem_voz = cfg.get("eleven_voice_id") or os.environ.get("ELEVEN_VOICE_ID")
             chaves = _chaves_eleven()
@@ -737,6 +780,23 @@ def sintetizar(texto, cfg, destino, modo):
         # placar nenhum -- ele foi feito justamente para o dono saber com que
         # voz o video saiu (03/09).
         usou = "eleven" if marcas is not None else None
+
+        # O DEGRAU LIVRE ANTES DO AZURE (22/10). O Azure usa as MESMAS vozes
+        # neurais do Edge -- a queda do eleven para ele soava igual a queda
+        # para o Edge. O chatterbox entra primeiro, com a voz do personagem
+        # vinda do perfil (ver `voz_livre._referencia`).
+        if marcas is None and motor in ("eleven", "elevenlabs") and _reserva_livre():
+            try:
+                from voz_livre import sintetizar_livre
+                marcas = sintetizar_livre(texto, cfg, destino, motor=_reserva_livre())
+                usou = _reserva_livre()
+                print(f"[voz] {usou} atendeu (a ElevenLabs nao)")
+                USOU_MOTOR[f"pedido_{motor}"] = USOU_MOTOR.get(f"pedido_{motor}", 0) + 1
+                USOU_MOTOR[f"usou_{usou}"] = USOU_MOTOR.get(f"usou_{usou}", 0) + 1
+                return marcas, _duracao_wav(destino)
+            except Exception as e:                             # noqa: BLE001
+                print(f"[voz] reserva livre falhou ({type(e).__name__}: {e}); seguindo para o Azure/Edge")
+                marcas = None
 
         if marcas is None and motor != "edge" and os.environ.get("AZURE_SPEECH_KEY"):
             if os.environ.get("PRODUCAO") != "1":

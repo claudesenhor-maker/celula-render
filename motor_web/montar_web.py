@@ -58,8 +58,16 @@ EFEITO_DA_ACAO = {
         "missao": [("plim", 0.05, 1.0)],
     },
     "silhueta": {"cai": [("thud", 0.6, 0.7)]},
+    # 22/10: os eventos da v2 do lowpoly (estilos/lowpoly.js). O tempo casa com
+    # o desenho: impacto e explosao batem em 0,6 da cena, quando o clarao sobe.
     "lowpoly": {"chuva_meteoros": [("whoosh", 0.1, 0.8), ("thud", 0.5, 0.8)], "tremor": [("tremido", 0.05, 1.0)],
-                "para_de_girar": [("tremido", 0.35, 1.0)], "inunda": [("whoosh", 0.1, 0.6)], "cresce": [("boing", 0.2, 0.8)]},
+                "para_de_girar": [("tremido", 0.35, 1.0)], "inunda": [("whoosh", 0.1, 0.6)], "cresce": [("boing", 0.2, 0.8)],
+                "encolhe": [("pop", 0.3, 0.8)], "impacto": [("whoosh", 0.25, 1.0), ("thud", 0.6, 1.3), ("tremido", 0.62, 1.0)],
+                "explode": [("thud", 0.55, 1.3), ("tremido", 0.57, 0.9)], "erupcao": [("tremido", 0.1, 1.0), ("thud", 0.3, 0.9)],
+                "vento": [("whoosh", 0.05, 0.8), ("whoosh", 0.5, 0.7)], "congela": [("plim", 0.55, 0.8)],
+                "seca": [("whoosh", 0.1, 0.5)], "brota": [("pop", 0.25, 0.6), ("pop", 0.45, 0.6), ("pop", 0.65, 0.6)],
+                "gravidade_zero": [("whoosh", 0.1, 0.6)], "aurora": [("plim", 0.3, 0.6)], "amanhece": [("plim", 0.4, 0.6)],
+                "derrete": [("gole", 0.5, 0.5)], "compara": [("pop", 0.3, 0.7)], "mostra": [("pop", 0.08, 0.5)]},
 }
 CPS_LEITURA = 14.0      # caracteres por segundo que alguem le no celular
 PAUSA_NARRADO = 0.22    # respiro entre cenas narradas (a voz nao emenda)
@@ -121,7 +129,7 @@ def eventos_sonoros(spec):
     por_acao = EFEITO_DA_ACAO.get(spec.get("estilo"), {})
     for c in spec["cenas"]:
         d = c["fim"] - c["ini"]
-        for nome, frac, ganho in por_acao.get(c.get("acao"), []):
+        for nome, frac, ganho in por_acao.get(c.get("acao_desenhada") or c.get("acao"), []):
             ev.append({"nome": nome, "t": c["ini"] + frac * d, "ganho": ganho})
         for nome in (c.get("sfx") or []):
             ev.append({"nome": nome, "t": c["ini"] + 0.05, "ganho": 0.9})
@@ -152,6 +160,12 @@ def main():
     json.dump(spec, open(spec_render, "w", encoding="utf-8"), ensure_ascii=False)
     mudo = os.path.join(tmp, "mudo.mp4")
     subprocess.run(["node", os.path.join(AQUI, "render_web.mjs"), "--spec", spec_render, "--saida", mudo], check=True)
+    try:
+        for c, a_ in zip(spec["cenas"], json.load(open(mudo + ".acoes.json", encoding="utf-8"))):
+            if a_:
+                c["acao_desenhada"] = a_
+    except (OSError, ValueError):
+        pass
     trilha = dict(fmt.get("trilha") or {})
     musica = dict(spec.get("musica") or {})
     for k, v in trilha.items():
@@ -160,8 +174,13 @@ def main():
     if not spec["narrado"]:
         musica.setdefault("ganho_db", -9)   # sem voz, a trilha e' a protagonista do som
     mix = SFX.mixar(voz, eventos_sonoros(spec), os.path.join(tmp, "mix.wav"), musica=musica, dur_s=spec["dur_s"])
-    subprocess.run(["ffmpeg", "-y", "-loglevel", "error", "-i", mudo, "-i", mix, "-c:v", "copy", "-c:a", "aac", "-b:a", "160k",
-                    "-shortest", a.saida], check=True)
+    # LOUDNORM (22/10): o motor web saia sem normalizacao nenhuma -- cada video
+    # num volume. -14 LUFS e' o alvo do YouTube (ele abaixa o que passa disso).
+    # 48 kHz/192k: a cama de faixa real (`trilha_biblioteca`) tem brilho acima
+    # de 12 kHz que a saida a 24 kHz cortava.
+    subprocess.run(["ffmpeg", "-y", "-loglevel", "error", "-i", mudo, "-i", mix, "-c:v", "copy",
+                    "-af", fmt.get("loudnorm") or "loudnorm=I=-14:LRA=11:TP=-1.5", "-ar", "48000",
+                    "-c:a", "aac", "-b:a", "192k", "-shortest", a.saida], check=True)
     json.dump(spec, open(os.path.splitext(a.saida)[0] + "_spec_render.json", "w", encoding="utf-8"), ensure_ascii=False, indent=1)
     print(f"[web] ok {a.saida} ({spec['dur_s']:.1f} s)")
 

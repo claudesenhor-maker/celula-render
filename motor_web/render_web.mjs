@@ -38,6 +38,7 @@ async function main() {
   await page.goto(pathToFileURL(path.join(AQUI, 'palco.html')).href, { waitUntil: 'networkidle0', timeout: 60000 });
   const prep = await page.evaluate((s) => window.preparar(s), spec);
   console.log('[render_web] ' + spec.estilo + ': ' + n + ' quadros a ' + fps + ' fps, fontes ' + JSON.stringify(prep.fontes));
+  if (prep.acoes && prep.acoes.some(Boolean)) fs.writeFileSync(saida + '.acoes.json', JSON.stringify(prep.acoes));
 
   const so = arg('quadros');
   if (so) {
