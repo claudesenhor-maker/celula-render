@@ -101,6 +101,63 @@ _FEMININOS = ("jenny", "aria", "ava", "emma", "michelle", "ana", "sonia", "libby
 
 # A frase que vira a REFERENCIA quando o canal nao tem gravacao: ~10 s, ritmo
 # de narrador, sem nome proprio (o chatterbox copia a cadencia junto com o timbre).
+# VOZES PUBLICAS (22/10, ordem do dono: "clone vozes publicas"). Trechos de
+# bancos de fala gravados PARA sintese de voz, com licenca aberta -- nao a voz de
+# alguem famoso nem de um video qualquer da internet. Atribuicao (CC BY 4.0):
+#   LibriTTS-R, Koizumi et al. 2023 (leituras do LibriVox), mythicinfinity/libritts_r
+#   CML-TTS, Oliveira et al. 2023 (leituras do LibriVox), ylacombe/cml-tts
+# Cada uma e' UM trecho de 10-17 s de um locutor (escolhido pelo tom medido em
+# 22/10); `voz_publica` no perfil escolhe pelo nome. O trecho vem da API publica
+# do Hugging Face na hora do render; falhou = a referencia sintetica do Kokoro.
+VOZES_PUBLICAS = {
+    "en_m_narrador": ("mythicinfinity/libritts_r", "config=clean&split=dev.clean", 5100),   # locutor 3000, 13 s
+    "en_m_grave": ("mythicinfinity/libritts_r", "config=clean&split=dev.clean", 3000),      # locutor 5536, 17 s
+    "en_m_2": ("mythicinfinity/libritts_r", "config=clean&split=dev.clean", 3900),          # locutor 8297, 9 s
+    "en_f_1": ("mythicinfinity/libritts_r", "config=clean&split=dev.clean", 2700),          # locutora 6319, 13 s
+    "en_f_2": ("mythicinfinity/libritts_r", "config=clean&split=dev.clean", 1800),          # locutora 7976, 10 s
+    "pt_m_1": ("ylacombe/cml-tts", "config=portuguese&split=dev", 0),                       # locutor 5417, 13 s
+    "pt_f_1": ("ylacombe/cml-tts", "config=portuguese&split=dev", 80),                      # locutora 9056, 13 s
+}
+# sem `voz_publica` no perfil: a do genero/lingua da voz do Edge, sempre a mesma
+# para a mesma voz do Edge (personagens diferentes continuam diferentes)
+_PUBLICAS_POR = {("en", "m"): ["en_m_narrador", "en_m_2"], ("en", "f"): ["en_f_1", "en_f_2"],
+                 ("pt", "m"): ["pt_m_1"], ("pt", "f"): ["pt_f_1"]}
+
+
+def _voz_publica(cfg):
+    nome = cfg.get("voz_publica")
+    if nome in VOZES_PUBLICAS:
+        return nome
+    edge = str(cfg.get("voice") or "")
+    gen = "f" if any(x in edge.lower() for x in _FEMININOS) else "m"
+    lista = _PUBLICAS_POR.get((_lingua(cfg), gen))
+    if not lista:
+        return None
+    return lista[sum(map(ord, edge)) % len(lista)]
+
+
+def _baixar_publica(nome, dest):
+    import urllib.request
+    ds, q, off = VOZES_PUBLICAS[nome]
+    url = f"https://datasets-server.huggingface.co/rows?dataset={ds}&{q}&offset={off}&length=1"
+    import time
+    bruto = dest + ".bruto"
+    for n in range(3):          # a API do Hugging Face devolve 502 de vez em quando
+        try:
+            d = json.load(urllib.request.urlopen(url, timeout=60))
+            a = d["rows"][0]["row"]["audio"]
+            a = a[0] if isinstance(a, list) else a
+            urllib.request.urlretrieve(a["src"], bruto)
+            break
+        except Exception:                                        # noqa: BLE001
+            if n == 2:
+                raise
+            time.sleep(4 * (n + 1))
+    subprocess.run(["ffmpeg", "-y", "-v", "error", "-i", bruto, "-ac", "1", "-ar", "24000", "-t", "15",
+                    "-af", "highpass=f=70,loudnorm=I=-18", dest], check=True)
+    os.remove(bruto)
+
+
 _FRASE_REF = {
     "en": "Here is something most people never think about. It sounds simple at first, but the more you "
           "look at it, the stranger it gets. So let's take it one step at a time.",
@@ -232,10 +289,11 @@ def _referencia(cfg, tmp):
     """O trecho cuja voz o chatterbox clona.
 
     1. `ref_url` do perfil (gravacao propria) -- baixada uma vez por processo;
-    2. senao, uma voz SINTETICA do Kokoro lendo `_FRASE_REF`: cada personagem
+    2. senao, uma VOZ PUBLICA (`VOZES_PUBLICAS`, banco de fala com licenca aberta);
+    3. senao, uma voz SINTETICA do Kokoro lendo `_FRASE_REF`: cada personagem
        ganha um timbre estavel (o mesmo `kokoro_voice` = a mesma voz em todo
        video) sem copiar a voz de ninguem;
-    3. se ate isso falhar, None = a voz embutida do chatterbox."""
+    4. se ate isso falhar, None = a voz embutida do chatterbox."""
     url = cfg.get("ref_url")
     if url:
         dest = os.path.join(tmp, "ref_" + re.sub(r"\W", "_", url)[-40:] + ".wav")
@@ -245,6 +303,17 @@ def _referencia(cfg, tmp):
             urllib.request.urlretrieve(url, bruto)
             subprocess.run(["ffmpeg", "-y", "-v", "error", "-i", bruto, "-ac", "1", "-ar", "24000", "-t", "15", dest], check=True)
         return dest
+    pub = _voz_publica(cfg)
+    if pub:
+        dest = os.path.join(tmp, f"ref_publica_{pub}.wav")
+        if os.path.exists(dest):
+            return dest
+        try:
+            _baixar_publica(pub, dest)
+            print(f"[voz-livre] referencia publica {pub} ({VOZES_PUBLICAS[pub][0]})")
+            return dest
+        except Exception as e:                                   # noqa: BLE001
+            print(f"[voz-livre] voz publica {pub} falhou ({e}); referencia do Kokoro")
     voz = _voz_kokoro(cfg)
     dest = os.path.join(tmp, f"ref_kokoro_{voz}.wav")
     if not os.path.exists(dest):

@@ -389,6 +389,78 @@
       return grupo;
     }
 
+    // OBJETOS CRIADOS PELA IA (22/10, ordem do dono: "criar objetos livremente
+    // durante a execucao, nao algo fechado por codigo"). A cena pode trazer
+    // `criar`: uma lista de objetos DESCRITOS EM DADOS que a IA monta a partir
+    // da frase -- nada e' executado como codigo. Cada objeto:
+    //   { "modelo": "pessoa|arvore|pinheiro|cacto|casa|predio|carro|nuvem|pinguim|peixe|vulcao|gelo"   (peca pronta)
+    //     ou "partes": [{ "forma": "caixa|esfera|cone|cilindro|icosa|toro|piramide",
+    //                     "cor": "#hex", "pos": [x,y,z], "tam": [sx,sy,sz], "giro": [rx,ry,rz], "brilha": bool }],
+    //     "pos": [x, z] ou [x, y, z], "escala": n, "giro": graus em y,
+    //     "anim": [{ "de": 0..1, "ate": 0..1, "mover": [dx,dy,dz], "girar": [voltas x,y,z],
+    //                "escalar": fator, "surgir": bool, "sumir": bool, "pulsar": bool }] }
+    // Limites: 12 objetos e 14 partes por objeto; numeros fora da faixa sao
+    // cortados. O tempo e' o `k` da cena (0..1): nada guarda estado entre quadros.
+    const FORMAS = {
+      caixa: () => new T.BoxGeometry(1, 1, 1), esfera: () => new T.IcosahedronGeometry(0.5, 1), cone: () => new T.ConeGeometry(0.5, 1, 7),
+      cilindro: () => new T.CylinderGeometry(0.5, 0.5, 1, 8), icosa: () => new T.IcosahedronGeometry(0.5, 0), toro: () => new T.TorusGeometry(0.4, 0.12, 6, 12),
+      piramide: () => new T.ConeGeometry(0.6, 1, 4),
+    };
+    const num = (v, a, b, p) => { const x = Number(v); return Number.isFinite(x) ? U.clamp(x, a, b) : p; };
+    const vet = (v, a, b, p) => [0, 1, 2].map((i) => num(Array.isArray(v) ? v[i] : undefined, a, b, p[i]));
+    const corOk = (c, p) => (/^#[0-9a-fA-F]{3,6}$/.test(String(c || '')) ? c : p);
+    function pecaPronta(nome, r) {
+      return ({ pessoa: () => pessoa(r, 1), arvore: () => arvore('redonda'), pinheiro: () => arvore('pinheiro'), cacto: () => arvore('cacto'),
+        casa: () => casa(), predio: () => predio(1.2, 3, 1.2, '#C9B79C', r), carro: () => carro('#E2574C'), nuvem: () => nuvem(r),
+        pinguim: () => pinguim(), peixe: () => peixe(), vulcao: () => vulcao(r), gelo: () => gelo() }[nome] || (() => null))();
+    }
+    function montarCriados(cn, idx, o, r) {
+      const lista = Array.isArray(cn.criar) ? cn.criar.slice(0, 12) : [];
+      o.criados = [];
+      lista.forEach((d, j) => {
+        try {
+          let g = d.modelo ? pecaPronta(String(d.modelo), r) : null;
+          if (!g) {
+            g = new T.Group();
+            (Array.isArray(d.partes) ? d.partes.slice(0, 14) : []).forEach((pt) => {
+              const f = FORMAS[pt.forma] || FORMAS.caixa;
+              const cor = corOk(pt.cor, '#CCCCCC');
+              const m = new T.Mesh(f(), M(cor, pt.brilha ? { emis: cor } : undefined));
+              m.position.set(...vet(pt.pos, -20, 20, [0, 0.5, 0]));
+              m.scale.set(...vet(pt.tam, 0.02, 20, [1, 1, 1]));
+              m.rotation.set(...vet(pt.giro, -360, 360, [0, 0, 0]).map((a) => (a * Math.PI) / 180));
+              g.add(m);
+            });
+            if (!g.children.length) return;
+            sombra(g);
+          }
+          const pos = Array.isArray(d.pos) && d.pos.length === 3 ? vet(d.pos, -30, 30, [0, 0, 0]) : (() => { const [x, z] = vet(d.pos, -30, 30, [0, 0, 0]); return [x, null, z]; })();
+          if (pos[1] === null) pos[1] = o.terreno ? o.terreno.userData.alt(pos[0], pos[2]) : 0;
+          g.position.set(pos[0], pos[1], pos[2]);
+          const esc = num(d.escala, 0.05, 30, 1); g.scale.setScalar(esc);
+          g.rotation.y = (num(d.giro, -360, 360, 0) * Math.PI) / 180;
+          g.userData.criado = { base: g.position.clone(), esc, giro: g.rotation.clone(), anim: Array.isArray(d.anim) ? d.anim.slice(0, 6) : [] };
+          o.sc.add(g); o.criados.push(g);
+        } catch (e) { console.log('[lowpoly] cena ' + idx + ': objeto criado ' + j + ' ignorado (' + e.message + ')'); }
+      });
+      if (o.criados.length) console.log('[lowpoly] cena ' + idx + ': ' + o.criados.length + ' objeto(s) criado(s) pela IA');
+    }
+    function animarCriados(o, k, t) {
+      (o.criados || []).forEach((g) => {
+        const u = g.userData.criado; let px = u.base.x, py = u.base.y, pz = u.base.z, rx = u.giro.x, ry = u.giro.y, rz = u.giro.z, s = u.esc, vis = true;
+        u.anim.forEach((a) => {
+          const de = num(a.de, 0, 1, 0), ate = Math.max(de + 0.01, num(a.ate, 0, 1, 1)), q = U.suave((k - de) / (ate - de));
+          if (a.mover) { const m = vet(a.mover, -40, 40, [0, 0, 0]); px += m[0] * q; py += m[1] * q; pz += m[2] * q; }
+          if (a.girar) { const g2 = vet(a.girar, -20, 20, [0, 0, 0]); rx += g2[0] * q * Math.PI * 2; ry += g2[1] * q * Math.PI * 2; rz += g2[2] * q * Math.PI * 2; }
+          if (a.escalar != null) s *= U.lerp(1, num(a.escalar, 0, 30, 1), q);
+          if (a.surgir) { s *= U.mola(Math.max(0, k - de) * 3, 10); if (k < de) vis = false; }
+          if (a.sumir && k > ate) vis = false;
+          if (a.pulsar && k >= de && k <= ate) s *= 1 + 0.08 * Math.sin(t * 9);
+        });
+        g.position.set(px, py, pz); g.rotation.set(rx, ry, rz); g.scale.setScalar(Math.max(0.0001, s)); g.visible = vis;
+      });
+    }
+
     function montar(cn, idx) {
       const sc = new T.Scene(), r = U.rng((spec.semente || 'lp') + ':' + idx);
       const acao = cn.acaoV2, cen = cn.cenario || 'cidade';
@@ -493,6 +565,7 @@
         regua.position.set(1.6, 0, 1.4); sc.add(regua); o.regua = regua;
       }
       Object.values(fx).forEach((f) => { if (f.isPoints || f.isLineSegments) sc.add(f); });
+      montarCriados(cn, idx, o, r);
       facetar(sc);
       return o;
     }
@@ -671,6 +744,7 @@
       }
       if (fx.poeira) { const a = fx.poeira.geometry.attributes.position; for (let j = 0; j < a.count; j++) { const x0 = (rr() - 0.5) * 20, y0 = rr() * 8, z0 = (rr() - 0.5) * 14; a.setXYZ(j, ((x0 + local * 1.2 + 10) % 20) - 10, y0 + Math.sin(t + j) * 0.3, z0); } a.needsUpdate = true; fx.poeira.material.opacity = 0.55 * U.suave(k * 2); }
       if (fx.flutua) { const a = fx.flutua.geometry.attributes.position; for (let j = 0; j < a.count; j++) { const x0 = (rr() - 0.5) * 12, z0 = (rr() - 0.5) * 10, f = rr(); a.setXYZ(j, x0 + Math.sin(t * 0.5 + j) * 0.5, U.saida(k) * (1 + f * 6) + 0.2, z0); } a.needsUpdate = true; }
+      animarCriados(o, k, t);
       // a ultima coisa do 3D: o desenho
       R.render(o.sc, cam);
     }
