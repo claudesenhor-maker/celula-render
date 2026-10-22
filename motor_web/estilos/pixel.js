@@ -89,22 +89,34 @@
       out.caiu = (cn.hud && cn.hud.hp != null && cn.hud.hp < atual.hp && k < 0.4) || (cn.hud && cn.hud.ouro != null && cn.hud.ouro < atual.ouro && k < 0.4);
       return out;
     }
+    // ZONA SEGURA DO SHORTS (22/10, ordem do dono: "as legendas e falas ficam
+    // tampadas com as informacoes do YouTube"). O app cobre o rodape (titulo,
+    // canal, descricao: ~480 px de baixo), a coluna da direita (curtir,
+    // comentar, compartilhar: ~170 px) e a barra do topo (~140 px). A caixa de
+    // dialogo morava em H-520..H-80 -- inteira debaixo da descricao -- e o HUD
+    // comecava em y=30, sob a barra. Tudo que se le fica dentro de ZS.
+    const ZS = { topo: 150, base: H - 500, esq: 30, dir: W - 175 };
+    const DLG = { x: ZS.esq, y: ZS.base - 360, w: ZS.dir - ZS.esq, h: 360 };
+    // o MUNDO sobe 150 px (25 pixels do buffer, multiplo de K: continua nitido)
+    // para o chao ficar acima da caixa; o rodape repete o chao (o app cobre ali).
+    const MUNDO_DY = 150;
     function hud(t) {
       const h = hudEm(t), tremor = h.caiu ? Math.sin(t * 80) * 6 : 0;
-      c.save(); c.translate(tremor, 0); caixa(30, 30, W - 60, 230);
-      barra(70, 70, 560, 'HP', h.hp, h.hp < 30 ? PAL.vermelho : PAL.verde); barra(70, 120, 560, 'NRG', h.energia, PAL.amarelo);
-      c.font = F(30); c.fillStyle = PAL.amarelo; c.textAlign = 'left'; c.fillText('G ' + Math.round(h.ouro), 70, 205); c.fillStyle = PAL.branco; c.textAlign = 'right'; c.fillText('LV ' + Math.round(h.nivel), W - 70, 205); c.restore();
+      c.save(); c.translate(tremor, 0); caixa(ZS.esq, ZS.topo, ZS.dir - ZS.esq, 130);
+      barra(70, ZS.topo + 24, 400, 'HP', h.hp, h.hp < 30 ? PAL.vermelho : PAL.verde); barra(70, ZS.topo + 72, 400, 'NRG', h.energia, PAL.amarelo);
+      c.font = F(30); c.textAlign = 'right'; c.textBaseline = 'middle'; c.fillStyle = PAL.amarelo; c.fillText('G ' + Math.round(h.ouro), ZS.dir - 40, ZS.topo + 42); c.fillStyle = PAL.branco; c.fillText('LV ' + Math.round(h.nivel), ZS.dir - 40, ZS.topo + 90); c.restore();
     }
     function dialogo(texto, local, quem) {
       if (!texto) return;
       // a caixa ja' mostra quem fala: "MOM: MOM: ..." era o roteiro repetindo
       if (quem && texto.toUpperCase().startsWith(String(quem).toUpperCase() + ':')) texto = texto.slice(String(quem).length + 1).trim();
       const n = Math.floor(local * 32), vis = texto.slice(0, n);
-      caixa(30, H - 520, W - 60, 440);
-      c.font = F(38); c.fillStyle = PAL.branco; c.textAlign = 'left'; c.textBaseline = 'top';
-      if (quem) { c.fillStyle = PAL.amarelo; c.fillText(String(quem).toUpperCase(), 80, H - 470); }
-      c.fillStyle = PAL.branco; U.linhas(c, vis, W - 180).forEach((l, i) => c.fillText(l, 80, H - (quem ? 400 : 450) + i * 64));
-      if (n >= texto.length && Math.floor(local * 3) % 2) { c.beginPath(); c.moveTo(W - 140, H - 150); c.lineTo(W - 100, H - 150); c.lineTo(W - 120, H - 124); c.closePath(); c.fill(); }
+      caixa(DLG.x, DLG.y, DLG.w, DLG.h);
+      c.font = F(36); c.fillStyle = PAL.branco; c.textAlign = 'left'; c.textBaseline = 'top';
+      if (quem) { c.fillStyle = PAL.amarelo; c.fillText(String(quem).toUpperCase(), DLG.x + 50, DLG.y + 45); }
+      c.fillStyle = PAL.branco; U.linhas(c, vis, DLG.w - 100).forEach((l, i) => c.fillText(l, DLG.x + 50, DLG.y + (quem ? 110 : 60) + i * 60));
+      const sx = DLG.x + DLG.w - 70, sy = DLG.y + DLG.h - 60;
+      if (n >= texto.length && Math.floor(local * 3) % 2) { c.beginPath(); c.moveTo(sx - 20, sy); c.lineTo(sx + 20, sy); c.lineTo(sx, sy + 26); c.closePath(); c.fill(); }
     }
     function banner(txt, local, cor) {
       const p = U.mola(local, 10); c.save(); c.translate(W / 2, 760); c.scale(p, p); c.fillStyle = cor || PAL.vermelho; c.fillRect(-470, -90, 940, 180); c.lineWidth = 10; c.strokeStyle = PAL.branco; c.strokeRect(-450, -70, 900, 140);
@@ -126,7 +138,7 @@
         case 'come': sprite(at[0], 70, yb, 0, 1); objeto(cn.objeto || 'pizza', 88, 200 - Math.floor(k * 3) * 2); break;
         case 'dorme': sprite(at[0], 112, 112, 0, 1); px(106, 150, 66, 18, PAL.branco); break;
         case 'compra': case 'recebe': { sprite(at[0], 70, yb, 0, 1); for (let i = 0; i < 6; i++) { const q = (local * 1.5 + i / 6) % 1; objeto('moeda', 80 + Math.sin(i * 2) * 20, cn.acao === 'recebe' ? 40 + q * 150 : 180 - q * 150); } if (cn.objeto && cn.objeto !== 'moeda') objeto(cn.objeto, 98, yb + 30); break; }
-        case 'batalha': sprite(at[0], 14, 162, passo, 1, 3); sprite(at[1] || 'chefe', 96, 66, 0, -1, 6); if (k > 0.45 && k < 0.6) px(0, 0, PW, PH, '#FFFFFF66'); extraUI = 'batalha'; break;
+        case 'batalha': sprite(at[0], 14, 162, passo, 1, 3); sprite(at[1] || 'chefe', 96, 76, 0, -1, 6); if (k > 0.45 && k < 0.6) px(0, 0, PW, PH, '#FFFFFF66'); extraUI = 'batalha'; break;
         case 'level_up': sprite(at[0], 84, yb, 0, 1); for (let i = 0; i < 10; i++) { const q = (local * 2 + i / 10) % 1; px(80 + (i % 5) * 6, yb + 20 - q * 120, 2, 2, i % 2 ? PAL.amarelo : PAL.branco); } extraUI = 'level'; break;
         case 'game_over': sprite(at[0], 84, yb + 10, 0, 1); extraUI = 'over'; break;
         case 'missao': sprite(at[0], 84, yb, 0, 1); extraUI = 'missao'; break;
@@ -134,17 +146,17 @@
       }
       if (cn.objeto && ['acorda', 'come', 'compra', 'recebe'].indexOf(cn.acao) < 0) objeto(cn.objeto, cn.acao === 'anda' ? U.lerp(-36, 150, k) + 28 : 82, cn.acao === 'anda' ? yb + 30 : 160 + Math.sin(t * 4) * 2);
       b.restore();
-      c.imageSmoothingEnabled = false; c.drawImage(buf, 0, 0, W, H);
+      c.imageSmoothingEnabled = false; c.drawImage(buf, 0, 0, W, H); c.drawImage(buf, 0, -MUNDO_DY, W, H);
       if (extraUI === 'over') { c.fillStyle = 'rgba(0,0,0,' + (0.75 * U.clamp(k * 2, 0, 1)).toFixed(2) + ')'; c.fillRect(0, 0, W, H); c.font = F(86); c.fillStyle = PAL.vermelho; c.textAlign = 'center'; c.fillText('GAME OVER', W / 2, 820); if (k > 0.5) { c.font = F(36); c.fillStyle = PAL.branco; c.fillText('CONTINUE? ' + (9 - Math.floor((k - 0.5) * 18)), W / 2, 960); } }
       hud(t);
       if (extraUI === 'level') banner('LEVEL UP!', local, PAL.verde2);
       if (extraUI === 'missao') banner('NEW QUEST', local, PAL.azul2);
-      if (extraUI === 'batalha') { if (!cn.texto) { caixa(30, H - 520, W - 60, 440); c.font = F(46); c.textAlign = 'left'; c.textBaseline = 'middle'; ['FIGHT', 'ITEM', 'RUN', 'CRY'].forEach((o, i) => { c.fillStyle = PAL.branco; c.fillText(o, 160 + (i % 2) * 420, H - 380 + Math.floor(i / 2) * 120); });
-        const sel = Math.min(3, Math.floor(k * 4)); c.fillStyle = PAL.amarelo; { const ax = 100 + (sel % 2) * 420, ay = H - 380 + Math.floor(sel / 2) * 120; c.beginPath(); c.moveTo(ax, ay - 20); c.lineTo(ax + 32, ay); c.lineTo(ax, ay + 20); c.closePath(); c.fill(); } }
-        if (k > 0.45 && k < 0.8) { c.font = F(70); c.fillStyle = PAL.vermelho; c.textAlign = 'center'; c.fillText('-' + (cn.dano || 40), W * 0.3, 1100 - (k - 0.45) * 400); } }
+      if (extraUI === 'batalha') { if (!cn.texto) { caixa(DLG.x, DLG.y, DLG.w, DLG.h); c.font = F(46); c.textAlign = 'left'; c.textBaseline = 'middle'; ['FIGHT', 'ITEM', 'RUN', 'CRY'].forEach((o, i) => { c.fillStyle = PAL.branco; c.fillText(o, DLG.x + 130 + (i % 2) * 380, DLG.y + 140 + Math.floor(i / 2) * 120); });
+        const sel = Math.min(3, Math.floor(k * 4)); c.fillStyle = PAL.amarelo; { const ax = DLG.x + 70 + (sel % 2) * 380, ay = DLG.y + 140 + Math.floor(sel / 2) * 120; c.beginPath(); c.moveTo(ax, ay - 20); c.lineTo(ax + 32, ay); c.lineTo(ax, ay + 20); c.closePath(); c.fill(); } }
+        if (k > 0.45 && k < 0.8) { c.font = F(70); c.fillStyle = PAL.vermelho; c.textAlign = 'center'; c.fillText('-' + (cn.dano || 40), W * 0.3, 1100 - MUNDO_DY - (k - 0.45) * 400); } }
       if (cn.texto) dialogo(cn.texto, local, cn.quem);
       if (cn.texto && cn.acao === 'missao') { c.font = F(40); c.fillStyle = PAL.branco; c.textAlign = 'center'; }
-      U.cartaz(c, spec, t, { fonte: F(48), y: 300, fundo: PAL.vermelho, borda: PAL.branco, cor: PAL.branco, altura_linha: 70, raio: 0, dur: 2.6, caixa: true });
+      U.cartaz(c, spec, t, { fonte: F(48), y: ZS.topo + 165, fundo: PAL.vermelho, borda: PAL.branco, cor: PAL.branco, altura_linha: 70, raio: 0, dur: 2.6, caixa: true });
       // linhas de varredura de tela de tubo
       c.fillStyle = 'rgba(0,0,0,.08)'; for (let y = 0; y < H; y += 6) c.fillRect(0, y, W, 2);
     }
