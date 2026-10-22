@@ -142,7 +142,7 @@
       if (hora === 'tempestade' || cn.objeto === 'chuva') clima('chuva', t, cor);
       // gente
       const at = cn.atores && cn.atores.length ? cn.atores : ['homem'];
-      if (at[0] === 'multidao') { for (let i = 0; i < 9; i++) figura(80 + i * 115 - desl * 0.8, CHAO + 30, 0.55 + (i % 3) * 0.06, i % 3 === 1 ? 'mulher' : 'homem', poseDe(i % 2 ? 'olha' : 'parado', t + i, k), t); }
+      if (at[0] === 'multidao') { for (let i = 0; i < 9; i++) figura(80 + i * 115 - desl * 0.8, CHAO + 30, 0.55 + (i % 3) * 0.06, i % 3 === 1 ? 'mulher' : 'homem', poseDe(cn.acao === 'anda' || cn.acao === 'corre' ? cn.acao : (i % 2 ? 'olha' : 'parado'), t + i, k), t); }
       else at.slice(0, 2).forEach((tipo, i) => {
         const acao = i === 0 ? cn.acao : (cn.acao === 'anda' || cn.acao === 'corre' ? cn.acao : 'parado');
         const x0 = i === 0 ? W * 0.36 : W * 0.68, mov = acao === 'anda' ? 180 * k : (acao === 'corre' ? 520 * k : 0);
