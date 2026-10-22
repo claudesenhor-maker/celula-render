@@ -492,10 +492,16 @@ class _Trabalhador:
                                       stdin=subprocess.PIPE, stdout=subprocess.PIPE, text=True, bufsize=1)
         cls._p.stdin.write(json.dumps(pedido, ensure_ascii=False) + "\n")
         cls._p.stdin.flush()
-        linha = cls._p.stdout.readline()
-        if not linha:
-            raise RuntimeError("o trabalhador da voz livre morreu (ver o log acima)")
-        r = json.loads(linha)
+        # so' a linha marcada e' resposta: qualquer outra coisa que vaze para o
+        # stdout do trabalhador (run 39823974750) vai para o log e e' ignorada
+        while True:
+            linha = cls._p.stdout.readline()
+            if not linha:
+                raise RuntimeError("o trabalhador da voz livre morreu (ver o log acima)")
+            if linha.startswith(_MARCA):
+                break
+            sys.stderr.write("[voz-livre] " + linha)
+        r = json.loads(linha[len(_MARCA):])
         if not r.get("ok"):
             raise RuntimeError(r.get("erro") or "falha sem mensagem")
         return r["marcas"]
@@ -535,10 +541,22 @@ def _sintetizar_local(texto, cfg, destino, motor=None):
     return marcas
 
 
+_MARCA = "@@VOZ@@ "
+
+
 def _servidor():
+    """O protocolo usa uma COPIA do stdout; o descritor 1 passa a apontar para o
+    stderr no nivel do sistema operacional. Assim nada do que as bibliotecas (ou
+    processos filhos) escrevem no stdout atravessa o protocolo -- no run
+    39823974750 um print de dentro dos modelos virou "resposta" e desalinhou tudo."""
     import traceback
-    sys.stdout, saida = sys.stderr, sys.stdout      # print dos motores vai para o log, nao para o protocolo
+    fd = os.dup(1)
+    os.dup2(2, 1)
+    saida = os.fdopen(fd, "w", buffering=1)
+    sys.stdout = sys.stderr
     for linha in sys.stdin:
+        if not linha.strip():
+            continue
         try:
             q = json.loads(linha)
             m = _sintetizar_local(q["texto"], q.get("cfg") or {}, q["destino"], q.get("motor"))
@@ -546,7 +564,7 @@ def _servidor():
         except Exception as e:                                  # noqa: BLE001
             traceback.print_exc()
             r = {"ok": False, "erro": f"{type(e).__name__}: {e}"[:500]}
-        saida.write(json.dumps(r, ensure_ascii=False) + "\n")
+        saida.write(_MARCA + json.dumps(r, ensure_ascii=False) + "\n")
         saida.flush()
 
 
