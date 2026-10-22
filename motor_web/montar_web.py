@@ -62,22 +62,58 @@ EFEITO_DA_ACAO = {
     # o desenho: impacto e explosao batem em 0,6 da cena, quando o clarao sobe.
     "lowpoly": {"chuva_meteoros": [("whoosh", 0.1, 0.8), ("thud", 0.5, 0.8)], "tremor": [("tremido", 0.05, 1.0)],
                 "para_de_girar": [("tremido", 0.35, 1.0)], "inunda": [("whoosh", 0.1, 0.6)], "cresce": [("boing", 0.2, 0.8)],
-                "encolhe": [("pop", 0.3, 0.8)], "impacto": [("whoosh", 0.25, 1.0), ("thud", 0.6, 1.3), ("tremido", 0.62, 1.0)],
-                "explode": [("thud", 0.55, 1.3), ("tremido", 0.57, 0.9)], "erupcao": [("tremido", 0.1, 1.0), ("thud", 0.3, 0.9)],
+                "encolhe": [("pop", 0.3, 0.8)], "impacto": [("whoosh", 0.25, 1.0), ("explosao", 0.6, 1.2), ("tremido", 0.62, 0.8)],
+                "explode": [("explosao", 0.55, 1.2), ("tremido", 0.57, 0.7)], "erupcao": [("tremido", 0.1, 1.0), ("explosao", 0.3, 0.6)],
                 "vento": [("whoosh", 0.05, 0.8), ("whoosh", 0.5, 0.7)], "congela": [("plim", 0.55, 0.8)],
                 "seca": [("whoosh", 0.1, 0.5)], "brota": [("pop", 0.25, 0.6), ("pop", 0.45, 0.6), ("pop", 0.65, 0.6)],
                 "gravidade_zero": [("whoosh", 0.1, 0.6)], "aurora": [("plim", 0.3, 0.6)], "amanhece": [("plim", 0.4, 0.6)],
                 "derrete": [("gole", 0.5, 0.5)], "compara": [("pop", 0.3, 0.7)], "mostra": [("pop", 0.08, 0.5)]},
     # 22/10: "como funciona" (estilos/mecanismo.js)
-    "mecanismo": {"explode": [("whoosh", 0.05, 0.8)], "monta": [("clique", 0.4, 0.8), ("clique", 0.55, 0.8)],
-                  "corte": [("whoosh", 0.05, 0.6)], "destaque": [("plim", 0.15, 0.7)], "gira": [("rangido", 0.1, 0.5)],
-                  "move": [("clique", 0.3, 0.8), ("clique", 0.8, 0.8)], "fluxo": [("whoosh", 0.1, 0.5)]},
+    "mecanismo": {"explode": [("whoosh", 0.05, 0.8), ("tecido", 0.1, 0.5)], "monta": [("metal", 0.4, 0.7), ("clique", 0.55, 0.8)],
+                  "corte": [("whoosh", 0.05, 0.6)], "destaque": [("plim", 0.15, 0.6)], "gira": [("motor", 0.05, 0.45)],
+                  "move": [("metal", 0.3, 0.7), ("clique", 0.8, 0.8)], "fluxo": [("whoosh", 0.1, 0.5)]},
     # 22/10: comparacao de escala (estilos/escala.js): a camera recua a cada cena
     "escala": {"compara": [("whoosh", 0.02, 0.7), ("plim", 0.4, 0.5)]},
     # 22/10: quiz "ache o diferente" (estilos/quiz.js); o tique por segundo vem
     # de `eventos_sonoros`, a resposta (1,3 s antes do fim do nivel) aqui
     "quiz": {},
 }
+# O PERFIL DE EFEITOS de cada estilo (sfx.PERFIL, 22/10): o acervo gravado
+# que o canal usa. Pixel soa 8-bit; quiz, relogio; o resto, o mundo real.
+PERFIL_SFX = {"pixel": "pixel", "quiz": "quiz"}
+
+
+def camas_de_ambiente(spec):
+    """[(ini, fim, tipo)]: o som do LUGAR de cada cena (sfx.ambiente).
+
+    So' os estilos com lugar: o low-poly (pela acao e pelo cenario), a
+    silhueta (clima, hora e lugar) e os estudios 3D (um tom de sala, para nao
+    haver silencio digital entre as falas). Pixel, quiz, fisica e mangueira
+    tem som proprio e ficam sem cama."""
+    est, out = spec.get("estilo"), []
+    for c in spec["cenas"]:
+        a, cen, obj, hora = c.get("acao_desenhada") or c.get("acao"), c.get("cenario"), c.get("objeto"), c.get("hora")
+        tipo = None
+        if est == "lowpoly":
+            tipo = ({"chove": "chuva", "vento": "vento", "incendio": "fogo", "erupcao": "fogo", "inunda": "mar", "seca": "vento",
+                     "noite_eterna": "grilos", "aurora": "grilos", "derrete": "mar", "estiagem": "vento", "sem_ar": "vento"}.get(a)
+                    or {"oceano": "mar", "praia": "mar", "cidade": "cidade", "espaco": "espaco", "planeta": "espaco", "polo": "vento",
+                        "deserto": "vento", "montanha": "vento", "vulcao": "fogo", "floresta": "vento", "campo": "vento"}.get(cen))
+            if hora == "noite" and tipo not in ("chuva", "fogo", "espaco"):
+                tipo = "grilos"
+        elif est == "silhueta":
+            tipo = ({"chuva": "chuva", "raio": "chuva", "neve": "vento", "fogueira": "fogo", "vagalumes": "grilos", "nevoa": "vento"}.get(obj)
+                    or ("grilos" if hora == "noite" else None)
+                    or {"mar": "mar", "farol": "mar", "cidade": "cidade", "vila": "cidade", "estrada": "vento"}.get(cen) or "vento")
+        elif est in ("mecanismo",):
+            tipo = "sala"
+        elif est == "escala":
+            tipo = "vento"
+        if tipo and c.get("fim") is not None:
+            out.append((c["ini"], c["fim"] + 0.4, tipo))
+    return out
+
+
 CPS_LEITURA = 14.0      # caracteres por segundo que alguem le no celular
 PAUSA_NARRADO = 0.22    # respiro entre cenas narradas (a voz nao emenda)
 
@@ -227,7 +263,9 @@ def main():
         musica.setdefault("ganho_db", -9)   # sem voz, a trilha e' a protagonista do som
     if fmt.get("sem_trilha"):
         musica = None                       # fisica: as notas das batidas SAO a trilha
-    mix = SFX.mixar(voz, eventos_sonoros(spec), os.path.join(tmp, "mix.wav"), musica=musica, dur_s=spec["dur_s"])
+    SFX.PERFIL = PERFIL_SFX.get(est, "padrao")
+    mix = SFX.mixar(voz, eventos_sonoros(spec), os.path.join(tmp, "mix.wav"), musica=musica, dur_s=spec["dur_s"],
+                    camas=camas_de_ambiente(spec))
     # LOUDNORM (22/10): o motor web saia sem normalizacao nenhuma -- cada video
     # num volume. -14 LUFS e' o alvo do YouTube (ele abaixa o que passa disso).
     # 48 kHz/192k: a cama de faixa real (`trilha_biblioteca`) tem brilho acima

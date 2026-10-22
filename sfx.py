@@ -463,6 +463,136 @@ def efeito(nome):
 
 
 # =====================================================================
+# EFEITO GRAVADO (22/10, ordem do dono: "efeitos sonoros e trilha mais
+# naturais e condizentes com cada canal")
+# =====================================================================
+# O sintetizado acima e' um oscilador com envelope: serve de rede, mas o
+# ouvido reconhece na hora que nao e' um passo nem uma porta de verdade.
+# `sfx_lib.zip` (ao lado deste arquivo) traz GRAVACOES reais, licenca CC0
+# (Kenney), varias versoes de cada som. Cada evento sorteia uma versao pela
+# sua chave (nome + instante) e varia de leve o tom (+-4%) e o volume
+# (+-1,5 dB): dois passos seguidos nunca sao o mesmo arquivo. PERFIL troca o
+# acervo por canal (pixel = 8-bit; quiz = tique de relogio); o que o perfil
+# nao tem cai no `padrao`, e o que nenhum tem cai no sintetizado.
+PERFIL = os.environ.get("SFX_PERFIL", "padrao")
+_LIB = {"zip": None, "indice": None, "cache": {}}
+ALIAS = {"batida": "thud", "ideia": "plim", "ding": "plim", "errou": "erro", "piada": "rimshot", "toque": "clique",
+         "teclado": "digitar", "blim": "notificacao", "tilintar": "chaves", "sacola": "papel", "xicara": "louca",
+         "porta": "rangido", "dinheiro": "caixa", "registradora": "caixa", "sting": "susto", "surpresa": "susto"}
+
+
+def _lib():
+    if _LIB["indice"] is None:
+        _LIB["indice"] = {}
+        try:
+            import json as _json
+            import zipfile
+            z = zipfile.ZipFile(os.path.join(os.path.dirname(os.path.abspath(__file__)), "sfx_lib.zip"))
+            _LIB["zip"], _LIB["indice"] = z, _json.loads(z.read("indice.json"))
+        except Exception as e:                                    # noqa: BLE001
+            print(f"[sfx] sem biblioteca gravada ({e}); so' sintetizado")
+    return _LIB["indice"]
+
+
+def _decodificar(arc, sr):
+    k = (arc, sr)
+    if k not in _LIB["cache"]:
+        import subprocess
+        bruto = _LIB["zip"].read(arc)
+        r = subprocess.run(["ffmpeg", "-v", "error", "-i", "pipe:0", "-f", "s16le", "-ac", "1", "-ar", str(sr), "pipe:1"],
+                           input=bruto, capture_output=True, check=True)
+        x = np.frombuffer(r.stdout, dtype="<i2").astype(np.float32) / 32768.0
+        p = float(np.max(np.abs(x))) or 1.0
+        _LIB["cache"][k] = x * (0.9 / p)
+    return _LIB["cache"][k]
+
+
+def efeito_gravado(nome, sr=SR, chave="", perfil=None):
+    """A gravacao do efeito (uma das versoes), ou None se nao houver."""
+    n = ALIAS.get(str(nome or "").strip().lower(), str(nome or "").strip().lower())
+    ind = _lib()
+    if not ind:
+        return None
+    for pf in (perfil or PERFIL, "padrao"):
+        lst = (ind.get(pf) or {}).get(n)
+        if lst:
+            break
+    else:
+        return None
+    import hashlib
+    h = int(hashlib.md5(f"{n}|{chave}".encode()).hexdigest()[:8], 16)
+    try:
+        x = _decodificar(lst[h % len(lst)], sr)
+    except Exception as e:                                        # noqa: BLE001
+        print(f"[sfx] {n}: gravacao ilegivel ({e}); sintetizado")
+        return None
+    tom = 1.0 + (((h >> 8) % 1000) / 1000.0 - 0.5) * 0.08          # +-4%
+    vol = 10 ** ((((h >> 18) % 1000) / 1000.0 - 0.5) * 3.0 / 20)   # +-1,5 dB
+    if abs(tom - 1.0) > 0.002 and len(x) > 4:
+        m = int(len(x) / tom)
+        x = np.interp(np.arange(m) * tom, np.arange(len(x)), x).astype(np.float32)
+    return x * vol
+
+
+# =====================================================================
+# CAMAS DE AMBIENTE (22/10): o lugar tambem soa
+# =====================================================================
+# Chuva, vento, mar, grilos, cidade, fogo, espaco: ruido filtrado com
+# movimento lento (nunca um loop que se repete), deterministico pela semente.
+# Entra baixo (-27 dB) e abaixa mais embaixo da fala.
+def _rosa(n, rng):
+    b = np.fft.rfft(rng.standard_normal(n))
+    f = np.arange(len(b), dtype=np.float32); f[0] = 1
+    return np.fft.irfft(b / np.sqrt(f), n).astype(np.float32)
+
+
+def ambiente(tipo, dur_s, sr=SR, semente=0):
+    n = max(1, int(dur_s * sr)); t = np.arange(n) / sr
+    rng = np.random.default_rng(abs(hash((tipo, semente))) % (2 ** 32))
+    lfo = lambda hz, fase=0.0: 0.5 + 0.5 * np.sin(2 * np.pi * hz * t + fase)      # noqa: E731
+    if tipo == "chuva":
+        x = _passa_alta(_ruido(n, int(rng.integers(1e6))), 900, sr) * 0.5
+        gotas = np.zeros(n, np.float32)
+        for i in rng.integers(0, n, int(dur_s * 40)):
+            m = min(n - i, int(0.012 * sr)); gotas[i:i + m] += np.exp(-np.arange(m) / (0.002 * sr)) * rng.uniform(0.2, 0.7)
+        x = x * (0.8 + 0.2 * lfo(0.07)) + _passa_alta(gotas, 2500, sr)
+    elif tipo == "vento":
+        x = _passa_baixa(_rosa(n, rng), 700, sr) * (0.25 + 0.75 * lfo(0.11) * lfo(0.043, 1.3))
+    elif tipo == "mar":
+        x = _passa_baixa(_rosa(n, rng), 1200, sr) * (0.15 + 0.85 * lfo(0.09) ** 2)
+    elif tipo == "grilos":
+        x = np.zeros(n, np.float32)
+        for k in range(3):
+            f0 = 4200 + 600 * k; per = 0.5 + 0.17 * k
+            env = ((t + k * 0.13) % per < 0.12) * (np.sin(2 * np.pi * 28 * t) > 0)
+            x += (np.sin(2 * np.pi * f0 * t) * env * 0.3).astype(np.float32)
+        x += _passa_baixa(_rosa(n, rng), 400, sr) * 0.15
+    elif tipo == "cidade":
+        x = _passa_baixa(_rosa(n, rng), 500, sr) * (0.7 + 0.3 * lfo(0.05))
+        for i in rng.integers(0, n, max(1, int(dur_s / 7))):     # buzina/carro passando ao longe
+            m = min(n - i, int(1.8 * sr)); e = np.sin(np.pi * np.arange(m) / m) ** 2
+            x[i:i + m] += (_passa_baixa(_ruido(m, int(rng.integers(1e6))), 900, sr) * e * 0.6).astype(np.float32)
+    elif tipo == "fogo":
+        x = _passa_baixa(_rosa(n, rng), 900, sr) * 0.6
+        for i in rng.integers(0, n, int(dur_s * 14)):
+            m = min(n - i, int(0.006 * sr)); x[i:i + m] += rng.uniform(0.3, 1.0) * np.exp(-np.arange(m) / (0.001 * sr))
+    elif tipo == "espaco":
+        x = (np.sin(2 * np.pi * 55 * t) * 0.3 + np.sin(2 * np.pi * 82.4 * t) * 0.2) * (0.6 + 0.4 * lfo(0.05)) + _passa_baixa(_rosa(n, rng), 200, sr) * 0.3
+    elif tipo == "sala":     # tom de ambiente de estudio: quase nada, mas nao e' silencio digital
+        x = _passa_baixa(_rosa(n, rng), 300, sr) * 0.2
+    else:
+        return np.zeros(n, np.float32)
+    x = x.astype(np.float32); p = float(np.max(np.abs(x))) or 1.0
+    f = min(n, int(0.6 * sr)); x = x * (0.9 / p)
+    if f > 1:
+        x[:f] *= np.linspace(0, 1, f); x[-f:] *= np.linspace(1, 0, f)
+    return x
+
+
+GANHO_AMBIENTE_DB = -27.0
+
+
+# =====================================================================
 # De AÇÃO para SOM
 # =====================================================================
 # Cada entrada: (efeito, onde na janela da ação, ganho).
@@ -1937,7 +2067,7 @@ def _mixar_faixa_real(mix, voz, sr, real, destino, n, loop_cauda_s):
 
 
 def mixar(voz_wav, eventos, destino, musica=None, dur_s=None, sr=SR, bipes=None,
-          loop_cauda_s=0.0):
+          loop_cauda_s=0.0, camas=None):
     """Voz + efeitos + trilha -> um WAV só, que é o que o ffmpeg recebe.
 
     `musica` é o bloco `musica` do spec (ou None/False para desligar):
@@ -1973,7 +2103,11 @@ def mixar(voz_wav, eventos, destino, musica=None, dur_s=None, sr=SR, bipes=None,
     usados = []
     g_sfx = _db(GANHO_SFX_DB)
     for e in (eventos or []):
-        onda = efeito(e.get("nome"))
+        onda = efeito_gravado(e.get("nome"), sr, f"{float(e.get('t', 0)):.2f}")
+        if onda is None:
+            onda = efeito(e.get("nome"))
+            if onda is not None and sr != SR:
+                onda = np.interp(np.arange(int(len(onda) * sr / SR)) * (SR / sr), np.arange(len(onda)), onda).astype(np.float32)
         if onda is None:
             print(f"[sfx] efeito desconhecido: {e.get('nome')!r}")
             continue
@@ -1987,6 +2121,21 @@ def mixar(voz_wav, eventos, destino, musica=None, dur_s=None, sr=SR, bipes=None,
             usados.append(f"{e['nome']}@{float(e.get('t', 0)):.1f}s")
     if usados:
         print(f"[sfx] {len(usados)} efeitos: {', '.join(usados)}")
+
+    # CAMAS DE AMBIENTE: [(inicio_s, fim_s, tipo)] -- o lugar de cada cena
+    if camas:
+        duck_amb = 1.0 + (_ducking(_ajustar(voz, n), sr) - 1.0) * 0.55
+        g_amb = _db(GANHO_AMBIENTE_DB)
+        tipos = []
+        for j, (a, b, tipo) in enumerate(camas):
+            i0, i1 = int(max(0.0, a) * sr), min(n, int(max(a, b) * sr))
+            if i1 - i0 < int(0.3 * sr):
+                continue
+            x = ambiente(tipo, (i1 - i0) / sr, sr, semente=j)
+            mix[i0:i0 + len(x)] += x[: i1 - i0] * g_amb * duck_amb[i0:i0 + len(x)][: i1 - i0]
+            tipos.append(tipo)
+        if tipos:
+            print(f"[sfx] ambiente: {', '.join(tipos)}")
 
     real = None
     if musica:
