@@ -773,6 +773,7 @@ QUADRO = CONFIG["quadro"]
 # n8n porque o config.json da VM esta atras do repo; levar para o config.json na
 # proxima sincronizacao (gerar_config.py --aplicar o regenera).
 CONFIG.setdefault("motor_web", {}).setdefault("estilos", {}).setdefault("mecanismo", {'narrado': True, 'fps': 30, 'dur_min_s': 30, 'dur_max_s': 55, 'cenas_min': 5, 'cenas_max': 9, 'palavras_por_cena_min': 6, 'palavras_por_cena_max': 24, 'titulo_max_palavras': 7, 'trilha': {'genero': 'lofi'}, 'vocabulario': {'acoes': ['mostra', 'explode', 'monta', 'corte', 'destaque', 'gira', 'move', 'fluxo'], 'cameras': ['orbita', 'perto', 'frente', 'cima']}})
+CONFIG["motor_web"]["estilos"].setdefault("escala", {'narrado': True, 'fps': 30, 'dur_min_s': 25, 'dur_max_s': 50, 'cenas_min': 5, 'cenas_max': 10, 'palavras_por_cena_min': 4, 'palavras_por_cena_max': 20, 'titulo_max_palavras': 7, 'trilha': {'genero': 'epico', 'ironia': True}, 'vocabulario': {'acoes': ['compara']}})
 MOTOR_WEB = CONFIG.get("motor_web", {})
 ESTILO_PADRAO = "dupla"
 
