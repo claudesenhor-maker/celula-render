@@ -39,6 +39,7 @@ async function main() {
   const prep = await page.evaluate((s) => window.preparar(s), spec);
   console.log('[render_web] ' + spec.estilo + ': ' + n + ' quadros a ' + fps + ' fps, fontes ' + JSON.stringify(prep.fontes));
   if (prep.acoes && prep.acoes.some(Boolean)) fs.writeFileSync(saida + '.acoes.json', JSON.stringify(prep.acoes));
+  if (prep.som && prep.som.length) fs.writeFileSync(saida + '.som.json', JSON.stringify(prep.som));
 
   const so = arg('quadros');
   if (so) {

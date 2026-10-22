@@ -16,6 +16,8 @@
 <script src="estilos/lowpoly.js"></script>
 <script src="estilos/mecanismo.js"></script>
 <script src="estilos/escala.js"></script>
+<script src="estilos/fisica.js"></script>
+<script src="estilos/quiz.js"></script>
 <script>
 let MOTOR = null;
 window.preparar = async function (spec) {
@@ -28,7 +30,7 @@ window.preparar = async function (spec) {
   MOTOR = m.criar(tela, spec, U);
   // `acoes`: o evento que o estilo DESENHA em cada cena (o lowpoly troca a acao
   // que contradiz a frase); o montar_web poe o som do evento desenhado.
-  return { ok: true, fontes: fontes.map((f) => document.fonts.check(f)), acoes: spec.cenas.map((c) => c.acaoV2 || null) };
+  return { ok: true, fontes: fontes.map((f) => document.fonts.check(f)), acoes: spec.cenas.map((c) => c.acaoV2 || null), som: window.EVENTOS_SOM || null };
 };
 window.quadro = function (t, formato, qualidade) {
   MOTOR.quadro(t);

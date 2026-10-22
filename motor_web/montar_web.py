@@ -74,6 +74,9 @@ EFEITO_DA_ACAO = {
                   "move": [("clique", 0.3, 0.8), ("clique", 0.8, 0.8)], "fluxo": [("whoosh", 0.1, 0.5)]},
     # 22/10: comparacao de escala (estilos/escala.js): a camera recua a cada cena
     "escala": {"compara": [("whoosh", 0.02, 0.7), ("plim", 0.4, 0.5)]},
+    # 22/10: quiz "ache o diferente" (estilos/quiz.js); o tique por segundo vem
+    # de `eventos_sonoros`, a resposta (1,3 s antes do fim do nivel) aqui
+    "quiz": {},
 }
 CPS_LEITURA = 14.0      # caracteres por segundo que alguem le no celular
 PAUSA_NARRADO = 0.22    # respiro entre cenas narradas (a voz nao emenda)
@@ -130,6 +133,33 @@ def linha_do_tempo(spec, tmp, modo_tts):
     return voz
 
 
+def _notas(eventos, dur_s, destino, sr=SFX.SR):
+    """As batidas da simulacao (estilos/fisica.js) viram MUSICA: uma nota de
+    timbre de marimba/sino por batida, na altura que a simulacao mandou (a
+    melodia do spec, em ciclo). E' a trilha desses videos -- o nicho vive disso."""
+    import numpy as np
+    n = int((dur_s + 1.0) * sr)
+    x = np.zeros(n, dtype=np.float32)
+    tt = np.arange(int(0.9 * sr)) / sr
+    for e in eventos:
+        i = int(float(e.get("t", 0)) * sr)
+        if i >= n:
+            continue
+        f0 = 440.0 * 2 ** ((float(e.get("nota", 72)) - 69) / 12.0)
+        env = np.exp(-tt * (5.5 if not e.get("forte") else 2.5))
+        tom = (np.sin(2 * np.pi * f0 * tt) + 0.35 * np.sin(2 * np.pi * f0 * 2.01 * tt) + 0.12 * np.sin(2 * np.pi * f0 * 3.98 * tt)) * env
+        g = 0.32 if e.get("forte") else 0.22
+        m = min(len(tom), n - i)
+        x[i:i + m] += (tom[:m] * g).astype(np.float32)
+    pico = float(np.max(np.abs(x))) if len(x) else 0.0
+    if pico > 0.95:
+        x = np.tanh(x * 1.2) / np.tanh(1.2) * 0.95
+    with wave.open(destino, "w") as w:
+        w.setnchannels(1); w.setsampwidth(2); w.setframerate(sr)
+        w.writeframes((np.clip(x, -1, 1) * 32000).astype("<i2").tobytes())
+    return destino
+
+
 def eventos_sonoros(spec):
     ev = []
     por_acao = EFEITO_DA_ACAO.get(spec.get("estilo"), {})
@@ -139,6 +169,14 @@ def eventos_sonoros(spec):
             ev.append({"nome": nome, "t": c["ini"] + frac * d, "ganho": ganho})
         for nome in (c.get("sfx") or []):
             ev.append({"nome": nome, "t": c["ini"] + 0.05, "ganho": 0.9})
+        # quiz: um tique por segundo do cronometro e o "plim" da resposta
+        if spec.get("estilo") == "quiz":
+            fim_relogio = c["fim"] - 1.3
+            tt = c["ini"] + 0.35
+            while tt < fim_relogio:
+                ev.append({"nome": "clique", "t": tt, "ganho": 0.6, "cadencia": True})
+                tt += 1.0
+            ev.append({"nome": "plim", "t": fim_relogio + 0.05, "ganho": 1.0})
         # o "blip" de maquina de escrever do pixel: 1 a cada 3 letras
         if spec.get("estilo") == "pixel" and c.get("texto") and c.get("acao") != "batalha":
             for j in range(0, len(c["texto"]), 3):
@@ -172,6 +210,14 @@ def main():
                 c["acao_desenhada"] = a_
     except (OSError, ValueError):
         pass
+    # a simulacao fisica entrega as batidas: elas sao a "voz" (o som principal)
+    try:
+        som = json.load(open(mudo + ".som.json", encoding="utf-8"))
+        if som:
+            voz = _notas(som, spec["dur_s"], os.path.join(tmp, "notas.wav"))
+            print(f"[web] {len(som)} batidas viraram notas")
+    except (OSError, ValueError):
+        pass
     trilha = dict(fmt.get("trilha") or {})
     musica = dict(spec.get("musica") or {})
     for k, v in trilha.items():
@@ -179,6 +225,8 @@ def main():
     musica.setdefault("semente", spec.get("fila_id") or spec.get("semente") or "web")
     if not spec["narrado"]:
         musica.setdefault("ganho_db", -9)   # sem voz, a trilha e' a protagonista do som
+    if fmt.get("sem_trilha"):
+        musica = None                       # fisica: as notas das batidas SAO a trilha
     mix = SFX.mixar(voz, eventos_sonoros(spec), os.path.join(tmp, "mix.wav"), musica=musica, dur_s=spec["dur_s"])
     # LOUDNORM (22/10): o motor web saia sem normalizacao nenhuma -- cada video
     # num volume. -14 LUFS e' o alvo do YouTube (ele abaixa o que passa disso).

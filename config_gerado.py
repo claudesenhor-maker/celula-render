@@ -774,6 +774,8 @@ QUADRO = CONFIG["quadro"]
 # proxima sincronizacao (gerar_config.py --aplicar o regenera).
 CONFIG.setdefault("motor_web", {}).setdefault("estilos", {}).setdefault("mecanismo", {'narrado': True, 'fps': 30, 'dur_min_s': 30, 'dur_max_s': 55, 'cenas_min': 5, 'cenas_max': 9, 'palavras_por_cena_min': 6, 'palavras_por_cena_max': 24, 'titulo_max_palavras': 7, 'trilha': {'genero': 'lofi'}, 'vocabulario': {'acoes': ['mostra', 'explode', 'monta', 'corte', 'destaque', 'gira', 'move', 'fluxo'], 'cameras': ['orbita', 'perto', 'frente', 'cima']}})
 CONFIG["motor_web"]["estilos"].setdefault("escala", {'narrado': True, 'fps': 30, 'dur_min_s': 25, 'dur_max_s': 50, 'cenas_min': 5, 'cenas_max': 10, 'palavras_por_cena_min': 4, 'palavras_por_cena_max': 20, 'titulo_max_palavras': 7, 'trilha': {'genero': 'epico', 'ironia': True}, 'vocabulario': {'acoes': ['compara']}})
+CONFIG["motor_web"]["estilos"].setdefault("fisica", {'narrado': False, 'fps': 30, 'dur_min_s': 25, 'dur_max_s': 45, 'cenas_min': 1, 'cenas_max': 4, 'cena_dur_min_s': 5, 'cena_dur_max_s': 45, 'titulo_max_palavras': 6, 'sem_trilha': True, 'vocabulario': {'acoes': ['simula']}})
+CONFIG["motor_web"]["estilos"].setdefault("quiz", {'narrado': False, 'fps': 30, 'dur_min_s': 18, 'dur_max_s': 40, 'cenas_min': 3, 'cenas_max': 6, 'cena_dur_min_s': 4, 'cena_dur_max_s': 9, 'titulo_max_palavras': 6, 'trilha': {'genero': 'suspense'}, 'vocabulario': {'acoes': ['nivel']}})
 MOTOR_WEB = CONFIG.get("motor_web", {})
 ESTILO_PADRAO = "dupla"
 
