@@ -132,7 +132,7 @@
         case 'missao': sprite(at[0], 84, yb, 0, 1); extraUI = 'missao'; break;
         default: sprite(at[0], 30, yb, Math.floor(t * 2) % 2, 1); if (at[1]) sprite(at[1], 116, yb, 0, -1);
       }
-      if (cn.objeto && ['acorda', 'come', 'compra', 'recebe'].indexOf(cn.acao) < 0) objeto(cn.objeto, 82, 160 + Math.sin(t * 4) * 2);
+      if (cn.objeto && ['acorda', 'come', 'compra', 'recebe'].indexOf(cn.acao) < 0) objeto(cn.objeto, cn.acao === 'anda' ? U.lerp(-36, 150, k) + 28 : 82, cn.acao === 'anda' ? yb + 30 : 160 + Math.sin(t * 4) * 2);
       b.restore();
       c.imageSmoothingEnabled = false; c.drawImage(buf, 0, 0, W, H);
       if (extraUI === 'over') { c.fillStyle = 'rgba(0,0,0,' + (0.75 * U.clamp(k * 2, 0, 1)).toFixed(2) + ')'; c.fillRect(0, 0, W, H); c.font = F(86); c.fillStyle = PAL.vermelho; c.textAlign = 'center'; c.fillText('GAME OVER', W / 2, 820); if (k > 0.5) { c.font = F(36); c.fillStyle = PAL.branco; c.fillText('CONTINUE? ' + (9 - Math.floor((k - 0.5) * 18)), W / 2, 960); } }
