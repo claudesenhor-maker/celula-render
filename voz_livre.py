@@ -115,41 +115,43 @@ _FRASE_REF = {
 # dependencias: instaladas na primeira chamada (o render dos outros
 # canais nao paga os ~2 min do torch)
 # =====================================================================
-def _pip(args):
-    cmd = [sys.executable, "-m", "pip", "install", "--quiet", "--disable-pip-version-check"] + args
-    print("[voz-livre] pip install " + " ".join(a for a in args if not a.startswith("-")))
-    subprocess.run(cmd, check=True)
+# ISOLADO (22/10, run 39815253969): instalar o chatterbox DENTRO do processo do
+# render trocou o numpy que ja' estava carregado ("numpy.dtype size changed"),
+# a voz caiu no Edge como devia -- e logo depois a MIXAGEM quebrou, derrubando
+# o video. Agora as dependencias moram num venv proprio e a sintese roda num
+# processo TRABALHADOR desse venv (`--servidor`), que carrega os modelos uma
+# vez e atende todas as falas do video. O processo do render nunca importa
+# torch nem troca numpy.
+VENV = os.environ.get("VOZ_LIVRE_VENV") or os.path.join(tempfile.gettempdir(), "voz_livre_venv")
+
+
+def _py_venv():
+    return os.path.join(VENV, "bin", "python")
+
+
+def _garantir_venv():
+    marca = os.path.join(VENV, ".pronto")
+    if os.path.exists(marca):
+        return
+    print(f"[voz-livre] montando o ambiente isolado em {VENV} (~3 min, uma vez por render)", flush=True)
+    subprocess.run([sys.executable, "-m", "venv", VENV], check=True)
+    pip = [_py_venv(), "-m", "pip", "install", "--quiet", "--disable-pip-version-check"]
+    subprocess.run(pip + ["--upgrade", "pip"], check=False)
+    # torch de CPU: o wheel padrao traz CUDA (~2,5 GB) que o runner nao usa
+    subprocess.run(pip + _TORCH + ["--index-url", "https://download.pytorch.org/whl/cpu"], check=True)
+    # o indice de CPU como extra: o torch==2.6.0 exigido ja' esta satisfeito pelo
+    # 2.6.0+cpu e o pip nao baixa o de CUDA
+    subprocess.run(pip + _PACOTES["chatterbox"] + _PACOTES["kokoro"] + _PACOTES["whisper"]
+                   + ["--extra-index-url", "https://download.pytorch.org/whl/cpu"], check=True)
+    # o G2P do portugues (e o reserva do ingles) do kokoro e' o espeak-ng do sistema
+    if not _tem("espeak-ng"):
+        subprocess.run(["sudo", "apt-get", "install", "-y", "-qq", "espeak-ng"], check=False)
+    open(marca, "w").write("ok")
 
 
 def _instalar(qual):
-    if qual in _PRONTO:
-        return
-    try:
-        import torch  # noqa: F401
-    except ImportError:
-        # torch de CPU: o wheel padrao traz CUDA (~2,5 GB) que o runner nao usa
-        _pip(_TORCH + ["--index-url", "https://download.pytorch.org/whl/cpu"])
-    if qual == "kokoro":
-        try:
-            import kokoro  # noqa: F401
-        except ImportError:
-            _pip(_PACOTES["kokoro"])
-        # o G2P do portugues (e o reserva do ingles) e' o espeak-ng do sistema
-        if not _tem("espeak-ng"):
-            subprocess.run(["sudo", "apt-get", "install", "-y", "-qq", "espeak-ng"], check=False)
-    elif qual == "chatterbox":
-        try:
-            import chatterbox  # noqa: F401
-        except ImportError:
-            # o indice de CPU como extra: o `torch==2.6.0` que ele exige ja' esta
-            # satisfeito pelo 2.6.0+cpu, e o pip nao baixa o de CUDA
-            _pip(_PACOTES["chatterbox"] + ["--extra-index-url", "https://download.pytorch.org/whl/cpu"])
-    elif qual == "whisper":
-        try:
-            import faster_whisper  # noqa: F401
-        except ImportError:
-            _pip(_PACOTES["whisper"])
-    _PRONTO.add(qual)
+    """No trabalhador as dependencias ja' vem do venv; fora dele, nada se instala."""
+    return
 
 
 def _tem(prog):
@@ -407,11 +409,38 @@ def _acabamento(entrada, destino, sr=SR):
 # =====================================================================
 # entrada
 # =====================================================================
+class _Trabalhador:
+    """O processo do venv isolado: uma linha JSON por pedido, uma por resposta.
+    Os logs dele vao para o stderr (aparecem no log do Action); o stdout e' so'
+    do protocolo."""
+    _p = None
+
+    @classmethod
+    def pedir(cls, pedido):
+        if cls._p is None or cls._p.poll() is not None:
+            _garantir_venv()
+            cls._p = subprocess.Popen([_py_venv(), os.path.abspath(__file__), "--servidor"],
+                                      stdin=subprocess.PIPE, stdout=subprocess.PIPE, text=True, bufsize=1)
+        cls._p.stdin.write(json.dumps(pedido, ensure_ascii=False) + "\n")
+        cls._p.stdin.flush()
+        linha = cls._p.stdout.readline()
+        if not linha:
+            raise RuntimeError("o trabalhador da voz livre morreu (ver o log acima)")
+        r = json.loads(linha)
+        if not r.get("ok"):
+            raise RuntimeError(r.get("erro") or "falha sem mensagem")
+        return r["marcas"]
+
+
 def sintetizar_livre(texto, cfg, destino, motor=None):
     """Texto -> WAV mono 24 kHz em `destino`; devolve as marcas por palavra.
 
-    Levanta excecao em qualquer falha: quem chama (`palito_v5.sintetizar`)
-    segue para o degrau seguinte da cadeia."""
+    Roda no trabalhador isolado. Levanta excecao em qualquer falha: quem chama
+    (`palito_v5.sintetizar`) segue para o degrau seguinte da cadeia."""
+    return _Trabalhador.pedir({"texto": texto, "cfg": cfg, "destino": os.path.abspath(destino), "motor": motor})
+
+
+def _sintetizar_local(texto, cfg, destino, motor=None):
     motor = (motor or cfg.get("motor") or "chatterbox").lower()
     if motor not in MOTORES:
         raise ValueError(f"motor livre desconhecido: {motor}")
@@ -436,6 +465,25 @@ def sintetizar_livre(texto, cfg, destino, motor=None):
         pass
     return marcas
 
+
+def _servidor():
+    import traceback
+    sys.stdout, saida = sys.stderr, sys.stdout      # print dos motores vai para o log, nao para o protocolo
+    for linha in sys.stdin:
+        try:
+            q = json.loads(linha)
+            m = _sintetizar_local(q["texto"], q.get("cfg") or {}, q["destino"], q.get("motor"))
+            r = {"ok": True, "marcas": m}
+        except Exception as e:                                  # noqa: BLE001
+            traceback.print_exc()
+            r = {"ok": False, "erro": f"{type(e).__name__}: {e}"[:500]}
+        saida.write(json.dumps(r, ensure_ascii=False) + "\n")
+        saida.flush()
+
+
+if __name__ == "__main__" and "--servidor" in sys.argv:
+    _servidor()
+    sys.exit(0)
 
 if __name__ == "__main__":
     import argparse
