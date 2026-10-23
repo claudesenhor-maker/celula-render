@@ -58,7 +58,7 @@
     // realista de comum3d.js; o LUGAR (`spec.ambiente`: oficina, cozinha,
     // banheiro, garagem, escritorio, laboratorio, externo, prancheta) entra
     // depois que o objeto tem tamanho. Sem comum3d, o estudio azul de antes.
-    const AMB = String(spec.ambiente || mod.ambiente || 'prancheta').toLowerCase();
+    const AMB = String(spec.ambiente || (spec.modelo || {}).ambiente || 'prancheta').toLowerCase();
     if (window.U3) U3.estudio(R, sc, T);
     else { sc.background = new T.Color('#1D4A7A'); sc.add(new T.HemisphereLight('#dfefff', '#1a2a40', 0.65)); }
     const rim = new T.DirectionalLight('#9fd0ff', 0.55); rim.position.set(-8, 4, -6); sc.add(rim);
