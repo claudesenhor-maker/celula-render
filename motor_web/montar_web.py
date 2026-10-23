@@ -87,6 +87,10 @@ EFEITO_DA_ACAO = {
                "corre": [("whoosh", 0.05, 0.9), ("whoosh", 0.45, 0.7)], "ataca": [("whoosh", 0.2, 0.9), ("thud", 0.42, 1.2), ("tremido", 0.44, 0.7)]},
     "linha_tempo": {"marco": [("whoosh", 0.05, 0.5), ("pop", 0.36, 0.7)], "salto": [("whoosh", 0.02, 0.9), ("pop", 0.36, 0.7)],
                     "zoom": [("whoosh", 0.05, 0.5), ("plim", 0.4, 0.8)]},
+    # 23/10: Sistema Solar com dados reais (estilos/orbita.js, ORBIT DAILY)
+    "orbita": {"sistema": [("whoosh", 0.03, 0.5)], "foco": [("whoosh", 0.03, 0.5), ("plim", 0.2, 0.6)], "dia": [("whoosh", 0.03, 0.4), ("plim", 0.92, 0.7)],
+               "compara": [("pop", 0.12, 0.6), ("thud", 0.42, 0.6)], "orbita": [("whoosh", 0.05, 0.6), ("plim", 0.95, 0.6)],
+               "viagem": [("whoosh", 0.06, 0.9), ("whoosh", 0.4, 0.7), ("pop", 0.58, 0.7)]},
 }
 # O PERFIL DE EFEITOS de cada estilo (sfx.PERFIL, 22/10): o acervo gravado
 # que o canal usa. Pixel soa 8-bit; quiz, relogio; o resto, o mundo real.
