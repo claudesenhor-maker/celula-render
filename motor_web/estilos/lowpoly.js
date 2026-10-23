@@ -222,10 +222,15 @@
       const jan = M('#FFE9A8', { emis: '#000000' }), janN = M('#FFD66B', { emis: '#B88A1A' });
       const anda = Math.max(1, Math.floor(h / 0.7));
       g.userData.janelas = [];
-      for (let k = 0; k < anda; k++) for (const s of [-1, 1]) {
-        if (r() < 0.25) continue;
-        const j = new T.Mesh(new T.BoxGeometry(w * 0.22, 0.28, 0.04), jan); j.position.set(s * w * 0.24, 0.45 + k * 0.7, d / 2 + 0.02); g.add(j); g.userData.janelas.push(j);
+      // 23/10: janelas nas QUATRO faces (so' a da frente tinha, e ela olhava para o centro: da camera o predio era uma caixa lisa)
+      for (let k = 0; k < anda; k++) for (let f = 0; f < 4; f++) for (const s of [-1, 1]) {
+        if (r() < 0.22) continue;
+        const larg = f % 2 ? d : w, prof = f % 2 ? w : d;
+        const j = new T.Mesh(new T.BoxGeometry(larg * 0.22, 0.28, 0.04), jan);
+        const ang = (f * Math.PI) / 2; j.position.set(Math.sin(ang) * (prof / 2 + 0.02) + Math.cos(ang) * s * larg * 0.24, 0.45 + k * 0.7, Math.cos(ang) * (prof / 2 + 0.02) - Math.sin(ang) * s * larg * 0.24);
+        j.rotation.y = ang; g.add(j); g.userData.janelas.push(j);
       }
+      const laje = new T.Mesh(new T.BoxGeometry(w * 1.06, 0.14, d * 1.06), M(new T.Color(cor).multiplyScalar(0.78).getStyle())); laje.position.y = h + 0.07; g.add(laje);
       g.userData.matNoite = janN; g.userData.matDia = jan;
       return sombra(g, true, true);
     }
@@ -284,17 +289,23 @@
     function pessoa(r, idx) {
       const g = new T.Group(), corpo = new T.Group(); g.add(corpo);
       const roupa = COR.roupa[idx % COR.roupa.length], pele = COR.pele[Math.floor(r() * COR.pele.length)], cab = COR.cabelo[Math.floor(r() * COR.cabelo.length)];
-      const tronco = new T.Mesh(new T.CylinderGeometry(0.36, 0.46, 1.0, 7), M(roupa)); tronco.position.y = 1.2; corpo.add(tronco);
+      const tronco = new T.Mesh(new T.CylinderGeometry(0.33, 0.42, 1.0, 7), M(roupa)); tronco.position.y = 1.2; corpo.add(tronco);
       const quadril = new T.Mesh(new T.CylinderGeometry(0.46, 0.4, 0.25, 7), M(COR.calca)); quadril.position.y = 0.62; corpo.add(quadril);
-      const cabeca = new T.Group(); cabeca.position.y = 1.98; corpo.add(cabeca);
-      const crane = new T.Mesh(new T.IcosahedronGeometry(0.46, 1), M(pele)); cabeca.add(crane);
-      const cabelo = new T.Mesh(new T.IcosahedronGeometry(0.49, 1), M(cab)); cabelo.scale.set(1.02, 0.62, 1.02); cabelo.position.set(0, 0.17, -0.05); cabeca.add(cabelo);
+      // 23/10 (dono: "pessoas confusas"): cabeca proporcional ao corpo (era 0,46 para um tronco de 1,0 e o
+      // cabelo uma bola MAIOR que ela); cabelo em touca, olhos pequenos, pescoco.
+      const pescoco = new T.Mesh(new T.CylinderGeometry(0.11, 0.13, 0.18, 6), M(pele)); pescoco.position.y = 1.76; corpo.add(pescoco);
+      const cabeca = new T.Group(); cabeca.position.y = 2.06; corpo.add(cabeca);
+      const crane = new T.Mesh(new T.IcosahedronGeometry(0.34, 1), M(pele)); crane.scale.set(1, 1.08, 0.98); cabeca.add(crane);
+      const estilo = Math.floor(r() * 3);
+      const cabelo = new T.Mesh(new T.SphereGeometry(0.375, 10, 6, 0, Math.PI * 2, 0, Math.PI * (estilo === 1 ? 0.62 : 0.5)), M(cab));
+      cabelo.position.set(0, 0.05, -0.02); cabelo.rotation.x = -0.25; cabeca.add(cabelo);
+      if (estilo === 2) { const coque = new T.Mesh(new T.IcosahedronGeometry(0.15, 1), M(cab)); coque.position.set(0, 0.3, -0.24); cabeca.add(coque); }
       const olhoM = M('#151515'), olhos = [];
-      [-0.16, 0.16].forEach((x) => { const o = new T.Mesh(new T.SphereGeometry(0.075, 8, 6), olhoM); o.position.set(x, 0.04, 0.41); cabeca.add(o); olhos.push(o);
-        const b = new T.Mesh(new T.SphereGeometry(0.025, 5, 4), M('#FFFFFF')); b.position.set(x + 0.025, 0.07, 0.48); cabeca.add(b); olhos.push(b); });
-      const bocaRiso = new T.Mesh(new T.TorusGeometry(0.11, 0.025, 4, 8, Math.PI), M('#5A2020')); bocaRiso.rotation.z = Math.PI; bocaRiso.position.set(0, -0.15, 0.42); cabeca.add(bocaRiso);
-      const bocaO = new T.Mesh(new T.CircleGeometry(0.08, 8), M('#5A2020')); bocaO.position.set(0, -0.18, 0.44); cabeca.add(bocaO);
-      const bocaReta = new T.Mesh(new T.BoxGeometry(0.16, 0.03, 0.02), M('#5A2020')); bocaReta.position.set(0, -0.16, 0.44); cabeca.add(bocaReta);
+      [-0.12, 0.12].forEach((x) => { const o = new T.Mesh(new T.SphereGeometry(0.052, 8, 6), olhoM); o.position.set(x, 0.03, 0.31); cabeca.add(o); olhos.push(o);
+        const b = new T.Mesh(new T.SphereGeometry(0.017, 5, 4), M('#FFFFFF')); b.position.set(x + 0.016, 0.05, 0.355); cabeca.add(b); olhos.push(b); });
+      const bocaRiso = new T.Mesh(new T.TorusGeometry(0.075, 0.018, 4, 8, Math.PI), M('#5A2020')); bocaRiso.rotation.z = Math.PI; bocaRiso.position.set(0, -0.12, 0.315); cabeca.add(bocaRiso);
+      const bocaO = new T.Mesh(new T.CircleGeometry(0.055, 8), M('#5A2020')); bocaO.position.set(0, -0.14, 0.335); cabeca.add(bocaO);
+      const bocaReta = new T.Mesh(new T.BoxGeometry(0.11, 0.022, 0.02), M('#5A2020')); bocaReta.position.set(0, -0.13, 0.335); cabeca.add(bocaReta);
       const membros = [];
       [[-0.55, 1.6, 'b'], [0.55, 1.6, 'b'], [-0.2, 0.58, 'p'], [0.2, 0.58, 'p']].forEach(([x, y, tipo]) => {
         const piv = new T.Group(); piv.position.set(x, y, 0);
@@ -508,15 +519,21 @@
         sc.fog = new T.Fog(new T.Color(CEU[hora][1]), 30, 70);
         const solS = brilho(hora === 'noite' ? 'rgba(220,230,255,1)' : 'rgba(255,240,190,1)', hora === 'noite' ? 3 : 4.5); solS.material.opacity = 0.85; sc.add(solS); o.solS = solS;
         const livre = (x, z) => Math.hypot(x, z - 1) > 2.6 && Math.hypot(x, z) < RAIO - 0.8;
+        // 23/10 (dono: "cenarios confusos"): predio, casa e piramide entre a camera e quem age tapavam a cena.
+        // A camera anda pelo arco da frente (azimute ~ -0,7..2,1 rad a partir de +z): construcao so' fora dele;
+        // arvore na frente so' pequena e na borda.
+        const atras = (x, z) => Math.cos(Math.atan2(x, z) - 0.7) < 0.12;
+        const livreFundo = (x, z) => livre(x, z) && atras(x, z);
+        const livreArvore = (x, z) => livre(x, z) && (atras(x, z) || Math.hypot(x, z) > RAIO - 1.8);
         const sobre = (m, x, z) => { m.position.set(x, tr.userData.alt(x, z), z); sc.add(m); return m; };
-        const espalha = (n, fn) => { let k = 0, tent = 0; while (k < n && tent++ < n * 20) { const a = r() * Math.PI * 2, d = 2.8 + r() * (RAIO - 3.6), x = Math.cos(a) * d, z = Math.sin(a) * d; if (!livre(x, z)) continue; fn(x, z, k++); } };
+        const espalha = (n, fn, ok) => { let k = 0, tent = 0; while (k < n && tent++ < n * 30) { const a = r() * Math.PI * 2, d = 2.8 + r() * (RAIO - 3.6), x = Math.cos(a) * d, z = Math.sin(a) * d; if (!(ok || livreArvore)(x, z)) continue; fn(x, z, k++); } };
         if (cen === 'cidade') {
-          espalha(16, (x, z) => { const h = 1.2 + r() * 3.8; const b = sobre(predio(1.0 + r() * 0.5, h, 1.0, ['#E4E1D6', '#C9B79C', '#A8B8C8', '#D9A28B', '#B7C9A8'][Math.floor(r() * 5)], r), x, z); b.rotation.y = Math.atan2(x, z); o.predios.push(b); });
+          espalha(13, (x, z) => { const h = 1.2 + r() * 3.8; const b = sobre(predio(1.0 + r() * 0.5, h, 1.0, ['#E4E1D6', '#C9B79C', '#A8B8C8', '#D9A28B', '#B7C9A8'][Math.floor(r() * 5)], r), x, z); b.rotation.y = Math.atan2(x, z); o.predios.push(b); }, livreFundo);
           for (let i = 0; i < 4; i++) { const k = carro(['#E2574C', '#F2B705', '#3E7CB1', '#5DAA5A'][i]); sc.add(k); o.carros.push(k); }
-          espalha(5, (x, z) => o.arvores.push(sobre(arvore('redonda'), x, z)));
+          espalha(5, (x, z) => o.arvores.push(sobre(arvore('redonda'), x, z)), livreFundo);
         }
         if (cen === 'floresta' || cen === 'campo') espalha(cen === 'campo' ? 8 : 26, (x, z) => { const a = sobre(arvore(r() < 0.5 ? 'pinheiro' : 'redonda'), x, z); a.scale.setScalar(0.8 + r() * 0.6); o.arvores.push(a); });
-        if (cen === 'campo') espalha(3, (x, z) => { const c2 = sobre(casa(), x, z); c2.rotation.y = Math.atan2(x, z); o.predios.push(c2); });
+        if (cen === 'campo') espalha(3, (x, z) => { const c2 = sobre(casa(), x, z); c2.rotation.y = Math.atan2(x, z); o.predios.push(c2); }, livreFundo);
         if (cen === 'polo') { espalha(10, (x, z) => { const a = sobre(arvore('pinheiro', '#E8F2F6'), x, z); o.arvores.push(a); }); espalha(4, (x, z) => { const pg = sobre(pinguim(), x, z); pg.rotation.y = r() * 6; o.extras.push(pg); }); }
         if (cen === 'deserto') { espalha(6, (x, z) => o.arvores.push(sobre(arvore('cacto'), x, z))); const pir = new T.Mesh(new T.ConeGeometry(2.2, 2.6, 4), M('#D9B26F')); sombra(pir, true, true); sobre(pir, 3.5, -4.5).position.y += 1.3; }
         if (cen === 'montanha') espalha(10, (x, z) => o.arvores.push(sobre(arvore('pinheiro'), x, z)));
@@ -527,6 +544,12 @@
           const ag = new T.Mesh(new T.CylinderGeometry(RAIO + 0.02, RAIO + 0.02, 4, 48, 1), new T.MeshLambertMaterial({  color: '#3C9BD6', transparent: true, opacity: 0.82 }));
           ag.userData.nivel0 = nivel0; sc.add(ag); o.agua = ag;
           if (cen === 'oceano' || acao === 'seca') { for (let k = 0; k < 5; k++) { const f = peixe(['#F28C38', '#F2B705', '#E46A86'][k % 3]); f.scale.setScalar(1.6); sc.add(f); o.peixes.push(f); } }
+          if (cen === 'oceano' && acao !== 'inunda' && acao !== 'seca') { // 23/10: o pier onde a gente fica (antes: em pe dentro da agua)
+            const pier = new T.Group(); const tabua = M('#A0703F'), tabua2 = M('#8C5F33');
+            for (let k = 0; k < 9; k++) { const tb = new T.Mesh(new T.BoxGeometry(4.2, 0.12, 0.34), k % 2 ? tabua : tabua2); tb.position.set(0, 0.42, -0.2 + k * 0.36); pier.add(tb); }
+            [[-1.9, -0.2], [1.9, -0.2], [-1.9, 2.7], [1.9, 2.7]].forEach(([x, z]) => { const st = new T.Mesh(new T.CylinderGeometry(0.1, 0.1, 1.2, 6), tabua2); st.position.set(x, 0.0, z); pier.add(st); });
+            sombra(pier); sc.add(pier); o.pier = pier;
+          }
           if (cen === 'oceano') { // um barquinho
             const b = new T.Group(); const casco = new T.Mesh(new T.BoxGeometry(1.4, 0.35, 0.6), M('#C8553D')); b.add(casco); const v2 = new T.Mesh(new T.ConeGeometry(0.45, 1.1, 3), M('#FFFFFF')); v2.position.y = 0.7; b.add(v2); sombra(b); sc.add(b); o.barco = b;
           }
@@ -536,8 +559,16 @@
         const n = acao === 'multidao' || acao === 'sem_ar' || acao === 'corre' ? 12 : Math.max(1, (cn.atores || ['pessoa']).length) + (cen === 'cidade' ? 2 : 1);
         for (let i = 0; i < Math.min(14, n); i++) {
           const p = pessoa(r, i);
-          if (i === 0) p.position.set(0, 0, 1.6); else { const a = r() * Math.PI * 2, d = 1.4 + r() * 2.2; p.position.set(Math.cos(a) * d, 0, 1 + Math.sin(a) * d * 0.7); p.rotation.y = (r() - 0.5) * 1.6; p.scale.setScalar(0.85); }
+          if (i === 0) p.position.set(0, 0, 1.6);
+          else {
+            // atras e dos lados (a camera vem da frente) e a 1 m de qualquer outro: nada de gente na frente do protagonista
+            let x = 0, z = 0;
+            for (let tent = 0; tent < 40; tent++) { const a = Math.PI * (0.95 + r() * 1.1), d = 1.3 + r() * (n > 6 ? 2.8 : 2.0); x = Math.cos(a) * d; z = 1.2 + Math.sin(a) * d * 0.75;
+              if (o.gente.every((q) => Math.hypot(q.position.x - x, q.position.z - z) > 1.0)) break; }
+            p.position.set(x, 0, z); p.rotation.y = Math.atan2(-x, 6 - z) * 0.6 + (r() - 0.5) * 0.5; p.scale.setScalar(0.85);
+          }
           p.userData.x0 = p.position.x; p.userData.z0 = p.position.z; p.userData.y0 = tr.userData.alt(p.position.x, p.position.z);
+          if (o.pier) { p.userData.y0 = 0.48; p.userData.x0 = U.clamp(p.position.x, -1.8, 1.8); p.userData.z0 = U.clamp(p.position.z, -0.2, 2.7); }
           sc.add(p); o.gente.push(p);
         }
         if (acao === 'chove') o.gente.slice(0, 2).forEach((p) => { const gc = guardaChuva(['#E2574C', '#3E7CB1'][o.gente.indexOf(p) % 2]); gc.position.set(0.55, -0.2, 0); p.userData.corpo.add(gc); });
