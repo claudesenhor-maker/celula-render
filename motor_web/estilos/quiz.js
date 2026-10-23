@@ -63,13 +63,27 @@
     const FUNDOS = ['#FFD23F', '#3EC1F3', '#7CFF8A', '#FF8FB1', '#B07CFF', '#FF9F45'];
     const TINTAS = ['#1B1B2F', '#C0392B', '#1F6FEB', '#11823B', '#7B2CBF', '#B35C00'];
     const REVELA = 1.3;   // segundos finais de cada nivel: a resposta
+    // MAIS DIFICIL (23/10, pedido do dono): a grade e a sutileza tem um PISO que
+    // sobe a cada nivel, seja o que for que o roteiro pedir -- nivel 1 ja' em 6x9,
+    // o ultimo ate 10x16; a diferenca nunca e' "facil" depois do nivel 2.
+    // SIMETRIA: girar um circulo, girar 90 graus um quadrado ou espelhar um
+    // coracao nao muda nada -- o nivel ficava impossivel. Essas trocam de modo.
+    const GIRO_INVISIVEL = { circulo: 1 }, ESPELHO_INVISIVEL = { circulo: 1, quadrado: 1, cruz: 1, hexagono: 1, estrela: 1, coracao: 1, gota: 1, triangulo: 1,
+      casa: 1, guarda_chuva: 1, lampada: 1, foguete: 1, maca: 0 };
     const niveis = spec.cenas.map((cn, i) => {
-      const r = U.rng((spec.semente || 'quiz') + ':' + i), col = Math.round(num(cn.colunas, 4, 12, 6)), lin = Math.round(num(cn.linhas, 5, 16, 9));
+      const r = U.rng((spec.semente || 'quiz') + ':' + i);
+      const col = Math.max(Math.round(num(cn.colunas, 4, 12, 6)), Math.min(10, 6 + i)), lin = Math.max(Math.round(num(cn.linhas, 5, 16, 9)), Math.min(16, 9 + 2 * i));
       let tipo = ['letras', 'formas', 'icones', 'cores'].includes(cn.tipo) ? cn.tipo : 'letras';
       const desenho = FORMAS[cn.base] || ICONES[cn.base];
       if (tipo !== 'letras' && !desenho) tipo = 'letras';
-      const dif = num(cn.dificuldade, 1, 5, 1 + Math.min(4, i));
-      return { col, lin, tipo, base: String(cn.base || 'O').slice(0, 14), dif: String(cn.diferente || (tipo === 'letras' ? 'Q' : 'girado')).slice(0, 14),
+      const dif = Math.max(num(cn.dificuldade, 1, 5, 1 + Math.min(4, i)), Math.min(5, 2 + i));
+      let modo = String(cn.diferente || (tipo === 'letras' ? 'Q' : 'girado')).slice(0, 14);
+      if (tipo !== 'letras') {
+        if (modo === 'girado' && GIRO_INVISIVEL[cn.base]) modo = 'sem_pedaco';
+        if (modo === 'espelhado' && ESPELHO_INVISIVEL[cn.base]) modo = GIRO_INVISIVEL[cn.base] ? 'sem_pedaco' : 'girado';
+        if (modo === 'hora' && cn.base !== 'relogio') modo = 'girado';
+      }
+      return { col, lin, tipo, base: String(cn.base || 'O').slice(0, 14), dif: modo,
         desenho, nivelDif: dif, alvo: Math.floor(r() * col * lin), fundo: corOk(cn.cor, FUNDOS[i % FUNDOS.length]), tinta: TINTAS[i % TINTAS.length],
         rotulo: String(cn.texto || 'LEVEL ' + (i + 1)).toUpperCase().slice(0, 24) };
     });
@@ -77,15 +91,15 @@
     function item(nv, k, cx, cy, tam) {
       if (nv.tipo === 'letras') { c.fillText(k === nv.alvo ? nv.dif : nv.base, cx, cy); return; }
       const e = tam / 2.1, d = nv.nivelDif, odd = k === nv.alvo;
-      c.save(); c.translate(cx, cy); c.fillStyle = nv.tinta; c.strokeStyle = nv.tinta;
+      c.save(); c.translate(cx, cy); c.fillStyle = nv._tom || nv.tinta; c.strokeStyle = nv._tom || nv.tinta;
       let v = null;
       if (odd) {
         const m = nv.tipo === 'cores' ? 'cor' : nv.dif;
-        if (m === 'girado') c.rotate(((6 - d) / 5) * Math.PI * 0.5 + 0.12);       // 90 graus facil, ~7 graus dificil
+        if (m === 'girado') c.rotate(((6 + 34 * (5 - d) / 4) * Math.PI) / 180);   // 40 graus facil, 6 graus dificil
         else if (m === 'espelhado') c.scale(-1, 1);
-        else if (m === 'maior') c.scale(1 + 0.32 / d, 1 + 0.32 / d);
-        else if (m === 'menor') c.scale(1 - 0.3 / d, 1 - 0.3 / d);
-        else if (m === 'cor') c.fillStyle = c.strokeStyle = clarear(nv.tinta, 0.5 / d);
+        else if (m === 'maior') c.scale(1 + 0.26 / d, 1 + 0.26 / d);
+        else if (m === 'menor') c.scale(1 - 0.24 / d, 1 - 0.24 / d);
+        else if (m === 'cor') c.fillStyle = c.strokeStyle = clarear(nv.tinta, 0.36 / d);
         else if (m === 'hora') v = { hora: 3 + Math.max(1, 6 - d) };
       }
       c.scale(e, e);
@@ -113,13 +127,22 @@
       // cartao branco atras da grade nas formas/icones (contraste com qualquer fundo)
       if (nv.tipo !== 'letras') { U.rr(c, x0 - 16, y0 - 16, x1 - x0 + 32, y1 - y0 + 32, 28); c.fillStyle = 'rgba(255,255,255,0.88)'; c.fill(); c.fillStyle = '#111'; }
       const entra = U.saida(U.clamp(local / 0.35, 0, 1));
+      // CAMUFLAGEM (23/10): do nivel de dificuldade 3 em diante todos os itens
+      // tremem um pouco de lugar -- o diferente deixa de "saltar" da grade
+      const rj = U.rng((spec.semente || 'quiz') + ':j' + i), tremor = nv.nivelDif >= 3 ? (nv.nivelDif - 2) * 0.05 : 0;
       for (let k = 0; k < nv.col * nv.lin; k++) {
-        const cx = x0 + (k % nv.col + 0.5) * cw, cy = y0 + (Math.floor(k / nv.col) + 0.5) * ch;
-        c.globalAlpha = entra; item(nv, k, cx, cy + (1 - entra) * 30, tam);
+        const jx = (rj() - 0.5) * 2 * tremor * cw, jy = (rj() - 0.5) * 2 * tremor * ch, jc = rj();
+        const cx = x0 + (k % nv.col + 0.5) * cw + jx, cy = y0 + (Math.floor(k / nv.col) + 0.5) * ch + jy;
+        c.globalAlpha = entra;
+        if (nv.tipo === 'cores' && nv.nivelDif >= 4 && k !== nv.alvo) { c.save(); nv._tom = clarear(nv.tinta, (jc - 0.5) * 0.05); }
+        item(nv, k, cx, cy + (1 - entra) * 30, tam);
+        if (nv._tom) { c.restore(); nv._tom = null; }
       }
       c.restore();
       if (resta <= 0) {
-        const k = nv.alvo, cx = x0 + (k % nv.col + 0.5) * cw, cy = y0 + (Math.floor(k / nv.col) + 0.5) * ch, q = U.mola(-resta, 10);
+        const k = nv.alvo, rj2 = U.rng((spec.semente || 'quiz') + ':j' + i); let jx = 0, jy = 0;
+        for (let n = 0; n <= k; n++) { const a = rj2(), b = rj2(); rj2(); if (n === k) { jx = (a - 0.5) * 2 * tremor * cw; jy = (b - 0.5) * 2 * tremor * ch; } }
+        const cx = x0 + (k % nv.col + 0.5) * cw + jx, cy = y0 + (Math.floor(k / nv.col) + 0.5) * ch + jy, q = U.mola(-resta, 10);
         c.save(); c.lineWidth = 12; c.strokeStyle = '#E2373C'; c.beginPath(); c.arc(cx, cy, Math.max(cw, ch) * 0.62 * q, 0, Math.PI * 2); c.stroke();
         c.font = '84px "Lilita One", sans-serif'; c.textAlign = 'center'; c.fillStyle = '#111'; c.fillText('FOUND IT?', W / 2, 430); c.restore();
       }

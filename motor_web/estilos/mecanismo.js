@@ -43,36 +43,44 @@
 
   function criar(tela, spec, U) {
     const T = window.THREE, c = tela.getContext('2d'), W = spec.w, H = spec.h;
-    const gl = document.createElement('canvas'); gl.width = W; gl.height = H;
-    const R = new T.WebGLRenderer({ canvas: gl, antialias: true, preserveDrawingBuffer: true }); R.setSize(W, H, false);
+    // ESC3D < 1 renderiza o 3D menor e amplia (testado 23/10: so' 7% mais rapido
+    // e o 3D fica mole -- o custo esta' nos passes, nao nos pixels)
+    const ESC3D = 1;
+    const gl = document.createElement('canvas'); gl.width = Math.round(W * ESC3D); gl.height = Math.round(H * ESC3D);
+    const R = new T.WebGLRenderer({ canvas: gl, antialias: true, preserveDrawingBuffer: true }); R.setSize(gl.width, gl.height, false);
     const cam = new T.PerspectiveCamera(34, W / H, 0.1, 300);
     const sc = new T.Scene();
     const num = (v, a, b, p) => { const x = Number(v); return Number.isFinite(x) ? U.clamp(x, a, b) : p; };
     const vet = (v, a, b, p) => [0, 1, 2].map((i) => num(Array.isArray(v) ? v[i] : undefined, a, b, p[i]));
     const corOk = (x, p) => (/^#[0-9a-fA-F]{3,6}$/.test(String(x || '')) ? x : p);
 
-    // ---- estudio: fundo azul de prancheta, chao com grade, luz de tres pontos
-    { const cv = document.createElement('canvas'); cv.width = 4; cv.height = 256; const g = cv.getContext('2d'); const gr = g.createLinearGradient(0, 0, 0, 256);
-      gr.addColorStop(0, '#0E2340'); gr.addColorStop(0.7, '#1D4A7A'); gr.addColorStop(1, '#2A6299'); g.fillStyle = gr; g.fillRect(0, 0, 4, 256); sc.background = new T.CanvasTexture(cv); }
-    sc.add(new T.HemisphereLight('#dfefff', '#1a2a40', 0.65));
-    const key = new T.DirectionalLight('#ffffff', 0.85); key.position.set(6, 10, 8); sc.add(key);
-    const rim = new T.DirectionalLight('#9fd0ff', 0.45); rim.position.set(-8, 4, -6); sc.add(rim);
-    const grade = new T.GridHelper(30, 30, '#5f8fc4', '#355d8a'); grade.position.y = -0.001; grade.material.transparent = true; grade.material.opacity = 0.35; sc.add(grade);
+    // ---- estudio (23/10, pedido do dono: "mais detalhista e com fundo"): luz
+    // realista de comum3d.js; o LUGAR (`spec.ambiente`: oficina, cozinha,
+    // banheiro, garagem, escritorio, laboratorio, externo, prancheta) entra
+    // depois que o objeto tem tamanho. Sem comum3d, o estudio azul de antes.
+    const AMB = String(spec.ambiente || mod.ambiente || 'prancheta').toLowerCase();
+    if (window.U3) U3.estudio(R, sc, T);
+    else { sc.background = new T.Color('#1D4A7A'); sc.add(new T.HemisphereLight('#dfefff', '#1a2a40', 0.65)); }
+    const rim = new T.DirectionalLight('#9fd0ff', 0.55); rim.position.set(-8, 4, -6); sc.add(rim);
+    if (!window.U3 || AMB === 'prancheta') { const grade = new T.GridHelper(30, 30, '#5f8fc4', '#355d8a'); grade.position.y = 0.002; grade.material.transparent = true; grade.material.opacity = 0.35; sc.add(grade); }
     { const cv = document.createElement('canvas'); cv.width = cv.height = 64; const g = cv.getContext('2d'); const gr = g.createRadialGradient(32, 32, 0, 32, 32, 32);
       gr.addColorStop(0, 'rgba(0,0,0,0.45)'); gr.addColorStop(1, 'rgba(0,0,0,0)'); g.fillStyle = gr; g.fillRect(0, 0, 64, 64);
       const s0 = new T.Mesh(new T.PlaneGeometry(1, 1), new T.MeshBasicMaterial({ map: new T.CanvasTexture(cv), transparent: true, depthWrite: false })); s0.rotation.x = -Math.PI / 2; s0.position.y = 0.01; sc.add(s0); sc.userData.sombra = s0; }
 
     // ---- o objeto, peca por peca
-    const F = FORMAS(T), mod = spec.modelo || {}, raiz = new T.Group(); sc.add(raiz);
+    const F = Object.assign(FORMAS(T), window.U3 ? U3.formas(T) : {}), mod = spec.modelo || {}, raiz = new T.Group(); sc.add(raiz);
     const pecas = {}, lista = [];
     (Array.isArray(mod.partes) ? mod.partes.slice(0, 40) : []).forEach((p, i) => {
       const nome = String(p.nome || 'peca' + i).slice(0, 40), cor = corOk(p.cor, '#B8C4D0');
-      const mat = new T.MeshStandardMaterial({ color: cor, roughness: p.metal ? 0.35 : 0.7, metalness: p.metal ? 0.6 : 0.05, flatShading: true, transparent: true, opacity: 1,
-        emissive: '#000000', side: (p.forma === 'tubo' ? T.DoubleSide : T.FrontSide) });
-      const m = new T.Mesh((F[p.forma] || F.caixa)(), mat);
+      // `material` (metal, aco, cromado, latao, plastico, borracha, madeira, vidro,
+      // ceramica, tecido, pedra) decide brilho e reflexo; `metal: true` antigo vale
+      const mat = window.U3 ? U3.material(T, cor, p.material, p.metal)
+        : new T.MeshStandardMaterial({ color: cor, roughness: p.metal ? 0.35 : 0.7, metalness: p.metal ? 0.6 : 0.05, flatShading: true, transparent: true, opacity: 1 });
+      mat.emissive = new T.Color('#000000'); mat.side = p.forma === 'tubo' ? T.DoubleSide : T.FrontSide;
+      const m = new T.Mesh((F[p.forma] || F.caixa)(), mat); m.castShadow = true; m.receiveShadow = true;
       const pos = vet(p.pos, -20, 20, [0, 0.5, 0]), tam = vet(p.tam, 0.01, 20, [1, 1, 1]), giro = vet(p.giro, -360, 360, [0, 0, 0]).map((a) => (a * Math.PI) / 180);
       m.position.set(...pos); m.scale.set(...tam); m.rotation.set(...giro);
-      m.userData = { nome, pos, giro, casca: !!p.casca, explode: vet(p.explode, -20, 20, [0, 0, 0]), eixo: vet(p.eixo, -1, 1, [0, 1, 0]), cor: new T.Color(cor) };
+      m.userData = { nome, pos, giro, casca: !!p.casca, explode: vet(p.explode, -20, 20, [0, 0, 0]), eixo: vet(p.eixo, -1, 1, [0, 1, 0]), cor: window.U3 ? new T.Color(cor).convertSRGBToLinear() : new T.Color(cor) };
       raiz.add(m); pecas[nome.toLowerCase()] = m; lista.push(m);
     });
     // enquadra: o objeto cabe na tela inteira, sobre o chao
@@ -99,6 +107,10 @@
     const distPara = (E) => Math.min((E.r / Math.sin(hfov / 2)) * 1.02,
       Math.max(E.lh / Math.tan(hfov / 2) * 1.35, E.ah / Math.tan(vfov / 2) * 1.6) + E.lh);
     sc.userData.sombra.scale.set(tamObj.x * esc * 1.6 + 1, tamObj.z * esc * 1.6 + 1, 1);
+    const tamCena = Math.max(E0.r, E1.r) * 2;
+    if (window.U3) { const amb = U3.ambiente(T, sc, AMB, tamCena, String(spec.fila_id || spec.titulo || 'm').length * 7919);
+      U3.luzComSombra(T, sc, tamCena, amb.luz, 1.7); }
+    else { const key = new T.DirectionalLight('#ffffff', 0.85); key.position.set(6, 10, 8); sc.add(key); }
     if (!lista.length) console.log('[mecanismo] spec sem modelo.partes: estudio vazio');
 
     // particulas do fluxo (pontos ao longo do caminho)
@@ -133,7 +145,9 @@
         const u = m.userData;
         m.position.set(u.pos[0] + u.explode[0] * ex, u.pos[1] + u.explode[1] * ex, u.pos[2] + u.explode[2] * ex);
         m.rotation.set(...u.giro);
-        m.material.opacity = u.casca ? U.lerp(1, 0.14, co) : 1; m.material.depthWrite = m.material.opacity > 0.5;
+        const base = m.material.userData.opacidadeBase || 1;
+        m.material.opacity = (u.casca ? U.lerp(1, 0.14, co) : 1) * base; m.material.depthWrite = m.material.opacity > 0.5;
+        m.castShadow = m.material.opacity > 0.5;
         m.material.emissive.setRGB(0, 0, 0); m.material.color.copy(u.cor);
         if (acao === 'destaque' && al.length && al.indexOf(m) < 0) { m.material.color.copy(u.cor).multiplyScalar(U.lerp(1, 0.35, U.suave(k * 3))); }
       });
@@ -193,7 +207,7 @@
 
     function quadro(t) {
       const { cn, i, k, local } = pose(t);
-      R.render(sc, cam); c.drawImage(gl, 0, 0, W, H);
+      R.render(sc, cam); c.imageSmoothingQuality = 'high'; c.drawImage(gl, 0, 0, W, H);
       if (i > 0 && local < 0.12) { c.fillStyle = 'rgba(255,255,255,' + (0.35 * (1 - local / 0.12)).toFixed(2) + ')'; c.fillRect(0, 0, W, H); }
       rotulos(cn, k, local); numero(cn, local);
       U.cartaz(c, spec, t, { fonte: '84px "Lilita One", sans-serif', y: 170, fundo: '#FFFFFF', borda: '#10243F', cor: '#10243F', altura_linha: 100, dur: 3.0 });

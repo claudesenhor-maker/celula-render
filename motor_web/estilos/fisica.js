@@ -45,7 +45,10 @@
     const MEL = Array.isArray(spec.melodia) && spec.melodia.length ? spec.melodia.map((n) => num(n, 36, 96, 72)) : [72, 74, 76, 77, 79, 77, 76, 74];
     const rng = U.rng(spec.semente || 'fis');
     const CX = W / 2, CY = H * 0.42, ESC = W * 0.46;          // mundo: 1 = meia largura
-    const eventos = [], quadros = [];
+    // `impactos` (23/10): ONDE e QUANDO cada batida foi -- a imagem acende no
+    // mesmo instante em que a nota toca (o "satisfatorio" e' som e luz juntos)
+    const eventos = [], quadros = [], impactos = [];
+    const impacto = (t, x, y, cor, k, forte) => { if (impactos.length < 4000 && (!impactos.length || t - impactos[impactos.length - 1].t > 0.02 || forte)) impactos.push({ t, x, y, cor, k, forte: !!forte }); };
     let notaI = 0, batidas = 0;
     const nota = (t, forte) => { if (!eventos.length || t - eventos[eventos.length - 1].t > 0.045 || forte) eventos.push({ t, nota: MEL[notaI++ % MEL.length] + (forte ? 12 : 0), forte: forte ? 1 : 0 }); };
     const limitaV = (b) => { const v = Math.hypot(b.vx, b.vy) || 1e-6; if (v < VMIN) { b.vx *= VMIN / v; b.vy *= VMIN / v; } else if (v > VMAX) { b.vx *= VMAX / v; b.vy *= VMAX / v; } };
@@ -115,7 +118,7 @@
             for (const p of pinos) {
               const dx = b.x - p.x, dy = b.y - p.y, d = Math.hypot(dx, dy), m = b.r + p.r;
               if (d < m && d > 1e-6) { const nx = dx / d, ny = dy / d, vn = b.vx * nx + b.vy * ny;
-                if (vn < 0) { b.vx -= (1 + 0.45) * vn * nx; b.vy -= (1 + 0.45) * vn * ny; b.vx += (rng() - 0.5) * 0.25; p.brilho = t; batidas++; nota(t); }
+                if (vn < 0) { b.vx -= (1 + 0.45) * vn * nx; b.vy -= (1 + 0.45) * vn * ny; b.vx += (rng() - 0.5) * 0.25; p.brilho = t; batidas++; nota(t); impacto(t, p.x, p.y, b.cor, -1); }
                 b.x = p.x + nx * m; b.y = p.y + ny * m; }
             }
             // bolas batem entre si (a corrida tem empurra-empurra)
@@ -136,7 +139,7 @@
           const p = paredes[k], d = Math.hypot(b.x, b.y), a = Math.atan2(b.y, b.x), R = raioEm(p, a - p.omega * t - p.fase);
           if (b.cruzando) {
             // comecou a atravessar: termina, a fenda girando nao a puxa de volta
-            if (d > R + b.r * 1.2) { b.cruzando = false; p.viva = false; p.quebra = t; b.k = k + 1; b.flash = t; nota(t, true); }
+            if (d > R + b.r * 1.2) { b.cruzando = false; p.viva = false; p.quebra = t; b.k = k + 1; b.flash = t; nota(t, true); impacto(t, b.x, b.y, b.cor, k, true); }
             else if (d < R - b.r * 2.5) b.cruzando = false;          // voltou para dentro por conta propria
             continue;
           }
@@ -149,7 +152,7 @@
             if (vn > 0) {
               b.vx -= (1 + Q) * vn * nx; b.vy -= (1 + Q) * vn * ny;
               b.vx += -ny * p.omega * p.R * 0.06; b.vy += nx * p.omega * p.R * 0.06;     // a parede que gira empurra
-              batidas++; nota(t);
+              batidas++; nota(t); impacto(t, b.x + nx * b.r, b.y + ny * b.r, b.cor, k);
               if (REGRA === 'cresce') b.r = Math.min(p.R * 0.4, b.r * 1.03);
               if (REGRA === 'acelera') { b.vx *= 1.02; b.vy *= 1.02; }
               if (REGRA === 'divide' && bolas.length < 40) bolas.push({ x: b.x * 0.92, y: b.y * 0.92, vx: -b.vx * 0.8, vy: b.vy * 0.8, r: b.r, cor: CORES[bolas.length % CORES.length], k: b.k, cruzando: false, fora: false, flash: 0 });
@@ -168,8 +171,9 @@
     // ===================================================================== DESENHO
     function desenhaParede(p, t) {
       const rot = p.fase + p.omega * t, extra = t > p.abre ? Math.min(Math.PI * 0.7, Math.max(0, t - p.abre - 1.2) * 0.18) : 0, meia = (p.ab + extra) / 2;
-      const cor = CORES[(paredes.indexOf(p) + 2) % CORES.length];
-      c.save(); c.lineWidth = 14; c.lineCap = 'round'; c.lineJoin = 'round'; c.strokeStyle = cor; c.shadowColor = cor; c.shadowBlur = 26;
+      const cor = CORES[(paredes.indexOf(p) + 2) % CORES.length], kp = paredes.indexOf(p);
+      const bateu = (desenhaParede.vivos || []).reduce((m, e) => (e.k === kp ? Math.max(m, 1 - (t - e.t) / 0.25) : m), 0);
+      c.save(); c.lineWidth = 14 + 8 * bateu; c.lineCap = 'round'; c.lineJoin = 'round'; c.strokeStyle = bateu > 0.5 ? '#FFFFFF' : cor; c.shadowColor = cor; c.shadowBlur = 26 + 40 * bateu;
       // contorno inteiro em passos de 1 grau, pulando as fendas
       c.beginPath(); let caneta = false;
       for (let i = 0; i <= 360; i++) {
@@ -196,20 +200,46 @@
 
     function quadro(t) {
       const qi = Math.min(quadros.length - 1, Math.max(0, Math.floor(t * FPS))), Q_ = quadros[qi];
+      // as batidas da janela [t-0,45 s, t] (busca binaria: a lista e' em ordem de tempo)
+      let lo = 0, hi = impactos.length; while (lo < hi) { const m = (lo + hi) >> 1; if (impactos[m].t < t - 0.45) lo = m + 1; else hi = m; }
+      const vivos = []; for (let j = lo; j < impactos.length && impactos[j].t <= t; j++) vivos.push(impactos[j]);
+      const ult = vivos[vivos.length - 1], pulso = ult ? Math.max(0, 1 - (t - ult.t) / (ult.forte ? 0.5 : 0.16)) * (ult.forte ? 0.5 : 0.18) : 0;
       const g = c.createRadialGradient(CX, CY, 50, CX, CY, H * 0.8); g.addColorStop(0, '#1A1A2E'); g.addColorStop(1, FUNDO); c.fillStyle = g; c.fillRect(0, 0, W, H);
+      if (pulso > 0) { const g2 = c.createRadialGradient(CX, CY, 0, CX, CY, H * 0.6); g2.addColorStop(0, ult.cor); g2.addColorStop(1, 'rgba(0,0,0,0)'); c.save(); c.globalAlpha = pulso; c.fillStyle = g2; c.fillRect(0, 0, W, H); c.restore(); }
       if (MODO === 'plinko') {
         pinos.forEach((p) => { const acende = U.clamp(1 - (t - p.brilho) / 0.16, 0, 1); c.save(); c.fillStyle = acende > 0 ? '#FFFFFF' : '#5A6B8C'; if (acende > 0) { c.shadowColor = '#FFFFFF'; c.shadowBlur = 30 * acende; }
           c.beginPath(); c.arc(CX + p.x * ESC, CY + p.y * ESC, p.r * ESC * (1 + 0.5 * acende), 0, TAU); c.fill(); c.restore(); });
         c.save(); c.strokeStyle = '#5A6B8C'; c.lineWidth = 6; cacapas.forEach((k) => { c.beginPath(); c.moveTo(CX + k.x0 * ESC, CY + 0.84 * ESC); c.lineTo(CX + k.x0 * ESC, CY + 1.0 * ESC); c.stroke(); });
         c.beginPath(); c.moveTo(CX - 0.95 * ESC, CY + 1.0 * ESC); c.lineTo(CX + 0.95 * ESC, CY + 1.0 * ESC); c.stroke(); c.restore();
       } else {
+        desenhaParede.vivos = vivos;
         paredes.forEach((p, k) => { if (Q_.vivas[k]) desenhaParede(p, t); else estilhaco(p, t); });
       }
-      for (let j = 6; j >= 0; j--) {
-        const qq = quadros[Math.max(0, qi - j * 2)]; if (!qq) continue;
-        qq.b.forEach(([x, y, r, cor]) => { c.globalAlpha = j ? 0.12 * (1 - j / 7) : 1; c.fillStyle = cor; if (!j) { c.shadowColor = cor; c.shadowBlur = 18; }
-          c.beginPath(); c.arc(CX + x * ESC, CY + y * ESC, r * ESC, 0, TAU); c.fill(); c.shadowBlur = 0; });
+      // RASTRO DE LUZ (23/10): uma faixa continua pelos ultimos 12 quadros, que
+      // afina e apaga -- antes eram 6 bolinhas soltas quase invisiveis
+      const NR = 12, nb = Q_.b.length;
+      c.save(); c.lineCap = 'round';
+      for (let bi = 0; bi < nb && bi < 40; bi++) {
+        for (let j = NR; j >= 1; j--) {
+          const a1 = quadros[qi - j], a2 = quadros[qi - j + 1]; if (!a1 || !a2 || !a1.b[bi] || !a2.b[bi]) continue;
+          const [x1, y1, r1, cor] = a1.b[bi], [x2, y2] = a2.b[bi]; if (Math.hypot(x2 - x1, y2 - y1) > 0.4) continue;
+          const k = 1 - j / (NR + 1); c.globalAlpha = 0.55 * k * k; c.strokeStyle = cor; c.lineWidth = r1 * ESC * 2 * (0.25 + 0.75 * k);
+          c.beginPath(); c.moveTo(CX + x1 * ESC, CY + y1 * ESC); c.lineTo(CX + x2 * ESC, CY + y2 * ESC); c.stroke();
+        }
       }
+      c.restore();
+      Q_.b.forEach(([x, y, r, cor]) => { c.save(); c.fillStyle = cor; c.shadowColor = cor; c.shadowBlur = 30; c.beginPath(); c.arc(CX + x * ESC, CY + y * ESC, r * ESC, 0, TAU); c.fill();
+        c.shadowBlur = 0; c.globalAlpha = 0.85; c.fillStyle = '#FFFFFF'; c.beginPath(); c.arc(CX + (x - r * 0.3) * ESC, CY + (y - r * 0.3) * ESC, r * ESC * 0.38, 0, TAU); c.fill(); c.restore(); });
+      // ONDA DE CHOQUE + FAISCAS em cada batida (0,45 s), na cor da bola
+      vivos.forEach((e, n) => {
+        const k = (t - e.t) / (e.forte ? 0.45 : 0.32); if (k < 0 || k > 1) return;
+        const px = CX + e.x * ESC, py = CY + e.y * ESC, rr = U.rng(Math.floor(e.t * 1000) + n);
+        c.save(); c.globalAlpha = (1 - k) * 0.9; c.strokeStyle = e.cor; c.lineWidth = (e.forte ? 10 : 6) * (1 - k) + 1; c.shadowColor = e.cor; c.shadowBlur = 20;
+        c.beginPath(); c.arc(px, py, (e.forte ? 160 : 70) * U.saida(k) + 6, 0, TAU); c.stroke();
+        c.fillStyle = '#FFFFFF'; const nf = e.forte ? 18 : 7;
+        for (let j = 0; j < nf; j++) { const a = rr() * TAU, d = (e.forte ? 220 : 90) * U.saida(k) * (0.5 + rr() * 0.5); c.beginPath(); c.arc(px + Math.cos(a) * d, py + Math.sin(a) * d + k * k * 40, (e.forte ? 6 : 4) * (1 - k) + 1, 0, TAU); c.fill(); }
+        c.restore();
+      });
       c.globalAlpha = 1;
       c.save(); c.font = '64px "Lilita One", sans-serif'; c.textAlign = 'center'; c.textBaseline = 'middle'; c.fillStyle = '#FFFFFF';
       if (MODO === 'plinko') {
@@ -227,7 +257,8 @@
           c.lineWidth = 18; c.strokeStyle = '#111'; c.strokeText(campeao.n, 0, -70); c.fillStyle = CORES[campeao.i % CORES.length]; c.fillText(campeao.n, 0, -70);
           c.font = '96px "Lilita One", sans-serif'; c.strokeText('CHAMPION!', 0, 60); c.fillStyle = '#FFD23F'; c.fillText('CHAMPION!', 0, 60); c.restore(); }
       } else {
-        c.fillText('BOUNCES: ' + Q_.batidas, W / 2, H * 0.80 - 230);
+        const pula = ult ? 1 + 0.18 * Math.max(0, 1 - (t - ult.t) / 0.12) : 1;
+        c.save(); c.translate(W / 2, H * 0.80 - 230); c.scale(pula, pula); c.fillText('BOUNCES: ' + Q_.batidas, 0, 0); c.restore();
         const abertas = Q_.vivas.filter((v) => !v).length; c.fillStyle = '#FFD23F'; c.fillText((MODO === 'poligono' ? 'WALLS: ' : 'RINGS: ') + (paredes.length - abertas) + ' / ' + paredes.length, W / 2, H * 0.80 - 150);
         if (abertas === paredes.length && paredes.length) { const tq = Math.max(...paredes.map((p) => p.quebra || 0)), s = U.mola(t - tq, 9);
           c.translate(W / 2, CY); c.scale(s, s); c.font = '150px "Lilita One", sans-serif'; c.lineWidth = 16; c.strokeStyle = '#111'; c.strokeText('ESCAPED!', 0, 0); c.fillStyle = '#FFD23F'; c.fillText('ESCAPED!', 0, 0); }
