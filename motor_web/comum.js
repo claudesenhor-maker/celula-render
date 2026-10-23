@@ -105,7 +105,9 @@
       if (!spec.titulo) return;
       const dur = est.dur || 3.2;
       if (t > dur + 0.4) return;
-      const ent = U.mola(t, 11), sai = U.clamp((t - dur) / 0.4, 0, 1);
+      // 23/10 (retencao): o cartaz ja' esta' NO QUADRO 0 -- e' o quadro que o feed
+      // mostra enquanto a pessoa decide; antes ele nascia do zero e so' aparecia ~0,2 s depois
+      const ent = U.mola(t + 0.35, 11), sai = U.clamp((t - dur) / 0.4, 0, 1);
       c.save();
       c.font = est.fonte; c.textAlign = 'center'; c.textBaseline = 'middle';
       const ls = U.linhas(c, est.caixa ? spec.titulo.toUpperCase() : spec.titulo, spec.w * 0.8);

@@ -332,7 +332,9 @@
       const v = c.createRadialGradient(W / 2, H / 2, H * 0.3, W / 2, H / 2, H * 0.75); v.addColorStop(0, 'rgba(0,0,0,0)'); v.addColorStop(1, 'rgba(0,0,0,.55)'); c.fillStyle = v; c.fillRect(0, 0, W, H);
       c.restore();
       // IRIS: abre no comeco, fecha no fim (e o loop recomeca da iris)
-      const ab = U.clamp(t / 0.6, 0, 1), fe = U.clamp((spec.dur_s - t) / 0.6, 0, 1), raio = Math.hypot(W, H) * 0.6 * U.suave(Math.min(ab, fe));
+      // 23/10 (retencao): sem iris ABRINDO -- 0,6 s de tela preta no comeco era o
+      // pior primeiro quadro de todos os motores. Fecha no fim (o loop continua).
+      const ab = 1, fe = U.clamp((spec.dur_s - t) / 0.6, 0, 1), raio = Math.hypot(W, H) * 0.6 * U.suave(Math.min(ab, fe));
       if (raio < Math.hypot(W, H) * 0.6) { c.save(); c.beginPath(); c.rect(0, 0, W, H); c.arc(W / 2, H * 0.45, Math.max(1, raio), 0, U.TAU, true); c.fillStyle = '#000'; c.fill('evenodd'); c.restore(); }
     }
     return { quadro };

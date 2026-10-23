@@ -126,7 +126,7 @@
       c.save(); c.font = tam + 'px "Lilita One", sans-serif'; c.textAlign = 'center'; c.textBaseline = 'middle'; c.fillStyle = '#111';
       // cartao branco atras da grade nas formas/icones (contraste com qualquer fundo)
       if (nv.tipo !== 'letras') { U.rr(c, x0 - 16, y0 - 16, x1 - x0 + 32, y1 - y0 + 32, 28); c.fillStyle = 'rgba(255,255,255,0.88)'; c.fill(); c.fillStyle = '#111'; }
-      const entra = U.saida(U.clamp(local / 0.35, 0, 1));
+      const entra = U.saida(U.clamp((local + 0.25) / 0.35, 0, 1));   // 23/10: a grade ja' aparece no 1o quadro
       // CAMUFLAGEM (23/10): do nivel de dificuldade 3 em diante todos os itens
       // tremem um pouco de lugar -- o diferente deixa de "saltar" da grade
       const rj = U.rng((spec.semente || 'quiz') + ':j' + i), tremor = nv.nivelDif >= 3 ? (nv.nivelDif - 2) * 0.05 : 0;

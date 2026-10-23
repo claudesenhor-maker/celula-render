@@ -149,6 +149,28 @@ def _silencio(caminho, dur, sr=SFX.SR):
     return caminho
 
 
+def _aparar_inicio(wav, marcas, folga=0.03):
+    """Corta o silencio que a voz traz ANTES da 1a palavra (23/10, retencao: o
+    TTS abre com 0,2-0,5 s de nada, e na cena 1 isso e' o gancho mudo enquanto
+    o feed decide). Usa a marca da 1a palavra; sem marcas, nao mexe."""
+    if not marcas:
+        return marcas, None
+    ini = float(marcas[0].get("inicio_s", 0))
+    if ini <= folga + 0.06:
+        return marcas, None
+    corte = ini - folga
+    with wave.open(wav) as w:
+        p, sr, n = w.getparams(), w.getframerate(), w.getnframes()
+        w.setpos(min(n, int(corte * sr)))
+        resto = w.readframes(n)
+    with wave.open(wav, "wb") as o:
+        o.setparams(p)
+        o.writeframes(resto)
+    novas = [dict(m, inicio_s=max(0.0, float(m["inicio_s"]) - corte), fim_s=max(0.0, float(m["fim_s"]) - corte)) for m in marcas]
+    with wave.open(wav) as w:
+        return novas, w.getnframes() / float(w.getframerate())
+
+
 def linha_do_tempo(spec, tmp, modo_tts):
     """Duracao de cada cena e, nos narrados, a voz e as palavras."""
     cenas, t, palavras, faixas, respiros = spec["cenas"], 0.0, [], [], []
@@ -161,6 +183,14 @@ def linha_do_tempo(spec, tmp, modo_tts):
             wav = os.path.join(tmp, f"n{i}.wav")
             if texto:
                 marcas, dur = sintetizar(texto, voz_cfg, wav, modo_tts)
+                try:
+                    if wav.endswith(".wav") and os.path.exists(wav):
+                        marcas, d2 = _aparar_inicio(wav, marcas)
+                        if d2:
+                            print(f"[voz] cena {i}: {dur - d2:.2f} s de silencio cortados antes da 1a palavra")
+                            dur = d2
+                except Exception as e:                       # noqa: BLE001 -- aparar e' bonus, nunca derruba
+                    print(f"[voz] cena {i}: nao aparei o inicio ({e})")
             else:
                 marcas, dur = [], float(c.get("dur_s") or 1.5)
                 _silencio(wav, dur)

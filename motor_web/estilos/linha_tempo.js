@@ -94,7 +94,7 @@
           c.translate(bx + (1 - Math.min(1, ent)) * 300, y - bh / 2);
           U.rr(c, 0, 0, bw, bh, 30); c.fillStyle = 'rgba(255,255,255,0.96)'; c.fill(); c.fillStyle = m.cor; U.rr(c, 0, 0, 22, bh, 11); c.fill();
           c.save(); c.translate(105, bh / 2); c.scale(62, 62); c.fillStyle = m.cor; c.strokeStyle = m.cor; ICONES[m.icone](c); c.restore();
-          c.fillStyle = '#16202C'; c.textAlign = 'left'; c.textBaseline = 'top'; c.font = '86px "Lilita One", sans-serif'; c.fillText(anoTxt(m.ano), 190, 34);
+          c.fillStyle = '#16202C'; c.textAlign = 'left'; c.textBaseline = 'top'; c.font = '86px "Lilita One", sans-serif'; { const lw = c.measureText(anoTxt(m.ano)).width; if (lw > bw - 220) c.font = Math.floor(86 * (bw - 220) / lw) + 'px "Lilita One", sans-serif'; } c.fillText(anoTxt(m.ano), 190, 34);
           c.font = '46px "Lilita One", sans-serif'; U.linhas(c, m.evento.toUpperCase(), bw - 220).slice(0, 2).forEach((l, n) => c.fillText(l, 190, 140 + n * 54));
         }
         c.restore();
@@ -104,6 +104,7 @@
       { const txt = anoTxt(anoAgora), s = 1 + 0.06 * Math.sin(Math.min(1, q) * Math.PI);
         const yA = U.lerp(560, 330, U.suave(U.clamp((t - 3.0) / 0.5, 0, 1)));
         c.save(); c.translate(W / 2, yA); c.scale(s, s); c.font = '150px "Lilita One", sans-serif'; c.textAlign = 'center'; c.textBaseline = 'middle';
+        { const lw = c.measureText(txt).width; if (lw > W * 0.9) c.font = Math.floor(150 * (W * 0.9) / lw) + 'px "Lilita One", sans-serif'; }   // 23/10: "450,000,000 BC" saia cortado
         c.lineWidth = 18; c.strokeStyle = '#000000'; c.strokeText(txt, 0, 0); c.fillStyle = '#FFD166'; c.fillText(txt, 0, 0); c.restore(); }
       if (cn.hud && typeof cn.hud !== 'object' && local > 0.4) { const s = U.mola(local - 0.4, 10); c.save(); c.translate(W / 2, H * 0.6); c.scale(s, s);
         c.font = '100px "Lilita One", sans-serif'; c.textAlign = 'center'; c.textBaseline = 'middle'; const tx = U.hud(c, cn.hud, c.canvas.width * 0.84 - 70, 22), w = c.measureText(tx).width + 70;
