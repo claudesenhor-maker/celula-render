@@ -218,9 +218,12 @@
       oA.grupo.visible = oB.grupo.visible = true; oA.grupo.scale.setScalar(1); oA.grupo.position.set(0, 0, 0); oB.grupo.scale.setScalar(rB); oB.grupo.position.set(0, 0, -L);
       giro(oA, t, 14); giro(oB, t, 14);
       luzSol.intensity = 0; luzDir.intensity = 2.0; luzDir.position.set(-5, 3, 2); amb.intensity = 0.12;
-      const q = U.suave(U.clamp((k - 0.08) / 0.84, 0, 1)), z0 = 3.4, z1 = -L + 3.4 * rB;
-      cam.position.set(0.9 * Math.sin(q * Math.PI), 0.25, U.lerp(z0, z1, q)); cam.near = 0.01; cam.far = 1e5; cam.updateProjectionMatrix();
-      cam.lookAt(0, -0.6 * (q > 0.5 ? rB : 1), cam.position.z - 10);
+      // o corpo de partida fica a ESQUERDA do caminho: a camera passa por ele (que some pela
+      // borda) e segue reto ate o destino, que para no alto da tela com folga
+      oA.grupo.position.set(-1.7, 0, 0);
+      const q = U.suave(U.clamp((k - 0.08) / 0.84, 0, 1)), z0 = 4.6, z1 = -L + 6.2 * rB;
+      cam.position.set(0.3, 0.2, U.lerp(z0, z1, q)); cam.near = 0.01; cam.far = 1e5; cam.updateProjectionMatrix();
+      cam.lookAt(0, -0.32 * (q > 0.5 ? rB : 1), cam.position.z - 10);
       // distancia: Lua a partir da Terra; planetas pela diferenca das orbitas (o mais perto que chegam)
       const km = A === 'earth' && B === 'moon' || A === 'moon' && B === 'earth' ? 384400 : CORPOS[A].pai === CORPOS[B].pai && CORPOS[A].pai === 'sun' ? Math.abs(CORPOS[A].a - CORPOS[B].a)
         : B === 'sun' ? CORPOS[A].a : A === 'sun' ? CORPOS[B].a : Math.abs((CORPOS[A].pai === 'sun' ? CORPOS[A].a : CORPOS.earth.a) - (CORPOS[B].pai === 'sun' ? CORPOS[B].a : CORPOS.earth.a));
@@ -303,7 +306,7 @@
       } else if (acao === 'viagem') {
         const v = VEICULOS[cn.veiculo] || VEICULOS.luz, horas = info.km / v[1];
         contador(CORPOS[info.A].nome.toUpperCase() + ' → ' + CORPOS[info.B].nome.toUpperCase(), dist(info.km * info.q), H * 0.6);
-        if (k > 0.55) selo(tempoH(horas).replace(' EARTH', ''), 'BY ' + v[0], H * 0.2, (k - 0.55) * dur);
+        if (k > 0.55) selo(tempoH(horas).replace(' EARTH', ''), 'BY ' + v[0], H * 0.49, (k - 0.55) * dur);
         if (info.q > 0.1 && info.q < 0.9) { const r2 = U.rng(17); c.save(); c.strokeStyle = 'rgba(255,255,255,0.5)'; c.lineWidth = 4;
           for (let j = 0; j < 30; j++) { const a = r2() * U.TAU, r0 = 120 + ((r2() * 900 + local * 1600) % 900); c.beginPath(); c.moveTo(W / 2 + Math.cos(a) * r0, H * 0.4 + Math.sin(a) * r0); c.lineTo(W / 2 + Math.cos(a) * (r0 + 90), H * 0.4 + Math.sin(a) * (r0 + 90)); c.stroke(); }
           c.restore(); }
