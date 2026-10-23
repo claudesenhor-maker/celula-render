@@ -77,6 +77,16 @@ EFEITO_DA_ACAO = {
     # 22/10: quiz "ache o diferente" (estilos/quiz.js); o tique por segundo vem
     # de `eventos_sonoros`, a resposta (1,3 s antes do fim do nivel) aqui
     "quiz": {},
+    # 23/10: historia em mapa (estilos/mapa.js): a camera viaja, paises acendem,
+    # rotas e setas andam, alfinetes caem, o ano conta
+    "mapa": {"mostra": [("whoosh", 0.02, 0.5)], "destaca": [("pop", 0.18, 0.6), ("pop", 0.32, 0.5)],
+             "rota": [("whoosh", 0.12, 0.6), ("clique", 0.82, 0.6)], "avanca": [("whoosh", 0.08, 0.9), ("thud", 0.62, 0.7)],
+             "marca": [("pop", 0.22, 0.7), ("pop", 0.5, 0.6)], "ano": [("clique", 0.02, 0.8), ("plim", 0.9, 0.5)]},
+    # 23/10: ficha de animal (estilos/animal.js) e linha do tempo (estilos/linha_tempo.js)
+    "animal": {"mostra": [("whoosh", 0.03, 0.4)], "stat": [("pop", 0.08, 0.6), ("plim", 0.62, 0.6)], "compara": [("pop", 0.2, 0.6)],
+               "corre": [("whoosh", 0.05, 0.9), ("whoosh", 0.45, 0.7)], "ataca": [("whoosh", 0.2, 0.9), ("thud", 0.42, 1.2), ("tremido", 0.44, 0.7)]},
+    "linha_tempo": {"marco": [("whoosh", 0.05, 0.5), ("pop", 0.36, 0.7)], "salto": [("whoosh", 0.02, 0.9), ("pop", 0.36, 0.7)],
+                    "zoom": [("whoosh", 0.05, 0.5), ("plim", 0.4, 0.8)]},
 }
 # O PERFIL DE EFEITOS de cada estilo (sfx.PERFIL, 22/10): o acervo gravado
 # que o canal usa. Pixel soa 8-bit; quiz, relogio; o resto, o mundo real.
@@ -259,6 +269,12 @@ def main():
     for k, v in trilha.items():
         musica.setdefault(k, v)
     musica.setdefault("semente", spec.get("fila_id") or spec.get("semente") or "web")
+    # CANAL SERIO (23/10): a trava de `sfx.genero_permitido` existe para a
+    # comedia (trilha dramatica embaixo de piada). Canal de historia, animal ou
+    # linha do tempo declara `trilha.registro: "serio"` no estilo e toca o
+    # epico/suspense que pediu, sem fingir ironia.
+    if str(musica.pop("registro", "") or "").lower() == "serio":
+        musica["ironia"] = True
     if not spec["narrado"]:
         musica.setdefault("ganho_db", -9)   # sem voz, a trilha e' a protagonista do som
     if fmt.get("sem_trilha"):
