@@ -239,6 +239,11 @@ def main():
     ap.add_argument("--modo-tts", default=os.environ.get("MODO_TTS", "real"))
     a = ap.parse_args()
     spec = json.load(open(a.spec, encoding="utf-8-sig"))
+    try:  # T236: sentido frase->imagem (so silhueta); nunca derruba o render
+        from sentido_cena import aplicar_no_spec
+        print(f"[web] sentido_cena: {aplicar_no_spec(spec)} cena(s) corrigida(s)")
+    except Exception as e:  # noqa: BLE001
+        print(f"[web] sentido_cena ignorado ({e})")
     est = spec.get("estilo")
     fmt = _formato(est)
     spec.setdefault("w", 1080); spec.setdefault("h", 1920); spec.setdefault("fps", int(fmt.get("fps") or 30))
