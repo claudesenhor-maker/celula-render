@@ -778,7 +778,11 @@ def motor_web(spec, fila_id, t0):
                         "--modo-tts", os.environ.get("MODO_TTS", "real")], capture_output=True, text=True)
     sys.stdout.write(r.stdout or ""); sys.stderr.write(r.stderr or "")
     if r.returncode != 0:
-        fim = ((r.stderr or "").strip() or (r.stdout or "").strip())[-700:]
+        # a causa do render_web (`[render_web] FALHOU: ...`) sai no stdout, antes do
+        # traceback do Python: ela vai na frente
+        saida = (r.stdout or "") + "\n" + (r.stderr or "")
+        causa = [l for l in saida.splitlines() if "FALHOU" in l or "Error:" in l][-3:]
+        fim = (" | ".join(causa) + " || " if causa else "") + ((r.stderr or "").strip() or (r.stdout or "").strip())[-400:]
         raise RuntimeError(f"montar_web saiu com {r.returncode} (estilo {spec.get('estilo')}): {fim}")
     sp = json.load(open(os.path.splitext(out)[0] + "_spec_render.json", encoding="utf-8"))
     dur = float(sp.get("dur_s") or 0)

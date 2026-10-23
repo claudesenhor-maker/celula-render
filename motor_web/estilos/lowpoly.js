@@ -657,7 +657,8 @@
           o.sol.intensity = 0.85 * luz; o.hemi.intensity = 0.2 + 0.45 * luz;
           const c0 = new T.Color(CEU.noite[0]).lerp(new T.Color(CEU.dia[0]), luz), c1 = new T.Color(CEU.noite[1]).lerp(new T.Color(CEU.dia[1]), luz);
           o.sc.background = o.sc.background && o.sc.background.isColor ? o.sc.background.copy(c0) : c0.clone(); if (o.sc.fog) o.sc.fog.color.copy(c1);
-          o.predios.forEach((b) => b.userData.janelas.forEach((j) => { j.material = luz < 0.45 ? b.userData.matNoite : b.userData.matDia; }));
+          // predio criado pela IA nao tem janelas proprias (23/10: 3 renders do MINI QUE PASARIA cairam aqui)
+          o.predios.forEach((b) => (b.userData.janelas || []).forEach((j) => { const m = luz < 0.45 ? b.userData.matNoite : b.userData.matDia; if (m) j.material = m; }));
         }
         if (o.fx.estrelas) { o.fx.estrelas.material.opacity = acao === 'aurora' ? 0.9 : U.clamp(1 - luz * 1.6, 0, 1); }
       }
