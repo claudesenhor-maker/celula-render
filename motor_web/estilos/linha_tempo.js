@@ -106,7 +106,7 @@
         c.save(); c.translate(W / 2, yA); c.scale(s, s); c.font = '150px "Lilita One", sans-serif'; c.textAlign = 'center'; c.textBaseline = 'middle';
         c.lineWidth = 18; c.strokeStyle = '#000000'; c.strokeText(txt, 0, 0); c.fillStyle = '#FFD166'; c.fillText(txt, 0, 0); c.restore(); }
       if (cn.hud && typeof cn.hud !== 'object' && local > 0.4) { const s = U.mola(local - 0.4, 10); c.save(); c.translate(W / 2, H * 0.6); c.scale(s, s);
-        c.font = '100px "Lilita One", sans-serif'; c.textAlign = 'center'; c.textBaseline = 'middle'; const tx = String(cn.hud).toUpperCase().slice(0, 14), w = c.measureText(tx).width + 70;
+        c.font = '100px "Lilita One", sans-serif'; c.textAlign = 'center'; c.textBaseline = 'middle'; const tx = U.hud(c, cn.hud, c.canvas.width * 0.84 - 70, 22), w = c.measureText(tx).width + 70;
         U.rr(c, -w / 2, -66, w, 132, 30); c.fillStyle = '#FFD166'; c.fill(); c.fillStyle = '#16202C'; c.fillText(tx, 0, 6); c.restore(); }
       U.cartaz(c, spec, t, { fonte: '84px "Lilita One", sans-serif', y: 150, fundo: '#FFD166', borda: '#16202C', cor: '#16202C', altura_linha: 100, dur: 3.0 });
       U.legenda(c, spec, t, { fonte: '100px "Lilita One", sans-serif', y: H * 0.70, cor: '#FFFFFF', cor_ativa: '#FFD166', contorno: 18, caixa: true, por_vez: 3 });

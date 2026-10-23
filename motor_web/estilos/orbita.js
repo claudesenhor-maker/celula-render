@@ -312,7 +312,7 @@
           c.restore(); }
       }
       if (cn.hud && typeof cn.hud !== 'object' && local > 0.3 && acao !== 'viagem') { const s = U.mola(local - 0.3, 10); c.save(); c.translate(W / 2, 330); c.scale(s, s); c.font = '110px "Lilita One", sans-serif'; c.textAlign = 'center'; c.textBaseline = 'middle';
-        const txt = String(cn.hud).toUpperCase().slice(0, 14), w = c.measureText(txt).width + 70; U.rr(c, -w / 2, -74, w, 148, 34); c.fillStyle = '#FFD23F'; c.fill(); c.fillStyle = '#10131C'; c.fillText(txt, 0, 6); c.restore(); }
+        const txt = U.hud(c, cn.hud, c.canvas.width * 0.84 - 70, 22), w = c.measureText(txt).width + 70; U.rr(c, -w / 2, -74, w, 148, 34); c.fillStyle = '#FFD23F'; c.fill(); c.fillStyle = '#10131C'; c.fillText(txt, 0, 6); c.restore(); }
       U.cartaz(c, spec, t, { fonte: '84px "Lilita One", sans-serif', y: 150, fundo: '#FFD23F', borda: '#10131C', cor: '#10131C', altura_linha: 100, dur: 3.0 });
       U.legenda(c, spec, t, { fonte: '96px "Lilita One", sans-serif', y: H * 0.74, cor: '#FFFFFF', cor_ativa: '#FFD23F', contorno: 18, caixa: true, por_vez: 3 });
     }

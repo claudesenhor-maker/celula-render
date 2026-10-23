@@ -99,23 +99,35 @@
       cam.position.set(cx + Math.sin(ang) * d, cy * 0.55, Math.cos(ang) * d); cam.near = d / 5000; cam.far = d * 400; cam.updateProjectionMatrix();
       cam.lookAt(cx, cy * 0.62, 0);
       R.render(sc, cam); c.drawImage(gl, 0, 0, W, H);
-      // etiquetas: nome e altura de cada item visivel, ancoradas no topo dele
-      itens.forEach((it, j) => {
-        if (j > a) return;
+      // etiquetas: nome e altura de cada item visivel, ancoradas no topo dele.
+      // 23/10: o destaque e' posto primeiro; etiqueta secundaria que bateria
+      // numa ja posta some (antes "1 BARCO" cobria "KHALIFA"); nunca sai pela
+      // borda (conta a largura real) nem sobe para baixo do selo do alto.
+      const comHud = !!(cn.hud && typeof cn.hud !== 'object');
+      const yMin = comHud ? 540 : 330, postas = [];
+      const ordem = itens.map((it, j) => j).filter((j) => j <= a).sort((x, y) => (y === a) - (x === a));
+      ordem.forEach((j) => {
+        const it = itens[j];
         const p = new T.Vector3(it.x, it.alt, 0).project(cam); if (p.z > 1) return;
         const px = (p.x * 0.5 + 0.5) * W, py = (-p.y * 0.5 + 0.5) * H; if (px < -50 || px > W + 50 || py < 0) return;
         const tamPx = Math.abs(py - (-new T.Vector3(it.x, 0, 0).project(cam).y * 0.5 + 0.5) * H); if (tamPx < 26 && j !== a) return;
         const v = it.tam, real = v >= 1000 ? (v / 1000).toLocaleString('en-US', { maximumFractionDigits: 1 }) + ' km' : v >= 1 ? v.toLocaleString('en-US', { maximumFractionDigits: 1 }) + ' m' : (v * 100).toLocaleString('en-US', { maximumFractionDigits: 1 }) + ' cm';
         const destaque = j === a, ent = destaque ? U.mola(local - 0.15, 10) : 1;
-        c.save(); c.translate(U.clamp(px, 140, W - 220), Math.max(330, py - 40)); c.scale(ent, ent);
-        c.font = (destaque ? '64px' : '42px') + ' "Lilita One", sans-serif'; c.textAlign = 'center'; c.textBaseline = 'bottom';
-        const l1 = it.nome.toUpperCase(), w1 = Math.max(c.measureText(l1).width, c.measureText(real).width) + 40, hh = destaque ? 150 : 104;
+        c.save();
+        c.font = (destaque ? '64px' : '42px') + ' "Lilita One", sans-serif';
+        const l1 = it.nome.toUpperCase(), w1 = Math.min(W - 40, Math.max(c.measureText(l1).width, c.measureText(real).width) + 40), hh = destaque ? 150 : 104;
+        const bx = U.clamp(px, w1 / 2 + 20, W - w1 / 2 - 20), by = Math.max(yMin, py - 40);
+        const caixa = [bx - w1 / 2, by - hh, bx + w1 / 2, by];
+        if (!destaque && postas.some((r) => caixa[0] < r[2] + 12 && caixa[2] > r[0] - 12 && caixa[1] < r[3] + 12 && caixa[3] > r[1] - 12)) { c.restore(); return; }
+        postas.push(caixa);
+        c.translate(bx, by); c.scale(ent, ent);
+        c.textAlign = 'center'; c.textBaseline = 'bottom';
         U.rr(c, -w1 / 2, -hh, w1, hh, 22); c.fillStyle = destaque ? '#FFD23F' : 'rgba(255,255,255,0.85)'; c.fill();
-        c.fillStyle = '#1B1B1B'; c.fillText(l1, 0, -hh / 2 + 4); c.font = (destaque ? '54px' : '36px') + ' "Lilita One", sans-serif'; c.fillText(real, 0, -12);
+        c.fillStyle = '#1B1B1B'; c.fillText(l1, 0, -hh / 2 + 4, w1 - 30); c.font = (destaque ? '54px' : '36px') + ' "Lilita One", sans-serif'; c.fillText(real, 0, -12, w1 - 30);
         c.restore();
       });
       if (cn.hud && typeof cn.hud !== 'object' && local > 0.3) { const s = U.mola(local - 0.3, 10); c.save(); c.translate(W / 2, 300); c.scale(s, s); c.font = '120px "Lilita One", sans-serif'; c.textAlign = 'center'; c.textBaseline = 'middle';
-        const txt = String(cn.hud).toUpperCase().slice(0, 14), w = c.measureText(txt).width + 70; U.rr(c, -w / 2, -78, w, 156, 34); c.fillStyle = '#1B1B1B'; c.fill(); c.fillStyle = '#FFD23F'; c.fillText(txt, 0, 6); c.restore(); }
+        const txt = U.hud(c, cn.hud, c.canvas.width * 0.84 - 70, 22), w = c.measureText(txt).width + 70; U.rr(c, -w / 2, -78, w, 156, 34); c.fillStyle = '#1B1B1B'; c.fill(); c.fillStyle = '#FFD23F'; c.fillText(txt, 0, 6); c.restore(); }
       U.cartaz(c, spec, t, { fonte: '84px "Lilita One", sans-serif', y: 170, fundo: '#FFD23F', borda: '#1B1B1B', cor: '#1B1B1B', altura_linha: 100, dur: 3.0 });
       U.legenda(c, spec, t, { fonte: '100px "Lilita One", sans-serif', y: H * 0.70, cor: '#FFFFFF', cor_ativa: '#FFD23F', contorno: 18, caixa: true, por_vez: 3 });
     }

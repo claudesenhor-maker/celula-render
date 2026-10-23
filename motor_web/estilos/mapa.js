@@ -253,7 +253,7 @@
       }
       if (cn.hud && typeof cn.hud !== 'object' && local > 0.3) {
         const s = U.mola(local - 0.3, 10); c.save(); c.translate(W / 2, H * 0.6); c.scale(s, s); c.font = '120px "Lilita One", sans-serif'; c.textAlign = 'center'; c.textBaseline = 'middle';
-        const txt = String(cn.hud).toUpperCase().slice(0, 14), w = c.measureText(txt).width + 70; U.rr(c, -w / 2, -78, w, 156, 34); c.fillStyle = '#13233A'; c.fill(); c.fillStyle = '#F2A541'; c.fillText(txt, 0, 6); c.restore();
+        const txt = U.hud(c, cn.hud, c.canvas.width * 0.84 - 70, 22), w = c.measureText(txt).width + 70; U.rr(c, -w / 2, -78, w, 156, 34); c.fillStyle = '#13233A'; c.fill(); c.fillStyle = '#F2A541'; c.fillText(txt, 0, 6); c.restore();
       }
       U.cartaz(c, spec, t, { fonte: '84px "Lilita One", sans-serif', y: 150, fundo: '#F2A541', borda: '#13233A', cor: '#13233A', altura_linha: 100, dur: 3.0 });
       U.legenda(c, spec, t, { fonte: '100px "Lilita One", sans-serif', y: H * 0.70, cor: '#FFFFFF', cor_ativa: '#F2A541', contorno: 18, caixa: true, por_vez: 3 });

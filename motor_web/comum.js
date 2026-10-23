@@ -59,6 +59,17 @@
       if (lin) out.push(lin);
       return out;
     },
+    // O SELO DO ALTO (hud): antes cada estilo cortava em 14 caracteres e saia
+    // "1.5 M AT THE S" (23/10). Agora corta so' entre palavras (ate `maxCar`)
+    // e diminui a fonte ja posta em `c.font` ate caber em `maxW` px.
+    hud(c, texto, maxW, maxCar) {
+      let s = String(texto == null ? '' : texto).toUpperCase().replace(/\s+/g, ' ').trim();
+      const lim = maxCar || 22;
+      if (s.length > lim) { const corte = s.slice(0, lim + 1).lastIndexOf(' '); s = s.slice(0, corte > 4 ? corte : lim).trim(); }
+      const m = /(\d+(?:\.\d+)?)px/.exec(c.font); let px = m ? Number(m[1]) : 100;
+      while (px > 40 && c.measureText(s).width > maxW) { px -= 4; c.font = c.font.replace(/\d+(?:\.\d+)?px/, px + 'px'); }
+      return s;
+    },
     // A LEGENDA DOS NARRADOS: 3 palavras por vez, a da voz destacada. Short se
     // assiste no mudo (mesma regra do motor do recorte, `legendas.py`).
     legenda(c, spec, t, est) {

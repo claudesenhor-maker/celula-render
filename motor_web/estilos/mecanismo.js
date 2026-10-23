@@ -86,11 +86,18 @@
     function esfera(ex) {
       lista.forEach((m) => { const u = m.userData; m.position.set(u.pos[0] + u.explode[0] * ex, u.pos[1] + u.explode[1] * ex, u.pos[2] + u.explode[2] * ex); });
       const b = new T.Box3().setFromObject(raiz), cs = new T.Vector3(); b.getCenter(cs);
-      return { c: cs, r: Math.max(0.5, b.getSize(new T.Vector3()).length() / 2) };
+      const tm = b.getSize(new T.Vector3());
+      // 23/10: largura que gira (diagonal do chao) e altura, separadas -- a esfera
+      // inteira encaixada na LARGURA deixava objeto alto e fino (caneta) miudo.
+      return { c: cs, r: Math.max(0.5, tm.length() / 2), lh: Math.max(0.5, Math.hypot(tm.x, tm.z) / 2), ah: Math.max(0.5, tm.y / 2) };
     }
-    const E0 = lista.length ? esfera(0) : { c: new T.Vector3(0, 1, 0), r: 2 }, E1 = lista.length ? esfera(1) : E0;
+    const E0 = lista.length ? esfera(0) : { c: new T.Vector3(0, 1, 0), r: 2, lh: 2, ah: 2 }, E1 = lista.length ? esfera(1) : E0;
     const hfov = 2 * Math.atan(Math.tan((cam.fov * Math.PI) / 360) * cam.aspect);
-    const distPara = (r) => (r / Math.sin(hfov / 2)) * 1.02;
+    const vfov = (cam.fov * Math.PI) / 180;
+    // a camera recua o que a LARGURA ou a ALTURA pedir (a que for maior), com
+    // folga para os rotulos da esquerda; nunca mais longe que a esfera antiga
+    const distPara = (E) => Math.min((E.r / Math.sin(hfov / 2)) * 1.02,
+      Math.max(E.lh / Math.tan(hfov / 2) * 1.35, E.ah / Math.tan(vfov / 2) * 1.6) + E.lh);
     sc.userData.sombra.scale.set(tamObj.x * esc * 1.6 + 1, tamObj.z * esc * 1.6 + 1, 1);
     if (!lista.length) console.log('[mecanismo] spec sem modelo.partes: estudio vazio');
 
@@ -146,7 +153,7 @@
         a.needsUpdate = true; fluxoMat.opacity = 0.95 * U.suave(k * 4);
       }
       // camera: gira devagar em volta; perto/frente/cima mudam o caminho
-      const r = U.lerp(E0.r, E1.r, ex), foco = E0.c.clone().lerp(E1.c, ex), D = distPara(r);
+      const foco = E0.c.clone().lerp(E1.c, ex), D = distPara({ r: U.lerp(E0.r, E1.r, ex), lh: U.lerp(E0.lh, E1.lh, ex), ah: U.lerp(E0.ah, E1.ah, ex) });
       let ang = 0.6 + t * 0.12 + Math.sin(t * 0.21) * 0.15, dist = D, y = foco.y + D * 0.3;
       const camN = cn.camera || 'orbita';
       if (camN === 'perto' && al.length) { const wp = new T.Vector3(); al[0].getWorldPosition(wp); const q = U.suave(k * 2); foco.lerp(wp, q * 0.7); dist = D * U.lerp(1, 0.7, q); y = foco.y + dist * 0.25; }
@@ -178,7 +185,7 @@
       });
     }
     function numero(cn, local) {
-      const txt = cn.hud != null && typeof cn.hud !== 'object' ? String(cn.hud).toUpperCase().slice(0, 16) : ''; if (!txt || local < 0.2) return;
+      const txt = cn.hud != null && typeof cn.hud !== 'object' ? U.hud(c, cn.hud, c.canvas.width * 0.84 - 70, 22) : ''; if (!txt || local < 0.2) return;
       const s = U.mola(local - 0.2, 10); c.save(); c.translate(W / 2, cn.ini < 3.2 ? 540 : 330); c.scale(s, s);
       c.font = '130px "Lilita One", sans-serif'; c.textAlign = 'center'; c.textBaseline = 'middle'; const w = c.measureText(txt).width + 80;
       U.rr(c, -w / 2, -85, w, 170, 36); c.fillStyle = '#FFFFFF'; c.fill(); c.fillStyle = '#10243F'; c.fillText(txt, 0, 6); c.restore();
