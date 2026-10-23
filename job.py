@@ -601,6 +601,12 @@ def main():
     # spec proprio (`cenas`, nao `trechos`) e render proprio (Chrome headless).
     if spec.get("motor") == "web":
         return motor_web(spec, fila_id, t0)
+    # O VIDEO LONGO B05 (T210): 16:9 1920x1080, 480-900 s, Shorts + contextos
+    # novos. Toda a montagem mora em `longo.py`; aqui so' o desvio. Piloto
+    # (`spec.piloto`) sobe o MP4 e avisa, sem tocar na fila.
+    if spec.get("tipo") == "longo":
+        import longo
+        return longo.rodar(spec, fila_id, t0, sys.modules[__name__])
 
     # O ELEVENLABS E EXCLUSIVO DO CANAL (05/09, decisao do dono do projeto)
     #
