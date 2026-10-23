@@ -4,7 +4,7 @@
      cada frame, e le o canvas. As fontes vem do Google Fonts e sao esperadas
      antes do primeiro quadro (fonte que chega no meio troca o desenho). -->
 <html><head><meta charset="utf-8">
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Press+Start+2P&family=Rye&family=Lilita+One&family=Cinzel:wght@700&family=Oswald:wght@600&display=block">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Press+Start+2P&family=Rye&family=Lilita+One&family=Cinzel:wght@700&family=Oswald:wght@600&family=Patrick+Hand&display=block">
 <style>html,body{margin:0;background:#000}canvas{display:block}</style>
 </head><body>
 <canvas id="tela" width="1080" height="1920"></canvas>
@@ -23,12 +23,13 @@
 <script src="estilos/animal.js"></script>
 <script src="estilos/linha_tempo.js"></script>
 <script src="estilos/orbita.js"></script>
+<script src="estilos/enem.js"></script>
 <script>
 let MOTOR = null;
 window.preparar = async function (spec) {
   const tela = document.getElementById('tela');
   tela.width = spec.w; tela.height = spec.h;
-  const fontes = ['16px "Press Start 2P"', '40px Rye', '40px "Lilita One"', '700 40px Cinzel', '600 40px Oswald'];
+  const fontes = ['16px "Press Start 2P"', '40px Rye', '40px "Lilita One"', '700 40px Cinzel', '600 40px Oswald', '40px "Patrick Hand"'];
   try { await Promise.all(fontes.map((f) => document.fonts.load(f))); await document.fonts.ready; } catch (e) { console.log('[palco] fontes: ' + e); }
   const m = MOTORES[spec.estilo];
   if (!m) throw new Error('estilo desconhecido: ' + spec.estilo + ' (tem: ' + Object.keys(MOTORES).join(', ') + ')');
