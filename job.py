@@ -772,8 +772,14 @@ def motor_web(spec, fila_id, t0):
     entrada, out = "/tmp/spec_web.json", "/tmp/final.mp4"
     json.dump(spec, open(entrada, "w", encoding="utf-8"), ensure_ascii=False)
     aqui = os.path.dirname(os.path.abspath(__file__))
-    subprocess.run([sys.executable, os.path.join(aqui, "motor_web", "montar_web.py"), "--spec", entrada, "--saida", out,
-                    "--modo-tts", os.environ.get("MODO_TTS", "real")], check=True)
+    # 23/10: a saida vai para o log do Action como antes, mas o FIM dela (onde
+    # esta o motivo) sobe no erro -- `render_falhou` so' guardava o comando.
+    r = subprocess.run([sys.executable, os.path.join(aqui, "motor_web", "montar_web.py"), "--spec", entrada, "--saida", out,
+                        "--modo-tts", os.environ.get("MODO_TTS", "real")], capture_output=True, text=True)
+    sys.stdout.write(r.stdout or ""); sys.stderr.write(r.stderr or "")
+    if r.returncode != 0:
+        fim = ((r.stderr or "").strip() or (r.stdout or "").strip())[-700:]
+        raise RuntimeError(f"montar_web saiu com {r.returncode} (estilo {spec.get('estilo')}): {fim}")
     sp = json.load(open(os.path.splitext(out)[0] + "_spec_render.json", encoding="utf-8"))
     dur = float(sp.get("dur_s") or 0)
     url = subir(out, f"videos/{fila_id}.mp4")
@@ -798,7 +804,7 @@ def _registrar_falha_render(fila_id, erro):
         requests.post(f"{SB}/rest/v1/logs_execucao", headers=dict(hdr, Prefer="return=minimal"),
                       json={"cell_id": cell, "workflow": "render", "evento": "render_falhou",
                             "nivel": "error",
-                            "detalhe_json": {"fila_id": fila_id, "erro": str(erro)[:400]}},
+                            "detalhe_json": {"fila_id": fila_id, "erro": str(erro)[-900:]}},
                       timeout=30)
         r = requests.get(f"{SB}/rest/v1/logs_execucao?select=log_id&evento=eq.render_falhou"
                          f"&detalhe_json->>fila_id=eq.{fila_id}", headers=hdr, timeout=30)
