@@ -231,8 +231,11 @@
     }
 
     // ======================= 2D por cima =======================
+    // 24/10: nenhuma etiqueta sobe para baixo do cartaz do titulo nem do selo do
+    // alto (no ORBIT DAILY o "EARTH" saia coberto pelo "TIDAL PULL")
+    let topoLivre = 0;
     function etiqueta(txt, sub, x, y, destaque, ent) {
-      c.save(); c.translate(U.clamp(x, 150, W - 150), y); c.scale(ent, ent); c.textAlign = 'center'; c.textBaseline = 'middle';
+      c.save(); c.translate(U.clamp(x, 150, W - 150), Math.max(y, topoLivre)); c.scale(ent, ent); c.textAlign = 'center'; c.textBaseline = 'middle';
       c.font = (destaque ? '58px' : '40px') + ' "Lilita One", sans-serif'; const w = Math.max(c.measureText(txt).width, sub ? c.measureText(sub).width * 0.7 : 0) + 44, h = destaque ? (sub ? 126 : 80) : 62;
       U.rr(c, -w / 2, -h / 2, w, h, 20); c.fillStyle = destaque ? '#FFD23F' : 'rgba(255,255,255,0.88)'; c.fill(); c.fillStyle = '#10131C';
       c.fillText(txt, 0, sub && destaque ? -20 : 2); if (sub && destaque) { c.font = '38px "Lilita One", sans-serif'; c.fillText(sub, 0, 30); }
@@ -272,6 +275,28 @@
       else if (acao === 'orbita') info = palcoOrbita(cn, t, k);
       else if (acao === 'viagem') info = palcoViagem(cn, t, k);
       else info = palcoFoco(cn, t, k, local, acao === 'dia');
+      // GANCHO DO 1o SEGUNDO (24/10): "sistema" e "orbita" abrem com pontinhos no
+      // escuro, e o feed decide nesse quadro. A 1a cena nasce colada no corpo do
+      // roteiro (grande na tela) e recua ate' o palco normal em ~1,6 s.
+      if (i === 0 && (acao === 'sistema' || acao === 'orbita') && local < 1.6) {
+        const k0 = info.alvo && OBJ[info.alvo] ? info.alvo : null, o = acao === 'orbita' ? info.oA : k0 && OBJ[k0];
+        if (o && o.grupo.visible) {
+          const alvoP = o.grupo.getWorldPosition(new T.Vector3()), r = Math.max(o.grupo.scale.x, 1e-4);
+          const p1 = cam.position.clone(), fwd = cam.getWorldDirection(new T.Vector3()), d1 = p1.distanceTo(alvoP);
+          const dPerto = (r * 1.35) / Math.tan((cam.fov * Math.PI) / 360) / Math.min(1, cam.aspect);
+          const w = 1 - U.suave(U.clamp((local - 0.45) / 1.15, 0, 1));
+          if (d1 > dPerto && w > 0) {
+            const dir = p1.clone().sub(alvoP).normalize(), dd = Math.exp(U.lerp(Math.log(d1), Math.log(dPerto), w));
+            cam.position.copy(alvoP).addScaledVector(dir, dd);
+            // mira: do centro do corpo (abaixo dele, para o planeta subir no quadro) ate' a mira do palco
+            const mira1 = p1.clone().addScaledVector(fwd, d1), mira0 = alvoP.clone().add(new T.Vector3(0, -r * 0.7, 0));
+            // a mira acompanha a distancia (linear), nao o tempo: o corpo nunca sai do quadro no meio do recuo
+            const fm = U.clamp((dd - dPerto) / Math.max(1e-6, d1 - dPerto), 0, 1);
+            cam.near = Math.min(cam.near, dd / 60); cam.updateProjectionMatrix(); cam.lookAt(mira0.lerp(mira1, fm));
+          }
+        }
+      }
+      topoLivre = t < 3.4 || (cn.hud && typeof cn.hud !== 'object' && local > 0.3 && acao !== 'viagem') ? 480 : 0;
       R.render(sc, cam); c.drawImage(gl, 0, 0, W, H);
       if (i > 0 && local < 0.12) { c.fillStyle = 'rgba(255,255,255,' + (0.35 * (1 - local / 0.12)).toFixed(2) + ')'; c.fillRect(0, 0, W, H); }
       const dur = cn.fim - cn.ini;

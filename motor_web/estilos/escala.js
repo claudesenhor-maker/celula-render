@@ -153,7 +153,19 @@
     function quadro(t) {
       const { c: cn, i, k, local } = U.cenaEm(spec, t), a = idxAlvo(cn, i), ant = i > 0 ? idxAlvo(spec.cenas[i - 1], i - 1) : a;
       const A = quadroDe(ant), B = quadroDe(a), q = U.suave(U.clamp(k * 2.4, 0, 1));
-      const d = lerpLog(A.d, B.d, q), cx = U.lerp(A.cx, B.cx, q), cy = lerpLog(Math.max(1e-3, A.cy), Math.max(1e-3, B.cy), q);
+      let d = lerpLog(A.d, B.d, q), cx = U.lerp(A.cx, B.cx, q), cy = lerpLog(Math.max(1e-3, A.cy), Math.max(1e-3, B.cy), q);
+      // 24/10: enquanto o cartaz do titulo esta' no alto (y 170 a ~430), o item cabe
+      // na faixa livre entre ele e a legenda -- antes o cartaz cobria a cabeca da
+      // pessoa e a etiqueta "PERSON 1.7 m". Depois a camera volta ao normal.
+      const wT = spec.titulo ? 1 - U.suave(U.clamp((t - 3.0) / 0.8, 0, 1)) : 0;
+      let miraY = cy * 0.62;
+      if (wT > 0 && itens[a]) {
+        const vt = Math.tan((cam.fov * Math.PI) / 360), faixa = 640 / H;
+        const dT = Math.max(d, itens[a].alt / (2 * vt * faixa));
+        d = lerpLog(d, dT, wT);
+        // a faixa livre (y 640 a 1280) tem o centro no meio da tela: mira no meio do item
+        miraY = U.lerp(miraY, itens[a].alt * 0.5, wT);
+      }
       // camera quase ao rés do chao, de frente: o ceu domina e o chao fica numa
       // faixa embaixo; mirar abaixo do centro do objeto o SOBE no quadro (a
       // legenda mora em 70% da altura)
@@ -165,14 +177,14 @@
         sol.position.set(cx + d * 0.7, d * 1.4, d * 1.1); sol.target.position.set(cx, 0, 0);
         const sh = sol.shadow.camera; sh.left = sh.bottom = -d * 1.2; sh.right = sh.top = d * 1.2; sh.near = d * 0.05; sh.far = d * 5; sh.updateProjectionMatrix();
       }
-      cam.lookAt(cx, cy * 0.62, 0);
+      cam.lookAt(cx, miraY, 0);
       R.render(sc, cam); c.drawImage(gl, 0, 0, W, H);
       // etiquetas: nome e altura de cada item visivel, ancoradas no topo dele.
       // 23/10: o destaque e' posto primeiro; etiqueta secundaria que bateria
       // numa ja posta some (antes "1 BARCO" cobria "KHALIFA"); nunca sai pela
       // borda (conta a largura real) nem sobe para baixo do selo do alto.
       const comHud = !!(cn.hud && typeof cn.hud !== 'object');
-      const yMin = comHud ? 540 : 330, postas = [];
+      const yMin = comHud ? 540 : t < 3.4 ? 590 : 330, postas = [];
       const ordem = itens.map((it, j) => j).filter((j) => j <= a).sort((x, y) => (y === a) - (x === a));
       ordem.forEach((j) => {
         const it = itens[j];

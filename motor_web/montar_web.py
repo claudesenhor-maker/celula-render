@@ -91,6 +91,10 @@ EFEITO_DA_ACAO = {
     "orbita": {"sistema": [("whoosh", 0.03, 0.5)], "foco": [("whoosh", 0.03, 0.5), ("plim", 0.2, 0.6)], "dia": [("whoosh", 0.03, 0.4), ("plim", 0.92, 0.7)],
                "compara": [("pop", 0.12, 0.6), ("thud", 0.42, 0.6)], "orbita": [("whoosh", 0.05, 0.6), ("plim", 0.95, 0.6)],
                "viagem": [("whoosh", 0.06, 0.9), ("whoosh", 0.4, 0.7), ("pop", 0.58, 0.7)]},
+    # 24/10: a pele por dentro (estilos/micro.js, SKIN DECODED): a gota cai em
+    # ~0,35 da cena, as moleculas entram, o efeito acende em ~0,3
+    "micro": {"corte": [("whoosh", 0.03, 0.5)], "aplica": [("gole", 0.33, 0.8), ("pop", 0.5, 0.5)], "molecula": [("pop", 0.02, 0.7), ("plim", 0.3, 0.5)],
+              "entra": [("whoosh", 0.08, 0.6)], "efeito": [("plim", 0.3, 0.7)], "dado": [("pop", 0.08, 0.6), ("plim", 0.3, 0.5)]},
 }
 # O PERFIL DE EFEITOS de cada estilo (sfx.PERFIL, 22/10): o acervo gravado
 # que o canal usa. Pixel soa 8-bit; quiz, relogio; o resto, o mundo real.
@@ -119,7 +123,7 @@ def camas_de_ambiente(spec):
             tipo = ({"chuva": "chuva", "raio": "chuva", "neve": "vento", "fogueira": "fogo", "vagalumes": "grilos", "nevoa": "vento"}.get(obj)
                     or ("grilos" if hora == "noite" else None)
                     or {"mar": "mar", "farol": "mar", "cidade": "cidade", "vila": "cidade", "estrada": "vento"}.get(cen) or "vento")
-        elif est in ("mecanismo",):
+        elif est in ("mecanismo", "micro"):
             tipo = "sala"
         elif est == "escala":
             tipo = "vento"
