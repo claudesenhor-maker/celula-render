@@ -268,7 +268,10 @@
       // 23/10: na 1a cena o texto esperava nada e saia por baixo do cartaz do titulo
       const local = local0 - (ci === 0 && spec.titulo ? 3.4 : 0);
       if (cn.texto && local >= 0 && local < 3) { c.save(); c.globalAlpha = U.clamp(Math.min(local * 4, (3 - local) * 3), 0, 1); c.font = '72px "Lilita One", sans-serif'; c.textAlign = 'center'; c.fillStyle = '#FFFFFF';
-        U.linhas(c, String(cn.texto), W * 0.8).forEach((l, i) => c.fillText(l, W / 2, 330 + i * 86)); c.restore(); }
+        // 24/10: no plinko o placar da rodada mora em ~y 300; a frase sobe para o topo (o cartaz do titulo ja saiu)
+        const y0 = MODO === 'plinko' ? 170 : 330, dy = MODO === 'plinko' ? 64 : 86;
+        if (MODO === 'plinko') c.font = '62px "Lilita One", sans-serif';
+        U.linhas(c, String(cn.texto), W * 0.8).slice(0, MODO === 'plinko' ? 2 : 9).forEach((l, i) => c.fillText(l, W / 2, y0 + i * dy)); c.restore(); }
       U.cartaz(c, spec, t, { fonte: '84px "Lilita One", sans-serif', y: 150, fundo: '#FFD23F', borda: '#111', cor: '#111', altura_linha: 100, dur: 3.0 });
     }
     return { quadro };
