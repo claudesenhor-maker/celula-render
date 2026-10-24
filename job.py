@@ -786,6 +786,21 @@ def motor_web(spec, fila_id, t0):
         raise RuntimeError(f"montar_web saiu com {r.returncode} (estilo {spec.get('estilo')}): {fim}")
     sp = json.load(open(os.path.splitext(out)[0] + "_spec_render.json", encoding="utf-8"))
     dur = float(sp.get("dur_s") or 0)
+
+    # T260: a mesma sonda no ensaio e em toda produção destes cinco canais.
+    if spec.get("qa_t260"):
+        from qa_t260.conferir_mp4 import sonda_runner
+        lim = spec["qa_t260"]
+        qa = sonda_runner(out, "/tmp/qa_t260", float(lim["dur_min"]), float(lim["dur_max"]))
+        qa["fila_id"] = fila_id
+        qa["run_id"] = os.environ.get("GITHUB_RUN_ID")
+        qa["quadros_urls"] = [subir(q, f"ensaios_t260/{fila_id}/quadro{k}.jpg", "image/jpeg")
+                              for k, q in enumerate(qa["quadros"])]
+        recibo = "/tmp/qa_t260/sonda.json"
+        json.dump(qa, open(recibo, "w"), ensure_ascii=False, indent=2)
+        subir(recibo, f"ensaios_t260/{fila_id}/sonda.json", "application/json")
+        if not qa["aprovado"]:
+            raise RuntimeError("T260 MP4 reprovado: " + " | ".join(qa["erros"]))
     url = subir(out, f"videos/{fila_id}.mp4")
     print(f"[ok] {url}  {dur}s  render={time.time() - t0:.0f}s  motor=web/{spec.get('estilo')}")
     atualizar_fila(fila_id, {"status": "pronto_para_publicar", "video_url": url, "atualizado_em": "now()"})
@@ -843,3 +858,4 @@ if __name__ == "__main__":
         avisar({"fila_id": fid, "status": "erro", "erro_msg": str(e)[:500],
                 "tentativa": falhas, "proximo_status": novo})
         sys.exit(1)
+
