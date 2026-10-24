@@ -277,6 +277,12 @@ def main():
     ap.add_argument("--modo-tts", default=os.environ.get("MODO_TTS", "real"))
     a = ap.parse_args()
     spec = json.load(open(a.spec, encoding="utf-8-sig"))
+    # T269: clima explícito, antes da imagem e da cama sonora (t269-v1).
+    from sentido_visual import corrigir
+    ajustes_visuais = corrigir(spec.get("estilo"), spec.get("cenas"))
+    if ajustes_visuais:
+        spec["sentido_visual"] = {"versao": "t269-v1", "ajustes": ajustes_visuais}
+        print(f"[web] sentido_visual: {len(ajustes_visuais)} correção(ões)")
     est = spec.get("estilo")
     fmt = _formato(est)
     spec.setdefault("w", 1080); spec.setdefault("h", 1920); spec.setdefault("fps", int(fmt.get("fps") or 30))
