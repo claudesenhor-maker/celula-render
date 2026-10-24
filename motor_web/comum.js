@@ -112,7 +112,11 @@
       c.font = est.fonte; c.textAlign = 'center'; c.textBaseline = 'middle';
       const ls = U.linhas(c, est.caixa ? spec.titulo.toUpperCase() : spec.titulo, spec.w * 0.8);
       const lh = est.altura_linha || 96, h = ls.length * lh + 60, w = Math.min(spec.w * 0.9, Math.max(...ls.map((l) => c.measureText(l).width)) + 90);
-      c.translate(spec.w / 2, est.y + h / 2); c.scale(ent * (1 - sai * 0.3), ent * (1 - sai * 0.3)); c.globalAlpha = 1 - sai;
+      // Alguns motores reservam espaço abaixo do título para o cronômetro.
+      // O limite inclui a mola de entrada e títulos com mais de duas linhas.
+      const altura = Math.min(h, est.altura_max || h);
+      const escala = Math.min(ent, est.altura_max ? est.altura_max / h : ent) * (1 - sai * 0.3);
+      c.translate(spec.w / 2, est.y + altura / 2); c.scale(escala, escala); c.globalAlpha = 1 - sai;
       if (est.fundo) { U.rr(c, -w / 2, -h / 2, w, h, est.raio || 28); c.fillStyle = est.fundo; c.fill(); if (est.borda) { c.lineWidth = 8; c.strokeStyle = est.borda; c.stroke(); } }
       ls.forEach((l, k) => {
         const y = -h / 2 + 30 + lh / 2 + k * lh;
@@ -122,6 +126,37 @@
       c.restore();
     }
   };
+// T272: função pura; grupos de três palavras + cortes de segurança até 6 s.
+// O quadro inicial mantém o enquadramento; o primeiro corte aproxima a imagem.
+function ritmoInicio(spec, t) {
+  const marcos = [0];
+  const palavras = Array.isArray(spec.palavras) ? spec.palavras : [];
+  const pedidos = palavras.filter((_, i) => i % 3 === 0)
+    .map(p => Number(p.ini)).filter(x => Number.isFinite(x) && x > 0 && x < 6)
+    .concat((spec.cenas || []).map(c => Number(c.ini)).filter(x => Number.isFinite(x) && x > 0 && x < 6));
+  for (const alvo of [...new Set(pedidos)].sort((a,b) => a-b).concat([6])) {
+    while (alvo-marcos[marcos.length-1] > 1.5) marcos.push(marcos[marcos.length-1]+1.5);
+    // Palavra e troca de cena podem ocorrer quase juntas: um corte só evita
+    // dois zooms opostos em poucos quadros.
+    if (alvo < 6 && alvo - marcos[marcos.length-1] >= 0.35) marcos.push(alvo);
+  }
+  const indice = marcos.filter(x => x <= t).length-1;
+  return {zoom: t >= 0 && t < 6 && indice % 2 === 1 ? 1.08 : 1, indice, marcos};
+}
+
+// A cópia raster funciona para Canvas 2D e WebGL e não altera MOTOR.quadro(t).
+// `saida` é só o destino: seu conteúdo é sobrescrito integralmente a cada chamada.
+function quadroComRitmo(tela, spec, t, saida) {
+  const z = ritmoInicio(spec, t).zoom, w = tela.width, h = tela.height;
+  const ctx = saida.getContext('2d');
+  ctx.setTransform(1, 0, 0, 1, 0, 0);
+  ctx.clearRect(0, 0, w, h);
+  ctx.drawImage(tela, (w-w/z)/2, (h-h/z)/2, w/z, h/z, 0, 0, w, h);
+  return saida;
+}
+
+  U.ritmoInicio = ritmoInicio;
+  U.quadroComRitmo = quadroComRitmo;
   G.U = U;
   G.MOTORES = G.MOTORES || {};
 })(window);

@@ -38,13 +38,16 @@ window.preparar = async function (spec) {
   const m = MOTORES[spec.estilo];
   if (!m) throw new Error('estilo desconhecido: ' + spec.estilo + ' (tem: ' + Object.keys(MOTORES).join(', ') + ')');
   MOTOR = m.criar(tela, spec, U);
+  window.SPEC_INICIO_T272 = spec;
+  window.SAIDA_INICIO_T272 = document.createElement('canvas');
+  SAIDA_INICIO_T272.width = tela.width; SAIDA_INICIO_T272.height = tela.height;
   // `acoes`: o evento que o estilo DESENHA em cada cena (o lowpoly troca a acao
   // que contradiz a frase); o montar_web poe o som do evento desenhado.
   return { ok: true, fontes: fontes.map((f) => document.fonts.check(f)), acoes: spec.cenas.map((c) => c.acaoV2 || null), som: window.EVENTOS_SOM || null };
 };
 window.quadro = function (t, formato, qualidade) {
   MOTOR.quadro(t);
-  return document.getElementById('tela').toDataURL(formato || 'image/jpeg', qualidade || 0.92);
+  return U.quadroComRitmo(document.getElementById('tela'), SPEC_INICIO_T272, t, SAIDA_INICIO_T272).toDataURL(formato || 'image/jpeg', qualidade || 0.92);
 };
 </script>
 </body></html>

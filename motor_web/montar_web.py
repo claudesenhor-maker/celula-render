@@ -267,6 +267,11 @@ def eventos_sonoros(spec):
                 tt = c["ini"] + j / 32.0
                 if tt < c["fim"]:
                     ev.append({"nome": "clique", "t": tt, "ganho": 0.35, "cadencia": True})
+    # T272: impacto no quadro 0; o efeito varia com o motor e não dobra o existente.
+    inicio = {"pixel": "susto", "quiz": "pop", "mecanismo": "metal", "micro": "pop",
+              "escala": "pop", "linha_tempo": "pop"}.get(spec.get("estilo"), "thud")
+    if not any(e.get("t") == 0 and e.get("nome") == inicio for e in ev):
+        ev.insert(0, {"nome": inicio, "t": 0.0, "ganho": 0.75})
     return ev
 
 

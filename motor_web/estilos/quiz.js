@@ -146,7 +146,7 @@
         c.save(); c.lineWidth = 12; c.strokeStyle = '#E2373C'; c.beginPath(); c.arc(cx, cy, Math.max(cw, ch) * 0.62 * q, 0, Math.PI * 2); c.stroke();
         c.font = '84px "Lilita One", sans-serif'; c.textAlign = 'center'; c.fillStyle = '#111'; c.fillText('FOUND IT?', W / 2, 430); c.restore();
       }
-      U.cartaz(c, spec, t, { fonte: '84px "Lilita One", sans-serif', y: 150, fundo: '#111', borda: '#FFF', cor: '#FFF', altura_linha: 100, dur: 2.2 });
+      U.cartaz(c, spec, t, { fonte: '84px "Lilita One", sans-serif', y: 100, altura_max: 240, fundo: '#111', borda: '#FFF', cor: '#FFF', altura_linha: 100, dur: 2.2 });
     }
     return { quadro };
   }
