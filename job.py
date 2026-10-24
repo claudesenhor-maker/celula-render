@@ -803,9 +803,51 @@ def motor_web(spec, fila_id, t0):
             raise RuntimeError("T260 MP4 reprovado: " + " | ".join(qa["erros"]))
     url = subir(out, f"videos/{fila_id}.mp4")
     print(f"[ok] {url}  {dur}s  render={time.time() - t0:.0f}s  motor=web/{spec.get('estilo')}")
+    gravar_timeline_web(fila_id, sp)
     atualizar_fila(fila_id, {"status": "pronto_para_publicar", "video_url": url, "atualizado_em": "now()"})
     avisar({"fila_id": fila_id, "status": "ok", "video_url": url, "duracao_s": dur, "render_s": round(time.time() - t0),
             "estilo": spec.get("estilo"), "estilo_por": "canal", "motor": "web"})
+
+
+def timeline_web(sp):
+    """As cenas do spec renderizado no formato de `roteiro_json.timeline` do
+    palito (idx, inicio_s, fim_s), que e' o que o coletor corta na curva de
+    retencao. Os tempos sao os do render (voz real), nao a estimativa."""
+    tl = []
+    for i, c in enumerate(sp.get("cenas") or []):
+        try:
+            ini, fim = float(c["ini"]), float(c["fim"])
+        except (KeyError, TypeError, ValueError):
+            return []
+        tl.append({"idx": i, "inicio_s": round(ini, 3), "fim_s": round(fim, 3), "duracao": round(fim - ini, 3),
+                   "fala": str(c.get("fala") or c.get("texto") or "")[:200], "acao": c.get("acao") or ""})
+    return tl
+
+
+def gravar_timeline_web(fila_id, sp):
+    """T272 (24/10): sem a timeline real os canais web nao tinham curva por
+    cena. Le o roteiro_json e acrescenta `timeline`; falhar aqui nunca derruba
+    um video ja renderizado."""
+    if not UUID_RE.match(str(fila_id)):
+        return
+    tl = timeline_web(sp)
+    if not tl:
+        print("[timeline] spec sem ini/fim nas cenas; nada gravado"); return
+    hdr = {"apikey": KEY, "Authorization": f"Bearer {KEY}", "Content-Type": "application/json"}
+    try:
+        r = requests.get(f"{SB}/rest/v1/fila_producao?fila_id=eq.{fila_id}&select=roteiro_json", headers=hdr, timeout=30)
+        r.raise_for_status()
+        rj = ((r.json() or [{}])[0] or {}).get("roteiro_json")
+        if not isinstance(rj, dict):
+            print("[timeline] roteiro_json ausente; nada gravado"); return
+        rj["timeline"] = tl
+        rj["timeline_origem"] = "render_web"
+        r = requests.patch(f"{SB}/rest/v1/fila_producao?fila_id=eq.{fila_id}", json={"roteiro_json": rj},
+                           headers=dict(hdr, Prefer="return=minimal"), timeout=30)
+        r.raise_for_status()
+        print(f"[timeline] {len(tl)} cenas gravadas ({tl[-1]['fim_s']}s)")
+    except Exception as e:                                        # noqa: BLE001
+        print(f"[timeline] nao gravei: {e}")
 
 
 RENDER_TENTATIVAS = 2     # quantas vezes um item volta para a fila depois de falhar
