@@ -146,6 +146,32 @@ def _formato(estilo):
         return {}
 
 
+def _masterizar(mix, alvo):
+    """O filtro de audio final, em DUAS passadas (26/10).
+
+    O loudnorm de uma passada so' (modo dinamico) errava o alvo para os dois
+    lados: os MP4 saiam entre -14,4 e -16,1 LUFS e com pico -1,3..-0,9 dBTP
+    depois do AAC, e a sonda T260 (-16..-12 LUFS, pico <= -1) reprovava video
+    bom ("pico -0.9 dBTP > -1"). A primeira passada MEDE o mix; a segunda
+    aplica o ganho linear exato, com TP -2 e um limitador a -2,5 dBFS de folga
+    para o overshoot do encoder (medido: ~0,7 dB). `alvo` e' o loudnorm do
+    estilo; dele valem I e LRA. Sem medida legivel, cai no filtro antigo."""
+    import re
+    par = dict(re.findall(r"(\w+)=(-?[\d.]+)", alvo))
+    i, lra = par.get("I", "-14"), par.get("LRA", "11")
+    base = f"loudnorm=I={i}:LRA={lra}:TP=-2"
+    try:
+        r = subprocess.run(["ffmpeg", "-hide_banner", "-nostats", "-i", mix, "-af", base + ":print_format=json",
+                            "-f", "null", "-"], capture_output=True, text=True, check=True)
+        m = json.loads(r.stderr[r.stderr.rindex("{"):r.stderr.rindex("}") + 1])
+        medido = (f":measured_I={m['input_i']}:measured_TP={m['input_tp']}:measured_LRA={m['input_lra']}"
+                  f":measured_thresh={m['input_thresh']}:offset={m['target_offset']}:linear=true")
+    except Exception as e:                           # noqa: BLE001
+        print(f"[web] loudnorm 1a passada falhou ({e}); passada unica")
+        medido = ""
+    return base + medido + ",aresample=48000,alimiter=limit=0.75:level=0"
+
+
 def _silencio(caminho, dur, sr=SFX.SR):
     with wave.open(caminho, "w") as w:
         w.setnchannels(1); w.setsampwidth(2); w.setframerate(sr)
@@ -336,7 +362,7 @@ def main():
     # 48 kHz/192k: a cama de faixa real (`trilha_biblioteca`) tem brilho acima
     # de 12 kHz que a saida a 24 kHz cortava.
     subprocess.run(["ffmpeg", "-y", "-loglevel", "error", "-i", mudo, "-i", mix, "-c:v", "copy",
-                    "-af", fmt.get("loudnorm") or "loudnorm=I=-14:LRA=11:TP=-1.5", "-ar", "48000",
+                    "-af", _masterizar(mix, fmt.get("loudnorm") or "loudnorm=I=-14:LRA=11:TP=-1.5"), "-ar", "48000",
                     "-c:a", "aac", "-b:a", "192k", "-shortest", a.saida], check=True)
     json.dump(spec, open(os.path.splitext(a.saida)[0] + "_spec_render.json", "w", encoding="utf-8"), ensure_ascii=False, indent=1)
     print(f"[web] ok {a.saida} ({spec['dur_s']:.1f} s)")

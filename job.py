@@ -792,7 +792,11 @@ def motor_web(spec, fila_id, t0):
     if spec.get("qa_t260"):
         from qa_t260.conferir_mp4 import sonda_runner
         lim = spec["qa_t260"]
-        qa = sonda_runner(out, "/tmp/qa_t260", float(lim["dur_min"]), float(lim["dur_max"]))
+        # 26/10: `dur_max` e' o teto do MOTOR (mecanismo/lowpoly 45 s), e o
+        # render passa dele por fracao de segundo (fade/loop do fim: 45,37 s
+        # reprovado como "duracao fora da faixa"). 1,5 s de folga; o teto de
+        # 180 s do Shorts continua dentro de `conferir`.
+        qa = sonda_runner(out, "/tmp/qa_t260", float(lim["dur_min"]), float(lim["dur_max"]) + 1.5)
         qa["fila_id"] = fila_id
         qa["run_id"] = os.environ.get("GITHUB_RUN_ID")
         qa["quadros_urls"] = [subir(q, f"ensaios_t260/{fila_id}/quadro{k}.jpg", "image/jpeg")
