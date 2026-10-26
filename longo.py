@@ -186,11 +186,12 @@ def validar_saida(info):
 def sondar(caminho, run=subprocess.run):
     """ffprobe → {largura, altura, duracao_s}."""
     r = run(["ffprobe", "-v", "error", "-show_entries",
-              "stream=codec_type,width,height:format=duration", "-of", "json", str(caminho)],
+              "stream=codec_type,width,height,display_aspect_ratio:format=duration", "-of", "json", str(caminho)],
             capture_output=True, text=True, check=True)
     dados = json.loads(r.stdout)
     fluxo = next(s for s in dados['streams'] if s['codec_type'] == 'video')
     return {"largura": fluxo["width"], "altura": fluxo["height"], "duracao_s": float(dados["format"]["duration"]),
+            "aspecto": fluxo.get('display_aspect_ratio'),
             "tem_audio": any(s['codec_type'] == 'audio' for s in dados['streams'])}
 
 
@@ -274,6 +275,29 @@ def _achar_fonte(pasta_repo):
     return "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf"
 
 
+def conferir_piloto(spec, fila_id, job, pasta, sondar=sondar):
+    """ffprobe do piloto existente no runner; só publica um recibo JSON no Storage."""
+    prefixo = f'{job.SB}/storage/v1/object/public/{job.BUCKET}/longos/'
+    url = spec.get('verificar_piloto_url') or ''
+    if (spec.get('piloto') is not True or job.UUID_RE.match(str(fila_id))
+        or not re.fullmatch(r'[\w-]{1,80}', str(fila_id)) or not url.startswith(prefixo)
+        or not re.fullmatch(r'[\w-]+\.mp4', url[len(prefixo):])):
+        raise ErroLongo('sonda exclusiva de piloto existente no Storage do projeto')
+    r = job.requests.get(url, timeout=300)
+    r.raise_for_status()
+    entrada = Path(pasta) / 'piloto.mp4'
+    entrada.write_bytes(r.content)
+    info = validar_saida(sondar(str(entrada)))
+    if not info.get('tem_audio') or info.get('aspecto') != '16:9':
+        raise ErroLongo('piloto sem áudio ou aspecto diferente de 16:9')
+    info = dict(info, piloto_url=url, origem='ffprobe', publicou=False)
+    recibo = Path(pasta) / 'sonda.json'
+    recibo.write_text(json.dumps(info, ensure_ascii=False, indent=2), encoding='utf-8')
+    sonda_url = job.subir(str(recibo), f'longos/sonda-{fila_id}.json', 'application/json')
+    job.avisar(dict(info, fila_id=fila_id, status='ok', sonda_url=sonda_url, piloto=True))
+    return info
+
+
 def rodar(spec, fila_id, t0, job, montar=None):
     """Caminho `spec.tipo == "longo"` do job.py (celula-render).
 
@@ -300,6 +324,8 @@ def rodar(spec, fila_id, t0, job, montar=None):
         return palito_v5.sintetizar(texto, cfg_voz, destino, os.environ.get("MODO_TTS", "real"))[1]
 
     pasta = tempfile.mkdtemp(prefix="longo_")
+    if spec.get('verificar_piloto_url'):
+        return conferir_piloto(spec, fila_id, job, pasta)
     if montar is None:
         repo = os.path.dirname(os.path.abspath(getattr(job, "__file__", ".")))
         recibo = executar(spec, pasta, baixar=baixar, sintetizar=sintetizar,

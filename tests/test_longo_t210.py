@@ -173,6 +173,28 @@ class Orquestracao(unittest.TestCase):
 
 
 class RodarNoJob(unittest.TestCase):
+    def test_sonda_piloto_existente_sem_render_ou_fila(self):
+        from types import SimpleNamespace
+        from unittest.mock import Mock
+        job = SimpleNamespace(SB='https://sb', BUCKET='bucket',
+            UUID_RE=__import__('re').compile(r'^[0-9a-f]{8}-[0-9a-f]{4}-'),
+            requests=SimpleNamespace(get=Mock(return_value=SimpleNamespace(
+                content=b'mp4', raise_for_status=lambda: None))),
+            subir=Mock(return_value='https://sb/sonda.json'), avisar=Mock(), atualizar_fila=Mock())
+        s = {'tipo':'longo', 'piloto':True, 'verificar_piloto_url':
+             'https://sb/storage/v1/object/public/bucket/longos/sem-id.mp4'}
+        with tempfile.TemporaryDirectory() as d:
+            r = ml.conferir_piloto(s, 'teste-sonda-t210', job, d,
+                sondar=lambda _: {'largura':1920,'altura':1080,'duracao_s':513.9,
+                                  'tem_audio':True,'aspecto':'16:9'})
+        self.assertEqual(r['aspecto'], '16:9')
+        job.atualizar_fila.assert_not_called()
+        self.assertTrue(job.subir.call_args.args[1].endswith('.json'))
+        job.avisar.assert_called_once()
+        for mudanca in ({'piloto':False}, {'verificar_piloto_url':'https://outro/longos/a.mp4'}):
+            with tempfile.TemporaryDirectory() as d, self.assertRaises(ml.ErroLongo):
+                ml.conferir_piloto(dict(s,**mudanca), 'teste-sonda-t210', job, d)
+
     def test_rodar_sobe_atualiza_fila_e_avisa(self):
         eventos = []
 
