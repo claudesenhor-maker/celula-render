@@ -101,8 +101,9 @@
     }
     // agua (efeito hidrata)
     const geoGota = new T.SphereGeometry(0.5, 16, 12);
-    const gotas = []; for (let k = 0; k < 40; k++) gotas.push({ x: (rnd() * 2 - 1) * LX * 0.95, y: Y_CORNEA - 0.1 - rnd() * 0.85, z: 0.35 + rnd() * 0.8, s: 0.05 + rnd() * 0.04, d: rnd() });
-    const gotaInst = new T.InstancedMesh(geoGota, M('#7FC8F8', 'vidro', 0.75), gotas.length); pele.add(gotaInst);
+    // 26/10: as gotas ficam na face do corte (z ~ LZ); por dentro do bloco as celulas escondiam todas
+    const gotas = []; for (let k = 0; k < 40; k++) gotas.push({ x: (rnd() * 2 - 1) * LX * 0.95, y: Y_CORNEA - 0.1 - rnd() * 0.85, z: LZ + 0.04 + rnd() * 0.12, s: 0.09 + rnd() * 0.06, d: rnd() });
+    const gotaInst = new T.InstancedMesh(geoGota, M('#4FB3F6', 'vidro', 0.85), gotas.length); pele.add(gotaInst);
 
     // ======================= A MOLECULA DO ATIVO =======================
     function molecula() {
@@ -122,6 +123,9 @@
       return g;
     }
     const grande = molecula(); sc.add(grande);
+    // 26/10: distancia do close pelo tamanho da molecula (a cadeia de 9 atomos saia cortada a 6 m)
+    const raioMol = new T.Box3().setFromObject(grande).getBoundingSphere(new T.Sphere()).radius || 1;
+    const distClose = (raioMol / 0.95) / (Math.tan((34 / 2) * Math.PI / 180) * (W / H));
     // as pequenas que entram na pele: copias da mesma (a geometria e' compartilhada)
     const NM = 16, mols = [];
     for (let k = 0; k < NM; k++) { const g = grande.clone(); g.scale.setScalar(0.17); sc.add(g); mols.push({ g, x: (rnd() * 2 - 1) * LX * 0.8, z: 0.45 + rnd() * 0.65, atraso: rnd() * 0.35, fase: rnd() * 6, ondula: 0.08 + rnd() * 0.12 }); }
@@ -221,7 +225,7 @@
       cam.lookAt(0, alvoY - 0.35, 0);
       // molecula grande (acao molecula) no centro, girando
       grande.visible = close;
-      if (close) { cam.position.set(0, 0.4, 6); cam.lookAt(0, -0.8, 0); grande.position.set(0, 0.2, 0); const s = U.mola(local, 8) * 1.25; grande.scale.setScalar(s); grande.rotation.set(t * 0.5, t * 0.8, 0.2); }
+      if (close) { cam.position.set(0, 0, distClose); cam.lookAt(0, 0, 0); grande.position.set(0, 0, 0); grande.scale.setScalar(U.mola(local, 8)); grande.rotation.set(t * 0.5, t * 0.8, 0.2); }
       // as moleculas pequenas
       const p0 = profAntes(i);
       mols.forEach((m, n) => {
@@ -262,7 +266,7 @@
       if (acao === 'corte') CAMADAS.forEach(([nome, y], j) => { const q = proj(-LX * 0.55, y, LZ); if (!q.atras) etiqueta(nome, q.x, q.y, j === CAMADAS.length - 1 || k > 0.8, U.mola(local - 0.4 - j * 0.55, 10), W * 0.73); });
       else if (acao === 'entra') { const nome = ({ superficie: 'TOP LAYER', epiderme: 'EPIDERMIS', derme: 'DERMIS' })[ativo.grande ? 'superficie' : cn.alvo] || 'EPIDERMIS';
         const q = proj(-LX * 0.55, alvoDe(cn), LZ); if (!q.atras) etiqueta(nome, q.x, q.y, true, U.mola(local - 0.6, 10), W * 0.72); }
-      else if (acao === 'aplica' || close) { const q = close ? { x: W / 2, y: H * 0.36 } : proj(0, 0.5, 0.5); etiqueta(ativo.nome.toUpperCase(), q.x, q.y + (close ? 0 : -60), true, U.mola(local - (close ? 0.3 : 0.8), 10)); }
+      else if (acao === 'aplica' || close) { const q = close ? { x: W / 2, y: H * 0.2 } : proj(0, 0.5, 0.5); etiqueta(ativo.nome.toUpperCase(), q.x, q.y + (close ? 0 : -60), true, U.mola(local - (close ? 0.3 : 0.8), 10)); }
       else if (acao === 'efeito') {
         const ponto = { hidrata: [0.4, -0.6], barreira: [-0.6, -0.12], manchas: [0.2, -1.1], colageno: [-0.4, -2.0], oleo: [XF - 0.3, -1.45], protege: [-0.8, 0.08], esfolia: [0.6, -0.04], acalma: [-0.5, Y_FUNDO + 0.45] }[cn.efeito];
         const nome = { hidrata: 'WATER HELD IN', barreira: 'BARRIER SEALED', manchas: 'LESS PIGMENT', colageno: 'COLLAGEN', oleo: 'LESS OIL', protege: 'UV BLOCKED', esfolia: 'OLD CELLS OFF', acalma: 'LESS REDNESS' }[cn.efeito];
