@@ -606,6 +606,7 @@ def main():
     # (`spec.piloto`) sobe o MP4 e avisa, sem tocar na fila.
     if spec.get("tipo") == "longo":
         import longo
+        os.environ["TIPO_RENDER"] = "longo"
         return longo.rodar(spec, fila_id, t0, sys.modules[__name__])
 
     # O ELEVENLABS E EXCLUSIVO DO CANAL (05/09, decisao do dono do projeto)
@@ -891,7 +892,7 @@ if __name__ == "__main__":
         # para quem for ler, em vez de so' no log do Action.
         fid = os.environ.get("FILA_ID", "")
         falhas = _registrar_falha_render(fid, e) if UUID_RE.match(str(fid)) else 99
-        novo = "pendente" if falhas <= RENDER_TENTATIVAS else "erro"
+        novo = "pendente" if falhas <= RENDER_TENTATIVAS and os.environ.get("TIPO_RENDER") != "longo" else "erro"
         print(f"[fila] falha {falhas} de {RENDER_TENTATIVAS} -> {novo}")
         try:
             atualizar_fila(fid, {"status": novo, "video_url": None, "atualizado_em": "now()"})

@@ -1,7 +1,8 @@
 """Montagem do vídeo longo B05 (T210): Shorts escolhidos + contextos novos em 16:9 1920×1080.
 
-Cópia de motor-realista/videos_realistas/montar_longo.py (projeto videos-auto), onde ficam os
-testes. O `job.py` chama `rodar` quando `spec.tipo == "longo"`. Só biblioteca padrão.
+Só biblioteca padrão. O mesmo arquivo é copiado como `longo.py` no repo celula-render, onde o
+`job.py` o chama quando `spec.tipo == "longo"`. Rede, ffmpeg e voz entram por parâmetro, então
+os testes rodam sem nada disso.
 """
 
 import json
@@ -90,14 +91,15 @@ def _fundo_desfocado():
             f"crop={LARGURA}:{ALTURA},boxblur=40:5,setsar=1[bg]")
 
 
-def cmd_short(entrada, saida):
+def cmd_short(entrada, saida, tem_audio=True):
     """Short vertical no centro (altura cheia) sobre o próprio vídeo desfocado."""
     grafo = (_fundo_desfocado() + f";[0:v]scale=-2:{ALTURA}:force_original_aspect_ratio=decrease,setsar=1[fg];"
              f"[bg][fg]overlay=(W-w)/2:(H-h)/2,fps={FPS},format=yuv420p[v];"
-             "[0:a]aresample=48000,aformat=channel_layouts=stereo[a]")
-    return ["ffmpeg", "-y", "-v", "error", "-i", entrada, "-filter_complex", grafo,
+              f"[{0 if tem_audio else 1}:a]aresample=48000,aformat=channel_layouts=stereo[a]")
+    silencio = [] if tem_audio else ['-f', 'lavfi', '-i', 'anullsrc=r=48000:cl=stereo']
+    return ["ffmpeg", "-y", "-v", "error", "-i", entrada, *silencio, "-filter_complex", grafo,
             "-map", "[v]", "-map", "[a]", "-c:v", "libx264", "-preset", "veryfast", "-crf", "22",
-            "-c:a", "aac", "-b:a", "160k", "-ar", "48000", saida]
+              "-c:a", "aac", "-b:a", "160k", "-ar", "48000", "-shortest", saida]
 
 
 def _escapar_drawtext(caminho):
@@ -183,12 +185,13 @@ def validar_saida(info):
 
 def sondar(caminho, run=subprocess.run):
     """ffprobe → {largura, altura, duracao_s}."""
-    r = run(["ffprobe", "-v", "error", "-select_streams", "v:0", "-show_entries",
-             "stream=width,height:format=duration", "-of", "json", str(caminho)],
+    r = run(["ffprobe", "-v", "error", "-show_entries",
+              "stream=codec_type,width,height:format=duration", "-of", "json", str(caminho)],
             capture_output=True, text=True, check=True)
     dados = json.loads(r.stdout)
-    fluxo = dados["streams"][0]
-    return {"largura": fluxo["width"], "altura": fluxo["height"], "duracao_s": float(dados["format"]["duration"])}
+    fluxo = next(s for s in dados['streams'] if s['codec_type'] == 'video')
+    return {"largura": fluxo["width"], "altura": fluxo["height"], "duracao_s": float(dados["format"]["duration"]),
+            "tem_audio": any(s['codec_type'] == 'audio' for s in dados['streams'])}
 
 
 def executar(spec, pasta, run=subprocess.run, baixar=None, sintetizar=None, sondar=sondar,
@@ -208,8 +211,9 @@ def executar(spec, pasta, run=subprocess.run, baixar=None, sintetizar=None, sond
         bruto = pasta / f"short{i}.mp4"
         baixar(s["video_url"], str(bruto))
         brutos.append(bruto)
+    infos = [sondar(str(b)) for b in brutos] if medir_shorts else []
     if medir_shorts:  # a duração real do MP4 manda, não a do spec
-        dur_short = [float(sondar(str(b))["duracao_s"]) for b in brutos]
+        dur_short = [float(info["duracao_s"]) for info in infos]
     else:
         dur_short = list(duracoes_short or [float(s["duracao_s"]) for s in shorts])
     dur_ctx, wavs = [], []
@@ -224,7 +228,8 @@ def executar(spec, pasta, run=subprocess.run, baixar=None, sintetizar=None, sond
         i = seg["indice"]
         saida = pasta / f"p{len(partes):02d}_{seg['tipo']}.mp4"
         if seg["tipo"] == "short":
-            run(cmd_short(str(brutos[i]), str(saida)), check=True, capture_output=True, text=True)
+            run(cmd_short(str(brutos[i]), str(saida), tem_audio=infos[i].get('tem_audio', True) if infos else True),
+                check=True, capture_output=True, text=True)
         else:
             c = contextos[i]
             imagem = pasta / f"img{i}.png"
@@ -304,7 +309,15 @@ def rodar(spec, fila_id, t0, job, montar=None):
     url = job.subir(recibo["saida"], f"longos/{fila_id}.mp4")
     print(f"[ok] longo {url}  {recibo['duracao_s']:.0f}s  render={time.time() - t0:.0f}s")
     if eh_producao:
-        job.atualizar_fila(fila_id, {"status": "pronto_para_publicar", "video_url": url, "atualizado_em": "now()"})
+        # O Dispatcher só pode ver pronto junto com os capítulos medidos pelo TTS.
+        roteiro = {"tipo": "longo", "formato": "16:9", "titulo": spec.get('titulo', ''),
+                   "playlist": spec.get('playlist', ''), "idioma": spec.get('idioma', 'pt-BR'),
+                   "narracao": '\n'.join(c['texto'] for c in spec['contextos']),
+                   "descricao": recibo['descricao'], "capitulos": recibo['capitulos'],
+                   "duracao_s": recibo['duracao_s'], "fracao_contexto": recibo['fracao_contexto'],
+                   "spec_longo": spec}
+        job.atualizar_fila(fila_id, {"status": "pronto_para_publicar", "video_url": url,
+                                   "roteiro_json": roteiro, "atualizado_em": "now()"})
     job.avisar({"fila_id": fila_id, "status": "ok", "tipo": "longo", "video_url": url,
                 "duracao_s": recibo["duracao_s"], "largura": recibo["largura"], "altura": recibo["altura"],
                 "fracao_contexto": recibo["fracao_contexto"], "lufs": recibo["lufs_alvo"],
