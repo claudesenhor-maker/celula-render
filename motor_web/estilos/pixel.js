@@ -134,7 +134,7 @@
       switch (cn.acao) {
         case 'acorda': { const ant = k < 0.5; sprite(at[0], ant ? 112 : 70, ant ? 112 : yb, 0, 1); if (ant) px(106, 150, 66, 18, PAL.branco); objeto('alarme', 40, 140 + (Math.floor(t * 12) % 2)); break; }
         case 'anda': sprite(at[0], U.lerp(-36, 150, k), yb, passo, 1); if (at[1]) sprite(at[1], 128, yb, 0, -1); break;
-        case 'digita': sprite(at[0], 54, 150, passo, 1); if (Math.floor(t * 3) % 2) px(80, 132, 3, 5, PAL.azul); objeto('cafe', 92, 142); break;
+        case 'digita': sprite(at[0], 54, 150, passo, 1); if (Math.floor(t * 3) % 2) px(80, 132, 3, 5, PAL.azul); objeto(cn.objeto || 'cafe', cn.objeto ? 82 : 92, cn.objeto ? 180 : 142); break;
         case 'come': sprite(at[0], 70, yb, 0, 1); objeto(cn.objeto || 'pizza', 88, 200 - Math.floor(k * 3) * 2); break;
         case 'dorme': sprite(at[0], 112, 112, 0, 1); px(106, 150, 66, 18, PAL.branco); break;
         case 'compra': case 'recebe': { sprite(at[0], 70, yb, 0, 1); for (let i = 0; i < 6; i++) { const q = (local * 1.5 + i / 6) % 1; objeto('moeda', 80 + Math.sin(i * 2) * 20, cn.acao === 'recebe' ? 40 + q * 150 : 180 - q * 150); } if (cn.objeto && cn.objeto !== 'moeda') objeto(cn.objeto, 98, yb + 30); break; }
@@ -144,7 +144,7 @@
         case 'missao': sprite(at[0], 84, yb, 0, 1); extraUI = 'missao'; break;
         default: sprite(at[0], 30, yb, Math.floor(t * 2) % 2, 1); if (at[1]) sprite(at[1], 116, yb, 0, -1);
       }
-      if (cn.objeto && ['acorda', 'come', 'compra', 'recebe'].indexOf(cn.acao) < 0) objeto(cn.objeto, cn.acao === 'anda' ? U.lerp(-36, 150, k) + 28 : 82, cn.acao === 'anda' ? yb + 30 : 160 + Math.sin(t * 4) * 2);
+      if (cn.objeto && ['acorda', 'digita', 'come', 'compra', 'recebe'].indexOf(cn.acao) < 0) objeto(cn.objeto, cn.acao === 'anda' ? U.lerp(-36, 150, k) + 28 : 82, cn.acao === 'anda' ? yb + 30 : 160 + Math.sin(t * 4) * 2);
       b.restore();
       c.imageSmoothingEnabled = false; c.drawImage(buf, 0, 0, W, H); c.drawImage(buf, 0, -MUNDO_DY, W, H);
       if (extraUI === 'over') { c.fillStyle = 'rgba(0,0,0,' + (0.75 * U.clamp(k * 2, 0, 1)).toFixed(2) + ')'; c.fillRect(0, 0, W, H); c.font = F(86); c.fillStyle = PAL.vermelho; c.textAlign = 'center'; c.fillText('GAME OVER', W / 2, 820); if (k > 0.5) { c.font = F(36); c.fillStyle = PAL.branco; c.fillText('CONTINUE? ' + (9 - Math.floor((k - 0.5) * 18)), W / 2, 960); } }
