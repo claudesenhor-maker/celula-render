@@ -132,7 +132,7 @@
       const yb = 162;
       let extraUI = null;
       switch (cn.acao) {
-        case 'acorda': { const ant = k < 0.5; sprite(at[0], ant ? 112 : 70, ant ? 112 : yb, 0, 1); if (ant) px(106, 150, 66, 18, PAL.branco); objeto('alarme', 40, 140 + (Math.floor(t * 12) % 2)); break; }
+        case 'acorda': { const ant = k < 0.5; sprite(at[0], ant ? 112 : 70, ant ? 112 : yb, 0, 1); if (ant) px(106, 150, 66, 18, PAL.branco); if (cn.objeto && cn.objeto !== 'alarme') objeto(cn.objeto, ant ? 140 : 98, ant ? 142 : 192); else objeto('alarme', 40, 140 + (Math.floor(t * 12) % 2)); break; }
         case 'anda': sprite(at[0], U.lerp(-36, 150, k), yb, passo, 1); if (at[1]) sprite(at[1], 128, yb, 0, -1); break;
         case 'digita': sprite(at[0], 54, 150, passo, 1); if (Math.floor(t * 3) % 2) px(80, 132, 3, 5, PAL.azul); objeto(cn.objeto || 'cafe', cn.objeto ? 82 : 92, cn.objeto ? 180 : 142); break;
         case 'come': sprite(at[0], 70, yb, 0, 1); objeto(cn.objeto || 'pizza', 88, 200 - Math.floor(k * 3) * 2); break;
