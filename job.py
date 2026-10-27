@@ -591,6 +591,8 @@ def avisar(payload):
 def main():
     t0 = time.time()
     spec_json = os.environ.get("SPEC_JSON")
+    if spec_json == "null":
+        spec_json = None
     if spec_json:
         spec = json.loads(spec_json)
     else:
