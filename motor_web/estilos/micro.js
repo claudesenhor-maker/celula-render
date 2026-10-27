@@ -273,7 +273,8 @@
         if (ponto) { const q = proj(ponto[0], ponto[1], LZ * 0.9); if (!q.atras) etiqueta(nome, q.x, q.y, true, U.mola(local - 0.9, 10), W * 0.5); }
       } else if (acao === 'dado' && cn.dado && typeof cn.dado === 'object') cartao(cn.dado.rotulo, cn.dado.valor, local);
       if (i > 0 && local < 0.12) { c.fillStyle = 'rgba(255,255,255,' + (0.3 * (1 - local / 0.12)).toFixed(2) + ')'; c.fillRect(0, 0, W, H); }
-      if (cn.hud && typeof cn.hud !== 'object' && local > 0.3) { const s = U.mola(local - 0.3, 10); c.save(); c.translate(W / 2, 330); c.scale(s, s); c.font = '104px "Lilita One", sans-serif'; c.textAlign = 'center'; c.textBaseline = 'middle';
+      // 26/10: o selo espera o cartaz do titulo (3 s) sair -- no 1o segundo os dois se sobrepunham
+      if (cn.hud && typeof cn.hud !== 'object' && local > 0.3 && t >= 3.0) { const s = U.mola(Math.min(local - 0.3, t - 3.0), 10); c.save(); c.translate(W / 2, 330); c.scale(s, s); c.font = '104px "Lilita One", sans-serif'; c.textAlign = 'center'; c.textBaseline = 'middle';
         const txt = U.hud(c, cn.hud, W * 0.84 - 70, 22), w = c.measureText(txt).width + 70; U.rr(c, -w / 2, -72, w, 144, 34); c.fillStyle = '#2A1E3C'; c.fill(); c.fillStyle = '#FFD23F'; c.fillText(txt, 0, 6); c.restore(); }
       U.cartaz(c, spec, t, { fonte: '84px "Lilita One", sans-serif', y: 150, fundo: '#FFD23F', borda: '#2A1E3C', cor: '#2A1E3C', altura_linha: 100, dur: 3.0 });
       U.legenda(c, spec, t, { fonte: '96px "Lilita One", sans-serif', y: H * 0.76, cor: '#FFFFFF', cor_ativa: '#FFD23F', contorno: 18, cor_contorno: '#2A1E3C', caixa: true, por_vez: 3 });
