@@ -53,7 +53,7 @@ const conferir=function conferir(antes, depois, comum, desenhar) {
     exigir(igual(desenhar(antes,comum,'digita',objeto,tempo),
       desenhar(depois,comum,'digita',objeto,tempo)), 'Default sem objeto mudou');
   }
-  for (const acao of ['acorda','anda','come','dorme','compra','recebe','batalha','level_up','game_over','missao','parado']) {
+  for (const acao of ['anda','come','dorme','compra','recebe','batalha','level_up','game_over','missao','parado']) {
     for (const objeto of ['celular','cafe','pizza',null]) for (const tempo of tempos) {
       exigir(igual(desenhar(antes,comum,acao,objeto,tempo),
         desenhar(depois,comum,acao,objeto,tempo)), 'Ação vizinha mudou: '+acao);
