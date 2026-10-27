@@ -135,7 +135,13 @@
         case 'acorda': { const ant = k < 0.5; sprite(at[0], ant ? 112 : 70, ant ? 112 : yb, 0, 1); if (ant) px(106, 150, 66, 18, PAL.branco); if (cn.objeto && cn.objeto !== 'alarme') objeto(cn.objeto, ant ? 140 : 98, ant ? 142 : 192); else objeto('alarme', 40, 140 + (Math.floor(t * 12) % 2)); break; }
         case 'anda': sprite(at[0], U.lerp(-36, 150, k), yb, passo, 1); if (at[1]) sprite(at[1], 128, yb, 0, -1); break;
         case 'digita': sprite(at[0], 54, 150, passo, 1); if (Math.floor(t * 3) % 2) px(80, 132, 3, 5, PAL.azul); objeto(cn.objeto || 'cafe', cn.objeto ? 82 : 92, cn.objeto ? 180 : 142); break;
-        case 'come': sprite(at[0], 70, yb, 0, 1); objeto(cn.objeto || 'pizza', 98, 184 - Math.floor(k * 3) * 2); break;
+        case 'come': {
+          // T324: evento literal, nunca uma palavra solta, hipótese ou pergunta.
+          const texto = typeof cn.texto === 'string' ? cn.texto.normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim().replace(/\s+/g, ' ').toLowerCase() : '';
+          const cafeLiteral = /^(?:you used coffee|usaste cafe(?: frio)?|voce usou cafe(?: frio)?)[.!](?:\s|$)/.test(texto);
+          const item = cafeLiteral && (!cn.objeto || cn.objeto === 'pizza') ? 'cafe' : (cn.objeto || 'pizza');
+          sprite(at[0], 70, yb, 0, 1); objeto(item, 98, 184 - Math.floor(k * 3) * 2); break;
+        }
         case 'dorme': sprite(at[0], 112, 112, 0, 1); px(106, 150, 66, 18, PAL.branco); break;
         case 'compra': case 'recebe': { sprite(at[0], 70, yb, 0, 1); for (let i = 0; i < 6; i++) { const q = (local * 1.5 + i / 6) % 1; objeto('moeda', 80 + Math.sin(i * 2) * 20, cn.acao === 'recebe' ? 40 + q * 150 : 180 - q * 150); } if (cn.objeto && cn.objeto !== 'moeda') objeto(cn.objeto, 98, yb + 30); break; }
         case 'batalha': sprite(at[0], 14, 162, passo, 1, 3); sprite(at[1] || 'chefe', 96, 76, 0, -1, 6); if (k > 0.45 && k < 0.6) px(0, 0, PW, PH, '#FFFFFF66'); extraUI = 'batalha'; break;
