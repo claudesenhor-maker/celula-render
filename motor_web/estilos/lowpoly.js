@@ -778,6 +778,12 @@
       if (fx.flutua) { const a = fx.flutua.geometry.attributes.position; for (let j = 0; j < a.count; j++) { const x0 = (rr() - 0.5) * 12, z0 = (rr() - 0.5) * 10, f = rr(); a.setXYZ(j, x0 + Math.sin(t * 0.5 + j) * 0.5, U.saida(k) * (1 + f * 6) + 0.2, z0); } a.needsUpdate = true; }
       animarCriados(o, k, t);
       // a ultima coisa do 3D: o desenho
+      if (spec.piloto_t320) {
+        // A consequência continua depois da troca de cenário.
+        const some = cn.sem_arvores || (cn.arvores_desaparecem && local > 0.35);
+        o.arvores.forEach((a) => { a.visible = !some; });
+        if (cn.hora === "noite" && o.solS) o.solS.visible = false;
+      }
       R.render(o.sc, cam);
     }
 

@@ -1,0 +1,307 @@
+{
+  "motor": "web",
+  "estilo": "lowpoly",
+  "piloto_t320": true,
+  "amostra": "trees",
+  "titulo": "Every Tree Vanishes. What Reaches Your House?",
+  "idioma": "en-US",
+  "narrado": true,
+  "w": 1080,
+  "h": 1920,
+  "fps": 30,
+  "semente": "t320-trees",
+  "voz": {
+    "motor": "edge",
+    "voice": "en-US-AndrewMultilingualNeural",
+    "rate": "+0%",
+    "pitch": "+0Hz"
+  },
+  "musica": {
+    "genero": "suspense",
+    "registro": "serio",
+    "ganho_db": -26
+  },
+  "qa_t260": {
+    "dur_min": 40,
+    "dur_max": 65
+  },
+  "cenas": [
+    {
+      "texto": "Every tree vanished. Your house next?",
+      "cenario": "floresta",
+      "acao": "mostra",
+      "hud": "WHAT IF?",
+      "hora": "dia",
+      "camera": "perto",
+      "atores": [
+        "pessoa"
+      ],
+      "sfx": [
+        "thud"
+      ],
+      "arvores_desaparecem": true
+    },
+    {
+      "texto": "Watch what happens when the rain arrives.",
+      "cenario": "cidade",
+      "acao": "chove",
+      "hud": "",
+      "hora": "dia",
+      "camera": "sobrevoo",
+      "atores": [
+        "pessoa"
+      ],
+      "sfx": [
+        "whoosh"
+      ],
+      "sem_arvores": true
+    },
+    {
+      "texto": "Imagine the trunks, leaves, and roots disappeared overnight.",
+      "cenario": "floresta",
+      "acao": "mostra",
+      "hud": "NO TREES",
+      "hora": "dia",
+      "camera": "zoom_in",
+      "atores": [
+        "pessoa"
+      ],
+      "sfx": [
+        "plim"
+      ],
+      "sem_arvores": true
+    },
+    {
+      "texto": "First, animals lose food and places to hide.",
+      "cenario": "campo",
+      "acao": "mostra",
+      "hud": "",
+      "hora": "dia",
+      "camera": "zoom_out",
+      "atores": [
+        "pessoa"
+      ],
+      "sfx": [
+        "whoosh"
+      ],
+      "sem_arvores": true
+    },
+    {
+      "texto": "Your street also loses shade and leafy shelter.",
+      "cenario": "cidade",
+      "acao": "anda",
+      "hud": "",
+      "hora": "dia",
+      "camera": "perto",
+      "atores": [
+        "pessoa"
+      ],
+      "sfx": [
+        "whoosh"
+      ],
+      "sem_arvores": true
+    },
+    {
+      "texto": "But here's the threat you might overlook.",
+      "cenario": "montanha",
+      "acao": "mostra",
+      "hud": "",
+      "hora": "dia",
+      "camera": "sobrevoo",
+      "atores": [
+        "pessoa"
+      ],
+      "sfx": [
+        "whoosh"
+      ],
+      "sem_arvores": true
+    },
+    {
+      "texto": "Tree roots help hold soil in place.",
+      "cenario": "floresta",
+      "acao": "mostra",
+      "hud": "ROOTS MATTER",
+      "hora": "dia",
+      "camera": "zoom_in",
+      "atores": [
+        "pessoa"
+      ],
+      "sfx": [
+        "plim"
+      ],
+      "sem_arvores": true
+    },
+    {
+      "texto": "Leaves intercept some rain before it hits the ground.",
+      "cenario": "campo",
+      "acao": "chove",
+      "hud": "",
+      "hora": "dia",
+      "camera": "zoom_out",
+      "atores": [
+        "pessoa"
+      ],
+      "sfx": [
+        "whoosh"
+      ],
+      "sem_arvores": true
+    },
+    {
+      "texto": "Without them, a downpour can send more water downhill.",
+      "cenario": "montanha",
+      "acao": "chove",
+      "hud": "",
+      "hora": "dia",
+      "camera": "perto",
+      "atores": [
+        "pessoa"
+      ],
+      "sfx": [
+        "whoosh"
+      ],
+      "sem_arvores": true
+    },
+    {
+      "texto": "Loose soil can travel with that runoff.",
+      "cenario": "praia",
+      "acao": "mostra",
+      "hud": "SOIL + WATER",
+      "hora": "dia",
+      "camera": "sobrevoo",
+      "atores": [
+        "pessoa"
+      ],
+      "sfx": [
+        "plim"
+      ],
+      "sem_arvores": true
+    },
+    {
+      "texto": "Where does the muddy water go next?",
+      "cenario": "cidade",
+      "acao": "compara",
+      "hud": "",
+      "hora": "dia",
+      "camera": "zoom_in",
+      "atores": [
+        "pessoa"
+      ],
+      "sfx": [
+        "whoosh"
+      ],
+      "sem_arvores": true
+    },
+    {
+      "texto": "Into streams, drains, and places people live.",
+      "cenario": "oceano",
+      "acao": "mostra",
+      "hud": "",
+      "hora": "dia",
+      "camera": "zoom_out",
+      "atores": [
+        "pessoa"
+      ],
+      "sfx": [
+        "whoosh"
+      ],
+      "sem_arvores": true
+    },
+    {
+      "texto": "Flood risks depend on terrain and the storm.",
+      "cenario": "cidade",
+      "acao": "inunda",
+      "hud": "LOCAL RISK",
+      "hora": "dia",
+      "camera": "perto",
+      "atores": [
+        "pessoa"
+      ],
+      "sfx": [
+        "plim"
+      ],
+      "sem_arvores": true
+    },
+    {
+      "texto": "It doesn't mean every house suddenly washes away.",
+      "cenario": "montanha",
+      "acao": "mostra",
+      "hud": "",
+      "hora": "dia",
+      "camera": "sobrevoo",
+      "atores": [
+        "pessoa"
+      ],
+      "sfx": [
+        "whoosh"
+      ],
+      "sem_arvores": true
+    },
+    {
+      "texto": "And wind loses some of its natural barriers.",
+      "cenario": "campo",
+      "acao": "vento",
+      "hud": "",
+      "hora": "dia",
+      "camera": "zoom_in",
+      "atores": [
+        "pessoa"
+      ],
+      "sfx": [
+        "whoosh"
+      ],
+      "sem_arvores": true
+    },
+    {
+      "texto": "Trees were doing work you barely noticed.",
+      "cenario": "floresta",
+      "acao": "mostra",
+      "hud": "",
+      "hora": "dia",
+      "camera": "zoom_out",
+      "atores": [
+        "pessoa"
+      ],
+      "sfx": [
+        "whoosh"
+      ],
+      "sem_arvores": true
+    },
+    {
+      "texto": "Shelter. Shade. Soil protection. More than scenery.",
+      "cenario": "cidade",
+      "acao": "compara",
+      "hud": "",
+      "hora": "dia",
+      "camera": "perto",
+      "atores": [
+        "pessoa"
+      ],
+      "sfx": [
+        "whoosh"
+      ],
+      "sem_arvores": true
+    },
+    {
+      "texto": "Next downpour, notice what's standing uphill from you.",
+      "cenario": "montanha",
+      "acao": "chove",
+      "hud": "LOOK UPHILL",
+      "hora": "dia",
+      "camera": "sobrevoo",
+      "atores": [
+        "pessoa"
+      ],
+      "sfx": [
+        "plim"
+      ],
+      "sem_arvores": true
+    }
+  ],
+  "metadados": {
+    "fontes": [
+      "https://www.epa.gov/soakuptherain/soak-rain-trees-help-reduce-runoff"
+    ],
+    "avaliacao": "T320 — aguarda feedback do dono"
+  },
+  "fila_id": "6b84a633-3843-50d4-8edd-8bb8eda203a5"
+}

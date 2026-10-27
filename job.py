@@ -773,6 +773,11 @@ def motor_web(spec, fila_id, t0):
     entrada, out = "/tmp/spec_web.json", "/tmp/final.mp4"
     json.dump(spec, open(entrada, "w", encoding="utf-8"), ensure_ascii=False)
     aqui = os.path.dirname(os.path.abspath(__file__))
+    if spec.get("piloto_t320"):
+        # workflow_dispatch usa SPEC_URL e não passa no npm do workflow.
+        os.environ["VOZ_EDGE_VIRA"] = "edge"
+        subprocess.run(["npm", "ci", "--no-audit", "--no-fund"],
+                       cwd=os.path.join(aqui, "motor_web"), check=True)
     # 23/10: a saida vai para o log do Action como antes, mas o FIM dela (onde
     # esta o motivo) sobe no erro -- `render_falhou` so' guardava o comando.
     r = subprocess.run([sys.executable, os.path.join(aqui, "motor_web", "montar_web.py"), "--spec", entrada, "--saida", out,

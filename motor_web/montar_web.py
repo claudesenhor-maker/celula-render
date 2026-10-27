@@ -203,6 +203,9 @@ def _aparar_inicio(wav, marcas, folga=0.03):
 
 def linha_do_tempo(spec, tmp, modo_tts):
     """Duracao de cada cena e, nos narrados, a voz e as palavras."""
+    if spec.get("piloto_t320"):
+        from pilotos_t320 import narrar_continuo
+        return narrar_continuo(spec, tmp, modo_tts)
     cenas, t, palavras, faixas, respiros = spec["cenas"], 0.0, [], [], []
     narrado = bool(spec.get("narrado"))
     if narrado:
@@ -271,6 +274,9 @@ def _notas(eventos, dur_s, destino, sr=SFX.SR):
 
 
 def eventos_sonoros(spec):
+    if spec.get("piloto_t320"):
+        from pilotos_t320 import eventos_sonoros as eventos_piloto
+        return eventos_piloto(spec["cenas"])
     ev = []
     por_acao = EFEITO_DA_ACAO.get(spec.get("estilo"), {})
     for c in spec["cenas"]:

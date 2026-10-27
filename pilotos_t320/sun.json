@@ -1,0 +1,290 @@
+{
+  "motor": "web",
+  "estilo": "lowpoly",
+  "piloto_t320": true,
+  "amostra": "sun",
+  "titulo": "The Sun Goes Dark. Why Are You Still in Daylight?",
+  "idioma": "en-US",
+  "narrado": true,
+  "w": 1080,
+  "h": 1920,
+  "fps": 30,
+  "semente": "t320-sun",
+  "voz": {
+    "motor": "edge",
+    "voice": "en-US-AndrewMultilingualNeural",
+    "rate": "+0%",
+    "pitch": "+0Hz"
+  },
+  "musica": {
+    "genero": "suspense",
+    "registro": "serio",
+    "ganho_db": -26
+  },
+  "qa_t260": {
+    "dur_min": 40,
+    "dur_max": 65
+  },
+  "cenas": [
+    {
+      "texto": "The Sun switched off. Nobody noticed.",
+      "cenario": "cidade",
+      "acao": "mostra",
+      "hud": "WHAT IF?",
+      "hora": "dia",
+      "camera": "perto",
+      "atores": [
+        "pessoa"
+      ],
+      "sfx": [
+        "thud"
+      ]
+    },
+    {
+      "texto": "Why are the streets still bright?",
+      "cenario": "campo",
+      "acao": "anda",
+      "hud": "",
+      "hora": "dia",
+      "camera": "sobrevoo",
+      "atores": [
+        "pessoa"
+      ],
+      "sfx": [
+        "whoosh"
+      ]
+    },
+    {
+      "texto": "Imagine sunlight stopped leaving the Sun right now.",
+      "cenario": "praia",
+      "acao": "mostra",
+      "hud": "LIGHT OFF",
+      "hora": "dia",
+      "camera": "zoom_in",
+      "atores": [
+        "pessoa"
+      ],
+      "sfx": [
+        "plim"
+      ]
+    },
+    {
+      "texto": "No explosion. Just no new light coming out.",
+      "cenario": "montanha",
+      "acao": "mostra",
+      "hud": "",
+      "hora": "dia",
+      "camera": "zoom_out",
+      "atores": [
+        "pessoa"
+      ],
+      "sfx": [
+        "whoosh"
+      ]
+    },
+    {
+      "texto": "You'd still see daylight for about eight minutes.",
+      "cenario": "cidade",
+      "acao": "anda",
+      "hud": "ABOUT 8 MIN",
+      "hora": "dia",
+      "camera": "perto",
+      "atores": [
+        "pessoa"
+      ],
+      "sfx": [
+        "plim"
+      ]
+    },
+    {
+      "texto": "The last sunlight is already on its way.",
+      "cenario": "campo",
+      "acao": "mostra",
+      "hud": "IN TRANSIT",
+      "hora": "dia",
+      "camera": "sobrevoo",
+      "atores": [
+        "pessoa"
+      ],
+      "sfx": [
+        "plim"
+      ]
+    },
+    {
+      "texto": "Light is fast. Space is ridiculously big.",
+      "cenario": "oceano",
+      "acao": "compara",
+      "hud": "",
+      "hora": "dia",
+      "camera": "zoom_in",
+      "atores": [
+        "pessoa"
+      ],
+      "sfx": [
+        "whoosh"
+      ]
+    },
+    {
+      "texto": "Sunlight crosses roughly one hundred fifty million kilometers.",
+      "cenario": "montanha",
+      "acao": "compara",
+      "hud": "150 MILLION KM",
+      "hora": "dia",
+      "camera": "zoom_out",
+      "atores": [
+        "pessoa"
+      ],
+      "sfx": [
+        "plim"
+      ]
+    },
+    {
+      "texto": "So the view outside is slightly out of date.",
+      "cenario": "cidade",
+      "acao": "anda",
+      "hud": "",
+      "hora": "dia",
+      "camera": "perto",
+      "atores": [
+        "pessoa"
+      ],
+      "sfx": [
+        "whoosh"
+      ]
+    },
+    {
+      "texto": "Then the final light reaches your street.",
+      "cenario": "campo",
+      "acao": "mostra",
+      "hud": "LAST LIGHT",
+      "hora": "dia",
+      "camera": "sobrevoo",
+      "atores": [
+        "pessoa"
+      ],
+      "sfx": [
+        "plim"
+      ]
+    },
+    {
+      "texto": "Daylight disappears. Now everyone notices the dark.",
+      "cenario": "cidade",
+      "acao": "noite_eterna",
+      "hud": "LIGHT ARRIVES",
+      "hora": "noite",
+      "camera": "zoom_in",
+      "atores": [
+        "pessoa"
+      ],
+      "sfx": [
+        "plim"
+      ]
+    },
+    {
+      "texto": "But the ground doesn't instantly freeze solid.",
+      "cenario": "praia",
+      "acao": "mostra",
+      "hud": "NOT INSTANT",
+      "hora": "noite",
+      "camera": "zoom_out",
+      "atores": [
+        "pessoa"
+      ],
+      "sfx": [
+        "plim"
+      ]
+    },
+    {
+      "texto": "Land and oceans have stored enormous amounts of heat.",
+      "cenario": "oceano",
+      "acao": "mostra",
+      "hud": "STORED ENERGY",
+      "hora": "noite",
+      "camera": "perto",
+      "atores": [
+        "pessoa"
+      ],
+      "sfx": [
+        "plim"
+      ]
+    },
+    {
+      "texto": "They lose that energy over time, not instantly.",
+      "cenario": "montanha",
+      "acao": "mostra",
+      "hud": "",
+      "hora": "noite",
+      "camera": "sobrevoo",
+      "atores": [
+        "pessoa"
+      ],
+      "sfx": [
+        "whoosh"
+      ]
+    },
+    {
+      "texto": "Plants also lose the sunlight powering photosynthesis.",
+      "cenario": "floresta",
+      "acao": "mostra",
+      "hud": "",
+      "hora": "noite",
+      "camera": "zoom_in",
+      "atores": [
+        "pessoa"
+      ],
+      "sfx": [
+        "whoosh"
+      ]
+    },
+    {
+      "texto": "That's another problem after our eight minute delay.",
+      "cenario": "campo",
+      "acao": "mostra",
+      "hud": "",
+      "hora": "noite",
+      "camera": "zoom_out",
+      "atores": [
+        "pessoa"
+      ],
+      "sfx": [
+        "whoosh"
+      ]
+    },
+    {
+      "texto": "This thought experiment switches off light, not gravity.",
+      "cenario": "praia",
+      "acao": "compara",
+      "hud": "LIGHT ONLY",
+      "hora": "noite",
+      "camera": "perto",
+      "atores": [
+        "pessoa"
+      ],
+      "sfx": [
+        "plim"
+      ]
+    },
+    {
+      "texto": "That bright sky? You're always seeing the past.",
+      "cenario": "cidade",
+      "acao": "anda",
+      "hud": "8 MIN AGO",
+      "hora": "noite",
+      "camera": "sobrevoo",
+      "atores": [
+        "pessoa"
+      ],
+      "sfx": [
+        "plim"
+      ]
+    }
+  ],
+  "metadados": {
+    "fontes": [
+      "https://science.nasa.gov/earth/facts/",
+      "https://science.nasa.gov/exoplanets/what-is-a-light-year/"
+    ],
+    "avaliacao": "T320 — aguarda feedback do dono"
+  },
+  "fila_id": "fc8e0281-30af-57d4-8e01-b707b00935a2"
+}

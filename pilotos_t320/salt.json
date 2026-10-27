@@ -1,0 +1,290 @@
+{
+  "motor": "web",
+  "estilo": "lowpoly",
+  "piloto_t320": true,
+  "amostra": "salt",
+  "titulo": "The Rain That Makes Drought Worse",
+  "idioma": "en-US",
+  "narrado": true,
+  "w": 1080,
+  "h": 1920,
+  "fps": 30,
+  "semente": "t320-salt",
+  "voz": {
+    "motor": "edge",
+    "voice": "en-US-AndrewMultilingualNeural",
+    "rate": "+0%",
+    "pitch": "+0Hz"
+  },
+  "musica": {
+    "genero": "suspense",
+    "registro": "serio",
+    "ganho_db": -26
+  },
+  "qa_t260": {
+    "dur_min": 40,
+    "dur_max": 65
+  },
+  "cenas": [
+    {
+      "texto": "This rain destroys your food.",
+      "cenario": "campo",
+      "acao": "murcha",
+      "hud": "WHAT IF?",
+      "hora": "dia",
+      "camera": "perto",
+      "atores": [
+        "pessoa"
+      ],
+      "sfx": [
+        "thud"
+      ]
+    },
+    {
+      "texto": "What if clouds dumped seawater instead?",
+      "cenario": "cidade",
+      "acao": "chove",
+      "hud": "SEAWATER RAIN",
+      "hora": "dia",
+      "camera": "sobrevoo",
+      "atores": [
+        "pessoa"
+      ],
+      "sfx": [
+        "plim"
+      ]
+    },
+    {
+      "texto": "Your umbrella helps you. What about farms?",
+      "cenario": "campo",
+      "acao": "chove",
+      "hud": "",
+      "hora": "dia",
+      "camera": "zoom_in",
+      "atores": [
+        "pessoa"
+      ],
+      "sfx": [
+        "whoosh"
+      ]
+    },
+    {
+      "texto": "One liter carries roughly thirty five grams of salt.",
+      "cenario": "praia",
+      "acao": "compara",
+      "hud": "35 G / L",
+      "hora": "dia",
+      "camera": "zoom_out",
+      "atores": [
+        "pessoa"
+      ],
+      "sfx": [
+        "plim"
+      ]
+    },
+    {
+      "texto": "Ten liters? Roughly three hundred fifty grams.",
+      "cenario": "cidade",
+      "acao": "compara",
+      "hud": "350 G",
+      "hora": "dia",
+      "camera": "perto",
+      "atores": [
+        "pessoa"
+      ],
+      "sfx": [
+        "plim"
+      ]
+    },
+    {
+      "texto": "Now spread that over an entire field.",
+      "cenario": "campo",
+      "acao": "mostra",
+      "hud": "",
+      "hora": "dia",
+      "camera": "sobrevoo",
+      "atores": [
+        "pessoa"
+      ],
+      "sfx": [
+        "whoosh"
+      ]
+    },
+    {
+      "texto": "Water evaporates. The salt stays behind.",
+      "cenario": "praia",
+      "acao": "seca",
+      "hud": "SALT STAYS",
+      "hora": "dia",
+      "camera": "zoom_in",
+      "atores": [
+        "pessoa"
+      ],
+      "sfx": [
+        "plim"
+      ]
+    },
+    {
+      "texto": "The next rainstorm brings another salty delivery.",
+      "cenario": "cidade",
+      "acao": "chove",
+      "hud": "",
+      "hora": "dia",
+      "camera": "zoom_out",
+      "atores": [
+        "pessoa"
+      ],
+      "sfx": [
+        "whoosh"
+      ]
+    },
+    {
+      "texto": "And another. This is the real trap.",
+      "cenario": "floresta",
+      "acao": "mostra",
+      "hud": "",
+      "hora": "dia",
+      "camera": "perto",
+      "atores": [
+        "pessoa"
+      ],
+      "sfx": [
+        "whoosh"
+      ]
+    },
+    {
+      "texto": "Wet soil doesn't guarantee roots can drink.",
+      "cenario": "campo",
+      "acao": "mostra",
+      "hud": "WET ≠ USABLE",
+      "hora": "dia",
+      "camera": "sobrevoo",
+      "atores": [
+        "pessoa"
+      ],
+      "sfx": [
+        "plim"
+      ]
+    },
+    {
+      "texto": "Salt makes absorbing that water much harder.",
+      "cenario": "floresta",
+      "acao": "mostra",
+      "hud": "",
+      "hora": "dia",
+      "camera": "zoom_in",
+      "atores": [
+        "pessoa"
+      ],
+      "sfx": [
+        "whoosh"
+      ]
+    },
+    {
+      "texto": "Sensitive crops wither, surrounded by soaking ground.",
+      "cenario": "campo",
+      "acao": "murcha",
+      "hud": "",
+      "hora": "dia",
+      "camera": "zoom_out",
+      "atores": [
+        "pessoa"
+      ],
+      "sfx": [
+        "whoosh"
+      ]
+    },
+    {
+      "texto": "A drought you can't fix with more rain.",
+      "cenario": "cidade",
+      "acao": "chove",
+      "hud": "",
+      "hora": "dia",
+      "camera": "perto",
+      "atores": [
+        "pessoa"
+      ],
+      "sfx": [
+        "whoosh"
+      ]
+    },
+    {
+      "texto": "Runoff also carries salt into freshwater habitats.",
+      "cenario": "oceano",
+      "acao": "mostra",
+      "hud": "",
+      "hora": "dia",
+      "camera": "sobrevoo",
+      "atores": [
+        "pessoa"
+      ],
+      "sfx": [
+        "whoosh"
+      ]
+    },
+    {
+      "texto": "The damage depends on drainage and repeated storms.",
+      "cenario": "montanha",
+      "acao": "mostra",
+      "hud": "",
+      "hora": "dia",
+      "camera": "zoom_in",
+      "atores": [
+        "pessoa"
+      ],
+      "sfx": [
+        "whoosh"
+      ]
+    },
+    {
+      "texto": "This isn't how normal rain actually works.",
+      "cenario": "praia",
+      "acao": "chove",
+      "hud": "REAL RAIN",
+      "hora": "dia",
+      "camera": "zoom_out",
+      "atores": [
+        "pessoa"
+      ],
+      "sfx": [
+        "plim"
+      ]
+    },
+    {
+      "texto": "Evaporation usually leaves ocean salt behind.",
+      "cenario": "oceano",
+      "acao": "mostra",
+      "hud": "SALT STAYS",
+      "hora": "dia",
+      "camera": "perto",
+      "atores": [
+        "pessoa"
+      ],
+      "sfx": [
+        "plim"
+      ]
+    },
+    {
+      "texto": "Good thing clouds don't deliver the whole ocean.",
+      "cenario": "cidade",
+      "acao": "chove",
+      "hud": "",
+      "hora": "dia",
+      "camera": "sobrevoo",
+      "atores": [
+        "pessoa"
+      ],
+      "sfx": [
+        "whoosh"
+      ]
+    }
+  ],
+  "metadados": {
+    "fontes": [
+      "https://www.noaa.gov/jetstream/ocean/sea-water",
+      "https://www.fao.org/4/t0234e/t0234e04.htm"
+    ],
+    "avaliacao": "T320 — aguarda feedback do dono"
+  },
+  "fila_id": "bf061b16-e513-53d7-b64f-a32702b4dfb8"
+}
