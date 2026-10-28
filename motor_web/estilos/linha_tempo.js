@@ -83,7 +83,7 @@
       // os marcos: os que ja passaram apagados, o atual aceso e entrando
       cenas.forEach((m, j) => {
         if (j > i) return;
-        const atual = j === i, ent = atual ? U.mola(local - 0.35, 10) : 1, y = Y[j];
+        const atual = j === i, ent = atual ? U.mola(local - 0.1, 10) : 1, y = Y[j];
         // o que ja passou apaga enquanto sobe (nao briga com o contador do ano)
         const yTela = (y - yCam) * zoom + Y0, alfa = atual ? 1 : U.clamp((yTela - 420) / 320, 0, 0.4);
         if (alfa <= 0.01) return;
@@ -106,7 +106,7 @@
         c.save(); c.translate(W / 2, yA); c.scale(s, s); c.font = '150px "Lilita One", sans-serif'; c.textAlign = 'center'; c.textBaseline = 'middle';
         { const lw = c.measureText(txt).width; if (lw > W * 0.9) c.font = Math.floor(150 * (W * 0.9) / lw) + 'px "Lilita One", sans-serif'; }   // 23/10: "450,000,000 BC" saia cortado
         c.lineWidth = 18; c.strokeStyle = '#000000'; c.strokeText(txt, 0, 0); c.fillStyle = '#FFD166'; c.fillText(txt, 0, 0); c.restore(); }
-      if (cn.hud && typeof cn.hud !== 'object' && local > 0.4) { const s = U.mola(local - 0.4, 10); c.save(); c.translate(W / 2, H * 0.6); c.scale(s, s);
+      if (cn.hud && typeof cn.hud !== 'object' && local > 0.2) { const s = U.mola(local - 0.2, 10); c.save(); c.translate(W / 2, H * 0.6); c.scale(s, s);
         c.font = '100px "Lilita One", sans-serif'; c.textAlign = 'center'; c.textBaseline = 'middle'; const tx = U.hud(c, cn.hud, c.canvas.width * 0.84 - 70, 22), w = c.measureText(tx).width + 70;
         U.rr(c, -w / 2, -66, w, 132, 30); c.fillStyle = '#FFD166'; c.fill(); c.fillStyle = '#16202C'; c.fillText(tx, 0, 6); c.restore(); }
       U.cartaz(c, spec, t, { fonte: '84px "Lilita One", sans-serif', y: 150, fundo: '#FFD166', borda: '#16202C', cor: '#16202C', altura_linha: 100, dur: 3.0 });
