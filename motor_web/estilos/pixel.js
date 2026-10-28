@@ -150,7 +150,13 @@
         case 'compra': case 'recebe': { sprite(at[0], 70, yb, 0, 1); for (let i = 0; i < 6; i++) { const q = (local * 1.5 + i / 6) % 1; objeto('moeda', 80 + Math.sin(i * 2) * 20, cn.acao === 'recebe' ? 40 + q * 150 : 180 - q * 150); } if (cn.objeto && cn.objeto !== 'moeda') objeto(cn.objeto, 98, yb + 30); break; }
         case 'batalha': sprite(at[0], 14, 162, passo, 1, 3); sprite(at[1] || 'chefe', 96, 76, 0, -1, 6); if (k > 0.45 && k < 0.6) px(0, 0, PW, PH, '#FFFFFF66'); extraUI = 'batalha'; break;
         case 'level_up': sprite(at[0], 84, yb, 0, 1); for (let i = 0; i < 10; i++) { const q = (local * 2 + i / 10) % 1; px(80 + (i % 5) * 6, yb + 20 - q * 120, 2, 2, i % 2 ? PAL.amarelo : PAL.branco); } extraUI = 'level'; break;
-        case 'game_over': sprite(at[0], 84, yb + 10, 0, 1); extraUI = 'over'; break;
+        case 'game_over': {
+          // T359: abertura viva continua a história; finais e fim explícito preservados.
+          const aberturaViva = cn === spec.cenas[0] && spec.cenas.length > 1 &&
+            Number.isFinite(cn.hud?.hp) && cn.hud.hp > 0 &&
+            !/\b(?:game\s+over|fin\s+del\s+juego|fim\s+de\s+jogo)\b/i.test(cn.texto || '');
+          sprite(at[0], 84, yb + 10, 0, 1); extraUI = aberturaViva ? null : 'over'; break;
+        }
         case 'missao': sprite(at[0], 84, yb, 0, 1); extraUI = 'missao'; break;
         default: sprite(at[0], 30, yb, Math.floor(t * 2) % 2, 1); if (at[1]) sprite(at[1], 116, yb, 0, -1);
       }
