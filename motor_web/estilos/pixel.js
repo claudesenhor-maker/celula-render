@@ -48,6 +48,8 @@
     }
     function objeto(nome, x, y) {
       if (nome === 'cafe') { px(x, y, 6, 6, PAL.branco); px(x + 6, y + 1, 2, 3, PAL.branco); px(x + 1, y + 1, 4, 2, PAL.madeira); }
+      // T337: casquinha e bola de sorvete no mesmo estilo de pixels.
+      else if (nome === 'sorvete') { px(x + 2, y + 5, 4, 2, PAL.laranja); px(x + 3, y + 7, 2, 2, PAL.laranja); px(x + 1, y + 1, 6, 4, PAL.rosa); px(x + 2, y, 4, 1, PAL.rosa); }
       else if (nome === 'boleto') { px(x, y, 8, 10, PAL.branco); for (let i = 0; i < 4; i++) px(x + 1, y + 2 + i * 2, 6, 1, PAL.cinza); px(x + 5, y + 8, 3, 1, PAL.vermelho); }
       else if (nome === 'celular') { px(x, y, 5, 9, PAL.preto); px(x + 1, y + 1, 3, 6, PAL.azul); }
       else if (nome === 'pizza') { for (let i = 0; i < 8; i++) px(x + i / 2, y + i, 8 - i, 1, i < 1 ? PAL.madeira : PAL.amarelo); px(x + 2, y + 2, 1, 1, PAL.vermelho); px(x + 4, y + 3, 1, 1, PAL.vermelho); }
@@ -139,7 +141,9 @@
           // T324: evento literal, nunca uma palavra solta, hipótese ou pergunta.
           const texto = typeof cn.texto === 'string' ? cn.texto.normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim().replace(/\s+/g, ' ').toLowerCase() : '';
           const cafeLiteral = /^(?:you used coffee|usaste cafe(?: frio)?|voce usou cafe(?: frio)?)[.!](?:\s|$)/.test(texto);
-          const item = cafeLiteral && (!cn.objeto || cn.objeto === 'pizza') ? 'cafe' : (cn.objeto || 'pizza');
+          // T337: só consumo afirmativo completo; objeto explícito distinto vence.
+          const sorveteLiteral = /^(?:you ate ice cream|comiste helado|voce comeu sorvete)[.!](?:\s|$)/.test(texto);
+          const item = (!cn.objeto || cn.objeto === 'pizza') && sorveteLiteral ? 'sorvete' : (cafeLiteral && (!cn.objeto || cn.objeto === 'pizza') ? 'cafe' : (cn.objeto || 'pizza'));
           sprite(at[0], 70, yb, 0, 1); objeto(item, 98, 184 - Math.floor(k * 3) * 2); break;
         }
         case 'dorme': sprite(at[0], 112, 112, 0, 1); px(106, 150, 66, 18, PAL.branco); break;
