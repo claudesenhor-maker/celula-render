@@ -1,0 +1,382 @@
+[
+  {
+    "estilo": "lowpoly",
+    "erros": [],
+    "fontes": [
+      true,
+      true,
+      true,
+      true,
+      true,
+      true
+    ],
+    "ms": [
+      1789.313843011856,
+      854.3048079609871,
+      657.7793970108032,
+      585.2746309638023
+    ],
+    "diferenca": {
+      "max": 0,
+      "alterados": 0,
+      "maiores4": 0
+    },
+    "suavizacao": true,
+    "metricas": {
+      "chamadas": 164,
+      "triangulos": 7652,
+      "geometrias": 288,
+      "texturas": 5
+    }
+  },
+  {
+    "estilo": "mecanismo",
+    "erros": [],
+    "fontes": [
+      true,
+      true,
+      true,
+      true,
+      true,
+      true
+    ],
+    "ms": [
+      11470.834677994251,
+      1749.567205965519,
+      1745.191819012165,
+      1683.5233480334282
+    ],
+    "diferenca": {
+      "max": 0,
+      "alterados": 0,
+      "maiores4": 0
+    },
+    "suavizacao": true,
+    "metricas": {
+      "chamadas": 22,
+      "triangulos": 17162,
+      "geometrias": 11,
+      "texturas": 5
+    }
+  },
+  {
+    "estilo": "escala",
+    "erros": [],
+    "fontes": [
+      true,
+      true,
+      true,
+      true,
+      true,
+      true
+    ],
+    "ms": [
+      9934.434121012688,
+      1211.6446880102158,
+      1058.4649179577827,
+      1211.8831040263176
+    ],
+    "diferenca": {
+      "max": 0,
+      "alterados": 0,
+      "maiores4": 0
+    },
+    "suavizacao": true,
+    "metricas": {
+      "chamadas": 20,
+      "triangulos": 15538,
+      "geometrias": 9,
+      "texturas": 4
+    }
+  },
+  {
+    "estilo": "animal",
+    "erros": [],
+    "fontes": [
+      true,
+      true,
+      true,
+      true,
+      true,
+      true
+    ],
+    "ms": [
+      1802.6545870304108,
+      943.2121729850769,
+      1083.2293120026588,
+      922.357864022255
+    ],
+    "diferenca": {
+      "max": 0,
+      "alterados": 0,
+      "maiores4": 0
+    },
+    "suavizacao": true,
+    "metricas": {
+      "chamadas": 18,
+      "triangulos": 9182,
+      "geometrias": 12,
+      "texturas": 3
+    }
+  },
+  {
+    "estilo": "orbita",
+    "erros": [],
+    "fontes": [
+      true,
+      true,
+      true,
+      true,
+      true,
+      true
+    ],
+    "ms": [
+      1605.2866250276566,
+      695.5690619945526,
+      659.1400929689407,
+      560.9672879576683
+    ],
+    "diferenca": {
+      "max": 0,
+      "alterados": 0,
+      "maiores4": 0
+    },
+    "suavizacao": true,
+    "metricas": {
+      "chamadas": 2,
+      "triangulos": 3968,
+      "geometrias": 3,
+      "texturas": 2
+    }
+  },
+  {
+    "estilo": "micro",
+    "erros": [],
+    "fontes": [
+      true,
+      true,
+      true,
+      true,
+      true,
+      true
+    ],
+    "ms": [
+      4197.9466680288315,
+      2069.764667034149,
+      2248.0532180070877,
+      2482.374646961689
+    ],
+    "diferenca": {
+      "max": 5,
+      "alterados": 1251,
+      "maiores4": 2
+    },
+    "suavizacao": true,
+    "metricas": {
+      "chamadas": 23,
+      "triangulos": 260026,
+      "geometrias": 27,
+      "texturas": 1
+    }
+  },
+  {
+    "estilo": "pixel",
+    "erros": [],
+    "fontes": [
+      true,
+      true,
+      true,
+      true,
+      true,
+      true
+    ],
+    "ms": [
+      502.87329798936844,
+      485.66562700271606,
+      275.92172902822495,
+      239.68624502420425
+    ],
+    "diferenca": {
+      "max": 0,
+      "alterados": 0,
+      "maiores4": 0
+    },
+    "suavizacao": false,
+    "metricas": null
+  },
+  {
+    "estilo": "mangueira",
+    "erros": [],
+    "fontes": [
+      true,
+      true,
+      true,
+      true,
+      true,
+      true
+    ],
+    "ms": [
+      1222.1469789743423,
+      1068.4232149720192,
+      1021.82375395298,
+      893.8272359967232
+    ],
+    "diferenca": {
+      "max": 181,
+      "alterados": 2550,
+      "maiores4": 1453
+    },
+    "suavizacao": true,
+    "metricas": null
+  },
+  {
+    "estilo": "silhueta",
+    "erros": [],
+    "fontes": [
+      true,
+      true,
+      true,
+      true,
+      true,
+      true
+    ],
+    "ms": [
+      1567.002757012844,
+      1296.3694279789925,
+      853.9487000107765,
+      787.8670429587364
+    ],
+    "diferenca": {
+      "max": 0,
+      "alterados": 0,
+      "maiores4": 0
+    },
+    "suavizacao": true,
+    "metricas": null
+  },
+  {
+    "estilo": "mapa",
+    "erros": [],
+    "fontes": [
+      true,
+      true,
+      true,
+      true,
+      true,
+      true
+    ],
+    "ms": [
+      1430.951161980629,
+      1273.1770129799843,
+      1390.5298590064049,
+      1540.997669994831
+    ],
+    "diferenca": {
+      "max": 1,
+      "alterados": 1,
+      "maiores4": 0
+    },
+    "suavizacao": true,
+    "metricas": null
+  },
+  {
+    "estilo": "linha_tempo",
+    "erros": [],
+    "fontes": [
+      true,
+      true,
+      true,
+      true,
+      true,
+      true
+    ],
+    "ms": [
+      547.015996992588,
+      566.5698329806328,
+      514.3118060231209,
+      509.9358369708061
+    ],
+    "diferenca": {
+      "max": 0,
+      "alterados": 0,
+      "maiores4": 0
+    },
+    "suavizacao": true,
+    "metricas": null
+  },
+  {
+    "estilo": "quiz",
+    "erros": [],
+    "fontes": [
+      true,
+      true,
+      true,
+      true,
+      true,
+      true
+    ],
+    "ms": [
+      355.5709910392761,
+      455.1720899939537,
+      322.744834959507,
+      192.84882098436356
+    ],
+    "diferenca": {
+      "max": 0,
+      "alterados": 0,
+      "maiores4": 0
+    },
+    "suavizacao": true,
+    "metricas": null
+  },
+  {
+    "estilo": "fisica",
+    "erros": [],
+    "fontes": [
+      true,
+      true,
+      true,
+      true,
+      true,
+      true
+    ],
+    "ms": [
+      743.2047969698906,
+      1077.296775996685,
+      946.554910004139,
+      859.0309290289879
+    ],
+    "diferenca": {
+      "max": 0,
+      "alterados": 0,
+      "maiores4": 0
+    },
+    "suavizacao": true,
+    "metricas": null
+  },
+  {
+    "estilo": "enem",
+    "erros": [],
+    "fontes": [
+      true,
+      true,
+      true,
+      true,
+      true,
+      true
+    ],
+    "ms": [
+      969.6187599897385,
+      464.80708903074265,
+      408.74044996500015,
+      404.9858649969101
+    ],
+    "diferenca": {
+      "max": 0,
+      "alterados": 0,
+      "maiores4": 0
+    },
+    "suavizacao": true,
+    "metricas": null
+  }
+]

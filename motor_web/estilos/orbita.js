@@ -5,7 +5,7 @@
 //
 //   cena: { texto, acao, alvo, alvo2?, dado?, veiculo?, hud? }
 //     acao "sistema"  -- o Sistema Solar visto de cima, acelerado, com as posicoes
-//                        de HOJE (longitude media J2000); `alvo` destacado
+//                        na data de referencia (longitude media J2000); `alvo` destacado
 //     acao "foco"     -- o corpo grande girando no proprio eixo; com `dado`, o
 //                        cartao do numero contra a Terra
 //     acao "dia"      -- uma volta no eixo em relacao ao Sol e o relogio contando
@@ -47,6 +47,7 @@
     const R = new T.WebGLRenderer({ canvas: gl, antialias: true, preserveDrawingBuffer: true, logarithmicDepthBuffer: true }); R.setSize(W, H, false);
     const cam = new T.PerspectiveCamera(40, W / H, 0.001, 1e6);
     const sc = new T.Scene(); sc.background = new T.Color('#03040B');
+    U3.estudio(R, sc, T, { reflexo: false, sombra: false, exposicao: 0.95 });
     const chave = (k, p) => (CORPOS[String(k || '').toLowerCase()] ? String(k).toLowerCase() : p);
 
     // ---- ceu: estrelas fixas numa casca grande (da semente)
@@ -72,9 +73,25 @@
         if (b.tipo === 'estrela') for (let i = 0; i < 260; i++) mancha(r() * 512, r() * 256, 3 + r() * 9, 2 + r() * 6, r() < 0.5 ? 'rgba(255,170,40,0.5)' : 'rgba(255,240,170,0.45)');
         if (b.tipo === 'nuvem') for (let i = 0; i < 70; i++) mancha(r() * 512, r() * 256, 20 + r() * 50, 5 + r() * 10, 'rgba(250,235,190,0.35)');
       } else if (b.tipo === 'terra') {
-        for (let i = 0; i < 46; i++) { const x = r() * 512, y = 40 + r() * 176; mancha(x, y, 10 + r() * 38, 6 + r() * 24, r() < 0.7 ? '#4E8C3A' : '#B79A62'); }
+        // Mesmas fronteiras Natural Earth do motor mapa, em projeção equiretangular.
+        // A Terra passa a ter continentes reconhecíveis, não manchas aleatórias.
+        const terra=new Path2D();
+        (window.MUNDO || []).forEach(p=>p.a.forEach(anel=>{
+          for(const copia of [-512,0,512]){let anterior=null,volta=0;
+            for(let j=0;j<anel.length;j+=2){let x=(anel[j]+180)/360*512,y=(90-anel[j+1])/180*256;
+              if(anterior!=null){if(x-anterior>256)volta-=512;if(x-anterior < -256)volta+=512;}
+              if(j===0)terra.moveTo(x+copia,y);else terra.lineTo(x+volta+copia,y);anterior=x;
+            }terra.closePath();}
+        }));
+        g.fillStyle='#648C59';g.fill(terra,'evenodd');
+        // Mascara uma única vez: recortar cada mancha por milhares de vértices
+        // geográficos custava dezenas de segundos na primeira criação em software.
+        const relevo=document.createElement('canvas');relevo.width=512;relevo.height=256;const rg=relevo.getContext('2d');
+        for(let i=0;i<240;i++){const x=r()*512,y=r()*256,rx=4+r()*13,ry=2+r()*7;
+          rg.fillStyle=y>80&&y<125?'rgba(202,175,106,.55)':'rgba(35,95,54,.22)';rg.beginPath();rg.ellipse(x,y,rx,ry,r()*3,0,U.TAU);rg.fill();}
+        rg.globalCompositeOperation='destination-in';rg.fillStyle='#fff';rg.fill(terra,'evenodd');g.drawImage(relevo,0,0);
         g.fillStyle = '#F4F8FB'; g.fillRect(0, 0, 512, 16); g.fillRect(0, 240, 512, 16);
-        for (let i = 0; i < 60; i++) mancha(r() * 512, r() * 256, 14 + r() * 40, 3 + r() * 6, 'rgba(255,255,255,0.55)');
+        if(U3.perfil !== 'rapido'){const nr=U.rng('nuvens-terra');for(let i=0;i<75;i++){g.fillStyle='rgba(255,255,255,.32)';g.beginPath();g.ellipse(nr()*512,nr()*256,8+nr()*23,1+nr()*4,-.3,0,U.TAU);g.fill();}}
       } else if (b.tipo === 'marte') {
         for (let i = 0; i < 50; i++) mancha(r() * 512, 30 + r() * 196, 8 + r() * 40, 4 + r() * 18, r() < 0.5 ? 'rgba(110,40,20,0.45)' : 'rgba(220,120,70,0.4)');
         g.fillStyle = '#F2EEE8'; g.fillRect(0, 0, 512, 10); g.fillRect(0, 248, 512, 8);
@@ -83,7 +100,7 @@
           g.strokeStyle = 'rgba(255,255,255,0.18)'; g.lineWidth = 1.5; g.beginPath(); g.arc(x - 1, y - 1, rr, Math.PI, Math.PI * 1.6); g.stroke(); }
         if (k === 'pluto') mancha(300, 150, 60, 40, 'rgba(245,230,210,0.7)');
       }
-      const t = new T.CanvasTexture(cv); t.anisotropy = 4; return t;
+      const t = new T.CanvasTexture(cv); t.encoding = T.sRGBEncoding; t.anisotropy = 4; return t;
     }
     const brilho = (() => { const cv = document.createElement('canvas'); cv.width = cv.height = 256; const g = cv.getContext('2d'), gr = g.createRadialGradient(128, 128, 0, 128, 128, 128);
       gr.addColorStop(0, 'rgba(255,230,150,0.95)'); gr.addColorStop(0.25, 'rgba(255,190,80,0.45)'); gr.addColorStop(1, 'rgba(255,150,40,0)'); g.fillStyle = gr; g.fillRect(0, 0, 256, 256); return new T.CanvasTexture(cv); })();
@@ -116,8 +133,10 @@
       return (OBJ[k] = { k, b, grupo, eixo, corpo });
     }
 
-    // ---- posicoes de HOJE: longitude media de J2000 + movimento medio
-    const diasJ2000 = (Date.now() - Date.UTC(2000, 0, 1, 12)) / 864e5;
+    // ---- posicoes na data de referencia: longitude media de J2000 + movimento medio
+    const dataReferencia = spec.data_referencia || '2000-01-01T12:00:00Z';
+    const dataMs = Date.parse(dataReferencia);
+    const diasJ2000 = ((Number.isFinite(dataMs) ? dataMs : Date.UTC(2000,0,1,12)) - Date.UTC(2000, 0, 1, 12)) / 864e5;
     const lonHoje = (k) => { const b = CORPOS[k]; return ((b.L0 || 0) + (360 * diasJ2000) / Math.max(1e-6, b.ano)) * Math.PI / 180; };
     const rSis = (k) => 2.6 + 3.2 * Math.log2(1 + CORPOS[k].a / 149.6e6);
     const tamSis = (k) => (k === 'sun' ? 0.9 : 0.16 + 0.3 * Math.log10(1 + CORPOS[k].raio / 1000));
@@ -297,7 +316,19 @@
         }
       }
       topoLivre = t < 3.4 || (cn.hud && typeof cn.hud !== 'object' && local > 0.3 && acao !== 'viagem') ? 480 : 0;
-      R.render(sc, cam); c.drawImage(gl, 0, 0, W, H);
+      U3.render(R, sc, cam, spec, t); c.drawImage(gl, 0, 0, W, H);
+      // Halo de atmosfera na composição 2D: mantém o contorno sem duas
+      // esferas transparentes de tela inteira no SwiftShader.
+      const terra=OBJ.earth;
+      if(spec.atmosfera_2d === true && U3.perfil !== 'rapido' && terra && terra.grupo.visible){
+        const centro=terra.grupo.getWorldPosition(new T.Vector3()),raio=terra.grupo.getWorldScale(new T.Vector3()).x;
+        const lateral=new T.Vector3(1,0,0).applyQuaternion(cam.quaternion).multiplyScalar(raio),a=proj(centro),b=proj(centro.clone().add(lateral));
+        const r=Math.hypot(a.x-b.x,a.y-b.y);
+        if(!a.atras && r>4 && r<W*2){const gr=c.createRadialGradient(a.x,a.y,r*.92,a.x,a.y,r*1.05);
+          gr.addColorStop(0,'rgba(55,128,237,0)');gr.addColorStop(.65,'rgba(55,128,237,.16)');gr.addColorStop(1,'rgba(55,128,237,0)');
+          c.save();c.fillStyle=gr;c.beginPath();c.arc(a.x,a.y,r*1.05,0,U.TAU);c.fill();c.restore();}
+      }
+
       if (i > 0 && local < 0.12) { c.fillStyle = 'rgba(255,255,255,' + (0.35 * (1 - local / 0.12)).toFixed(2) + ')'; c.fillRect(0, 0, W, H); }
       const dur = cn.fim - cn.ini;
 
@@ -305,7 +336,7 @@
         info.marcas.forEach(([kk, p, tam]) => { const q = proj(p.clone().add(new T.Vector3(0, tam * 1.6, 0))); if (q.atras) return;
           if (kk === info.alvo) etiqueta(CORPOS[kk].nome.toUpperCase(), null, q.x, q.y - 40, true, U.mola(local - 0.2, 10)); });
         contador('TIME LAPSE', '+' + tempoD(Math.max(0, info.dias)), H * 0.87);
-        c.save(); c.font = '30px "Lilita One", sans-serif'; c.fillStyle = 'rgba(200,210,230,0.6)'; c.textAlign = 'center'; c.fillText('POSITIONS: TODAY · DISTANCES NOT TO SCALE', W / 2, H * 0.965); c.restore();
+        c.save(); c.font = '30px "Lilita One", sans-serif'; c.fillStyle = 'rgba(200,210,230,0.8)'; c.textAlign = 'center'; c.fillText('REFERENCE: ' + dataReferencia.slice(0,10) + ' · NOT TO SCALE', W * 0.43, H * 0.74, W * 0.77); c.restore();
       } else if (acao === 'foco' || acao === 'dia') {
         const b = CORPOS[info.alvo];
         if (acao === 'dia' && b.dia) { contador('ONE DAY ON ' + b.nome.toUpperCase(), tempoH(b.dia * U.suave(k)), H * 0.6); }
@@ -341,7 +372,7 @@
       U.cartaz(c, spec, t, { fonte: '84px "Lilita One", sans-serif', y: 150, fundo: '#FFD23F', borda: '#10131C', cor: '#10131C', altura_linha: 100, dur: 3.0 });
       U.legenda(c, spec, t, { fonte: '96px "Lilita One", sans-serif', y: H * 0.74, cor: '#FFFFFF', cor_ativa: '#FFD23F', contorno: 18, caixa: true, por_vez: 3 });
     }
-    return { quadro };
+    return { quadro, dispose: () => U3.liberar(R, sc) };
   }
   MOTORES.orbita = { criar, CORPOS };
 })();

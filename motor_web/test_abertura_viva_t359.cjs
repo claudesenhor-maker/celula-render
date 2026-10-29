@@ -14,7 +14,7 @@ function desenhar(fonte, comum, cenas, indice, fracao) {
     });
   }
   const b=contexto(true),c=contexto(false);
-  const spec={w:1080,h:1920,titulo:'',cenas:[]}; let ini=0;
+  const spec={qualidade:'legado',w:1080,h:1920,titulo:'',cenas:[]}; let ini=0;
   for(const cena of cenas) {const fim=ini+(cena.dur_s||3.4);spec.cenas.push({...cena,ini,fim});ini=fim;}
   const original=JSON.stringify(spec),cn=spec.cenas[indice],t=cn.ini+(cn.fim-cn.ini)*fracao;
   new Function('document','MOTORES',fonte)({createElement:()=>({getContext:()=>b})},motores);

@@ -198,13 +198,14 @@
       c.restore();
     }
 
+    const fundoFixo=U.camada(W,H,g=>{const gr=g.createRadialGradient(CX,CY,50,CX,CY,H*.8);gr.addColorStop(0,'#1A1A2E');gr.addColorStop(1,FUNDO);g.fillStyle=gr;g.fillRect(0,0,W,H);});
     function quadro(t) {
       const qi = Math.min(quadros.length - 1, Math.max(0, Math.floor(t * FPS))), Q_ = quadros[qi];
       // as batidas da janela [t-0,45 s, t] (busca binaria: a lista e' em ordem de tempo)
       let lo = 0, hi = impactos.length; while (lo < hi) { const m = (lo + hi) >> 1; if (impactos[m].t < t - 0.45) lo = m + 1; else hi = m; }
       const vivos = []; for (let j = lo; j < impactos.length && impactos[j].t <= t; j++) vivos.push(impactos[j]);
       const ult = vivos[vivos.length - 1], pulso = ult ? Math.max(0, 1 - (t - ult.t) / (ult.forte ? 0.5 : 0.16)) * (ult.forte ? 0.5 : 0.18) : 0;
-      const g = c.createRadialGradient(CX, CY, 50, CX, CY, H * 0.8); g.addColorStop(0, '#1A1A2E'); g.addColorStop(1, FUNDO); c.fillStyle = g; c.fillRect(0, 0, W, H);
+      c.drawImage(fundoFixo,0,0);
       if (pulso > 0) { const g2 = c.createRadialGradient(CX, CY, 0, CX, CY, H * 0.6); g2.addColorStop(0, ult.cor); g2.addColorStop(1, 'rgba(0,0,0,0)'); c.save(); c.globalAlpha = pulso; c.fillStyle = g2; c.fillRect(0, 0, W, H); c.restore(); }
       if (MODO === 'plinko') {
         pinos.forEach((p) => { const acende = U.clamp(1 - (t - p.brilho) / 0.16, 0, 1); c.save(); c.fillStyle = acende > 0 ? '#FFFFFF' : '#5A6B8C'; if (acende > 0) { c.shadowColor = '#FFFFFF'; c.shadowBlur = 30 * acende; }

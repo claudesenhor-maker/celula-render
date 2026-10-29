@@ -22,7 +22,7 @@ const desenhar=function desenhar(fonte, comum, acao, objeto, tempo = 1, atores =
   new Function('document', 'MOTORES', 'observar', instrumentada)(
     {createElement: () => ({getContext: () => b})}, motores,
     (nome, x, y) => objetos.push({nome, x, y}));
-  const spec = {w:1080, h:1920, titulo:'', cenas:[{
+  const spec = {qualidade:'legado',w:1080, h:1920, titulo:'', cenas:[{
     ini:0, fim:3.4, acao, objeto, atores, cenario:'mercado',
     texto:'It was on sale. That counts as free.', quem:'Hero',
     hud:{hp:88, ouro:150, nivel:7, energia:48}

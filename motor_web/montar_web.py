@@ -27,6 +27,7 @@ import subprocess
 import sys
 import tempfile
 import wave
+import shutil
 
 AQUI = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.dirname(AQUI))          # work/
@@ -324,7 +325,19 @@ def main():
     spec_render = os.path.join(tmp, "spec_render.json")
     json.dump(spec, open(spec_render, "w", encoding="utf-8"), ensure_ascii=False)
     mudo = os.path.join(tmp, "mudo.mp4")
-    subprocess.run(["node", os.path.join(AQUI, "render_web.mjs"), "--spec", spec_render, "--saida", mudo], check=True)
+    try:
+        subprocess.run(["node", os.path.join(AQUI, "render_web.mjs"), "--spec", spec_render, "--saida", mudo], check=True)
+    finally:
+        # Inclusive reprovações precisam ficar disponíveis fora da pasta temporária.
+        if os.path.isdir(mudo + ".previas"):
+            shutil.copytree(mudo + ".previas", a.saida + ".previas", dirs_exist_ok=True)
+        if os.path.isfile(mudo + ".direcao.json"):
+            relatorio = json.load(open(mudo + ".direcao.json", encoding="utf-8"))
+            for rodada in relatorio.get("historico", []):
+                for quadro in rodada.get("quadros", []):
+                    quadro["arquivo"] = os.path.basename(a.saida) + ".previas/" + os.path.basename(quadro["arquivo"])
+            json.dump(relatorio, open(a.saida + ".direcao.json", "w", encoding="utf-8"), ensure_ascii=False, indent=2)
+    spec = json.load(open(mudo + ".spec.json", encoding="utf-8"))
     try:
         for c, a_ in zip(spec["cenas"], json.load(open(mudo + ".acoes.json", encoding="utf-8"))):
             if a_:

@@ -303,6 +303,7 @@
     }
 
     // ---------- o quadro ----------
+    const vinheta = U.camada(W,H,g=>{const v=g.createRadialGradient(W/2,H/2,H*.3,W/2,H/2,H*.75);v.addColorStop(0,'rgba(0,0,0,0)');v.addColorStop(1,'rgba(0,0,0,.42)');g.fillStyle=v;g.fillRect(0,0,W,H);});
     function quadro(t) {
       const { c: cena, k, local } = U.cenaEm(spec, t);
       const f = Math.round(t * (spec.fps || 30));
@@ -326,10 +327,10 @@
       }
       U.cartaz(c, spec, t, { fonte: '74px Rye, serif', y: 150, fundo: '#0D0C0B', borda: '#E9E1CB', cor: '#E9E1CB', altura_linha: 92, dur: 2.8 });
       // pelicula: grao, risco, cintilacao, vinheta
-      c.globalAlpha = 0.9; c.drawImage(graos[f % graos.length], 0, 0, W, H); c.globalAlpha = 1;
+      c.globalAlpha = spec.pelicula_intensidade == null ? 0.32 : U.clamp(Number(spec.pelicula_intensidade)||0,0,1); c.drawImage(graos[f % graos.length], 0, 0, W, H); c.globalAlpha = 1;
       if (r() < 0.18) { c.strokeStyle = 'rgba(20,18,16,.35)'; c.lineWidth = 3; const x = r() * W; c.beginPath(); c.moveTo(x, 0); c.lineTo(x + (r() - 0.5) * 40, H); c.stroke(); }
       c.fillStyle = 'rgba(255,250,235,' + (0.04 * r()).toFixed(3) + ')'; c.fillRect(0, 0, W, H);
-      const v = c.createRadialGradient(W / 2, H / 2, H * 0.3, W / 2, H / 2, H * 0.75); v.addColorStop(0, 'rgba(0,0,0,0)'); v.addColorStop(1, 'rgba(0,0,0,.55)'); c.fillStyle = v; c.fillRect(0, 0, W, H);
+      c.drawImage(vinheta,0,0);
       c.restore();
       // IRIS: abre no comeco, fecha no fim (e o loop recomeca da iris)
       // 23/10 (retencao): sem iris ABRINDO -- 0,6 s de tela preta no comeco era o

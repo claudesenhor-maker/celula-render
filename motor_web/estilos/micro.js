@@ -32,8 +32,8 @@
     if (T3) U3.estudio(R, sc, T, { exposicao: 1.05, reflexo: false });
     const corOk = (x, p) => (/^#[0-9a-fA-F]{3,6}$/.test(String(x || '')) ? x : p);
     const M = (cor, tipo, op) => {
-      const m = T3 ? U3.material(T, cor, tipo || 'plastico') : new T.MeshStandardMaterial({ color: cor, roughness: 0.6 });
-      if (op != null) { m.transparent = true; m.opacity = op; m.userData.opacidadeBase = op; }
+      const m = T3 ? U3.material(T, cor, tipo === 'tecido' ? 'pele' : tipo || 'pele') : new T.MeshStandardMaterial({ color: cor, roughness: 0.6 });
+      if (op != null) { m.transparent = true; m.opacity = op; m.depthWrite = op >= 1; m.userData.opacidadeBase = op; }
       return m;
     };
     const rnd = U.rng(String(spec.semente || spec.fila_id || 'micro'));
@@ -66,12 +66,14 @@
     const soltaTijolo = (spec.cenas || []).some((q) => q.acao === 'efeito' && q.efeito === 'esfolia'), matTij = M('#F7DCCB', 'tecido');
     const tijolos = [];
     for (let fila = 0; fila < 3; fila++) for (let x = -LX + 0.22 - (fila % 2) * 0.2; x < LX - 0.1; x += 0.44) for (let z = -LZ + 0.2; z < LZ; z += 0.4) {
-      const m = new T.Mesh(geoCaixa, soltaTijolo ? M('#F7DCCB', 'tecido') : matTij); const y = -0.04 - fila * 0.075;
-      m.scale.set(0.4, 0.055, 0.36); m.position.set(x, y, z); pele.add(m);
+      const m = soltaTijolo ? new T.Mesh(geoCaixa, M('#F7DCCB', 'tecido')) : new T.Object3D(); const y = -0.04 - fila * 0.075;
+      m.scale.set(0.4, 0.055, 0.36); m.position.set(x, y, z); if(soltaTijolo)pele.add(m);
       tijolos.push({ m, x, y, z, fila, r: rnd() });
     }
+    const tijInst = soltaTijolo ? null : new T.InstancedMesh(geoCaixa, matTij, tijolos.length);
+    if(tijInst){tijInst.instanceMatrix.setUsage(T.DynamicDrawUsage);pele.add(tijInst);}
     // epiderme: celulas (instanciadas: centenas de esferas a custo de uma)
-    const geoCel = new T.SphereGeometry(0.5, 20, 14);
+    const geoCel = new T.SphereGeometry(0.5, 16, 10);
     const celulas = []; for (let y = Y_CORNEA - 0.12; y > Y_DERME + 0.08; y -= 0.17) for (let x = -LX + 0.12; x < LX; x += 0.2) for (let z = 0.15; z < LZ; z += 0.25)
       celulas.push({ x: x + (rnd() - 0.5) * 0.05, y: y + (rnd() - 0.5) * 0.04, z, s: 0.17 + rnd() * 0.03, basal: y < Y_DERME + 0.25 });
     const celInst = new T.InstancedMesh(geoCel, M('#F0B3A0', 'tecido'), celulas.length); pele.add(celInst);
@@ -160,12 +162,14 @@
       melInst.instanceMatrix.needsUpdate = true;
       // barreira: antes ha' frestas (tijolos tortos e a argamassa rala); depois tudo alinha
       const fresta = ef.barreira != null ? 1 - bar : 0;
-      tijolos.forEach((b) => {
+      tijolos.forEach((b, indice) => {
         const solta = ef.esfolia != null && b.fila === 0 && b.r < 0.55 ? U.suave(U.clamp(esf * 1.3 - b.r * 0.6, 0, 1)) : 0;
         b.m.position.set(b.x + (b.r - 0.5) * 0.06 * fresta, b.y + solta * (0.9 + b.r * 1.4), b.z);
         b.m.rotation.set((b.r - 0.5) * 0.25 * fresta + solta * b.r * 2, 0, (b.r - 0.5) * 0.3 * fresta + solta * (b.r - 0.5) * 3);
         if (soltaTijolo) { b.m.material.opacity = 1 - solta; b.m.material.transparent = solta > 0; } b.m.visible = solta < 0.99;
+        if(tijInst){b.m.updateMatrix();tijInst.setMatrixAt(indice,b.m.matrix);}
       });
+      if(tijInst)tijInst.instanceMatrix.needsUpdate=true;
       argamassa.material.opacity = ef.barreira != null ? 0.25 + 0.7 * bar : 0.55;
       argamassa.material.emissive = argamassa.material.emissive || new T.Color(); argamassa.material.emissive.set('#FFC93C').multiplyScalar(0.45 * bar * (0.6 + 0.4 * Math.sin(t * 5)));
       gotas.forEach((g, n) => { const s = g.s * U.clamp(hid * 1.4 - g.d * 0.4, 0, 1); m4.compose(v1.set(g.x, g.y + Math.sin(t * 1.5 + n) * 0.015, g.z), q0, new T.Vector3(s, s, s)); gotaInst.setMatrixAt(n, m4); });
@@ -259,7 +263,7 @@
         if (!desce && pr <= 0.5) r.g.visible = false;
       });
       sol.position.set(cam.position.x * 0.4 + 2.5, 5, 4);
-      R.render(sc, cam); c.drawImage(gl, 0, 0, W, H);
+      U3.render(R, sc, cam, spec, t); c.drawImage(gl, 0, 0, W, H);
 
       topoLivre = t < 3.4 || (cn.hud && typeof cn.hud !== 'object' && local > 0.3) ? 480 : 0;
       // etiquetas
@@ -279,7 +283,7 @@
       U.cartaz(c, spec, t, { fonte: '84px "Lilita One", sans-serif', y: 150, fundo: '#FFD23F', borda: '#2A1E3C', cor: '#2A1E3C', altura_linha: 100, dur: 3.0 });
       U.legenda(c, spec, t, { fonte: '96px "Lilita One", sans-serif', y: H * 0.76, cor: '#FFFFFF', cor_ativa: '#FFD23F', contorno: 18, cor_contorno: '#2A1E3C', caixa: true, por_vez: 3 });
     }
-    return { quadro };
+    return { quadro, dispose: () => U3.liberar(R, sc) };
   }
   MOTORES.micro = { criar };
 })();

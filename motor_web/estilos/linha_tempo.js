@@ -95,7 +95,9 @@
           U.rr(c, 0, 0, bw, bh, 30); c.fillStyle = 'rgba(255,255,255,0.96)'; c.fill(); c.fillStyle = m.cor; U.rr(c, 0, 0, 22, bh, 11); c.fill();
           c.save(); c.translate(105, bh / 2); c.scale(62, 62); c.fillStyle = m.cor; c.strokeStyle = m.cor; ICONES[m.icone](c); c.restore();
           c.fillStyle = '#16202C'; c.textAlign = 'left'; c.textBaseline = 'top'; c.font = '86px "Lilita One", sans-serif'; { const lw = c.measureText(anoTxt(m.ano)).width; if (lw > bw - 220) c.font = Math.floor(86 * (bw - 220) / lw) + 'px "Lilita One", sans-serif'; } c.fillText(anoTxt(m.ano), 190, 34);
-          c.font = '46px "Lilita One", sans-serif'; U.linhas(c, m.evento.toUpperCase(), bw - 220).slice(0, 2).forEach((l, n) => c.fillText(l, 190, 140 + n * 54));
+          c.font = '46px "Lilita One", sans-serif';
+          const texto = U.textoAjustado(c, String(spec.cenas[j].evento || m.evento).toUpperCase(), bw - 220, 125, 26);
+          texto.linhas.forEach((l, n) => c.fillText(l, 190, 140 + n * texto.lh));
         }
         c.restore();
       });
