@@ -94,7 +94,7 @@ No GitHub Actions, URL usa a variável `VIDEO_REVISOR_URL` e token usa o secret 
 
 As fixtures não representam todos os roteiros possíveis. A validação dos motores legados Python cobriu o helper de codificação, geração de prévias, ponte HTTP com aceitação/reprovação e sintaxe dos pontos integrados; não substitui renderizar vídeos completos com os assets reais desses canais.
 
-Comparativos: [3D](comparacao-3d.jpg), [2D](comparacao-2d.jpg), [quadro extraído do MP4 pixel](pixel-exportado.png).
+Comparativos: [3D](comparativos.html#3d), [2D](comparativos.html#2d), [quadro extraído do MP4 pixel](comparativos.html#pixel).
 
 Tempos orientativos de três quadros após o primeiro, no mesmo navegador/VM com SwiftShader, incluindo leitura e PNG. Não são benchmark estatístico nem medição de vídeo inteiro. Valores negativos indicam menor tempo; pequenas diferenças podem ser ruído de carga da VM. Órbita aceita custo maior para a cor/superfície mais correta, com halo caro fora do padrão.
 
