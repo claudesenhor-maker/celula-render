@@ -88,6 +88,7 @@
       for (let j = 0; j < i; j++) Object.assign(atual, spec.cenas[j].hud || {});
       const alvo = Object.assign({}, atual, cn.hud || {}), q = U.saida(U.clamp(k * 3, 0, 1));
       const out = {}; for (const key in alvo) out[key] = U.lerp(atual[key], alvo[key], q);
+      out.ouroAntes = atual.ouro;
       out.caiu = (cn.hud && cn.hud.hp != null && cn.hud.hp < atual.hp && k < 0.4) || (cn.hud && cn.hud.ouro != null && cn.hud.ouro < atual.ouro && k < 0.4);
       return out;
     }
@@ -147,7 +148,7 @@
           sprite(at[0], 70, yb, 0, 1); objeto(item, 98, 184 - Math.floor(k * 3) * 2); break;
         }
         case 'dorme': sprite(at[0], 112, 112, 0, 1); px(106, 150, 66, 18, PAL.branco); break;
-        case 'compra': case 'recebe': { sprite(at[0], 70, yb, 0, 1); for (let i = 0; i < 6; i++) { const q = (local * 1.5 + i / 6) % 1; objeto('moeda', 80 + Math.sin(i * 2) * 20, cn.acao === 'recebe' ? 40 + q * 150 : 180 - q * 150); } if (cn.objeto && cn.objeto !== 'moeda') objeto(cn.objeto, 98, yb + 30); break; }
+        case 'compra': case 'recebe': { sprite(at[0], 70, yb, 0, 1); const h = hudEm(t); if (cn.acao === 'compra' || !Number.isFinite(cn.hud?.ouro) || !Number.isFinite(h.ouroAntes) || cn.hud.ouro > h.ouroAntes) for (let i = 0; i < 6; i++) { const q = (local * 1.5 + i / 6) % 1; objeto('moeda', 80 + Math.sin(i * 2) * 20, cn.acao === 'recebe' ? 40 + q * 150 : 180 - q * 150); } if (cn.objeto && cn.objeto !== 'moeda') objeto(cn.objeto, 98, yb + 30); break; }
         case 'batalha': sprite(at[0], 14, 162, passo, 1, 3); sprite(at[1] || 'chefe', 96, 76, 0, -1, 6); if (k > 0.45 && k < 0.6) px(0, 0, PW, PH, '#FFFFFF66'); extraUI = 'batalha'; break;
         case 'level_up': sprite(at[0], 84, yb, 0, 1); for (let i = 0; i < 10; i++) { const q = (local * 2 + i / 10) % 1; px(80 + (i % 5) * 6, yb + 20 - q * 120, 2, 2, i % 2 ? PAL.amarelo : PAL.branco); } extraUI = 'level'; break;
         case 'game_over': {
