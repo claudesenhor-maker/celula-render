@@ -25,6 +25,10 @@ jobs:
           python-version: '3.11'
       - run: npm ci --prefix motor_web --no-audit --no-fund
       - run: pip install Pillow
+      - name: Dependência de exportação
+        run: |
+          sudo apt-get update -qq || true
+          sudo apt-get install -y -qq ffmpeg
       - run: npm test --prefix motor_web
       - run: python -m unittest discover -s motor_web/tests -p 'test_*.py'
       - name: Amostras dos 14 motores
