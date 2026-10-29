@@ -2506,11 +2506,14 @@ def render(pasta_partes, spec, saida, tmpdir=None, amostra=0):
     # (`loudnorm`), e o motor do palito -- que e' o da PRODUCAO -- nao foi
     # tocado: mexer no audio do que vai ao ar pede medida em video publicado,
     # nao em laboratorio.
+    from qualidade_render import codificacao, conferir_quadros
+    perfil_video = codificacao(spec, n / FPS)
+    conferir_quadros(spec, fd, n, FPS, saida)
     cmd = ["ffmpeg", "-y", "-v", "error", "-framerate", str(FPS),
            "-i", os.path.join(fd, "%05d.png"), "-i", audio,
            "-af", spec.get("loudnorm", "loudnorm=I=-13:LRA=13:TP=-1.0"),
-           "-c:v", "libx264", "-preset", "medium", "-crf", "23", "-maxrate", "4M",
-           "-bufsize", "8M", "-pix_fmt", "yuv420p", "-c:a", "aac", "-b:a", "160k",
+           "-c:v", "libx264", "-preset", "medium", "-crf", perfil_video["crf"], "-maxrate", perfil_video["maxrate"],
+           "-bufsize", perfil_video["bufsize"], "-pix_fmt", "yuv420p", "-c:a", "aac", "-b:a", "160k",
            "-shortest", "-movflags", "+faststart", saida]
     subprocess.run(cmd, check=True)
     # Os quadros so servem ao ffmpeg: ~2.000 PNG (3-5 GB) por video, e a serie

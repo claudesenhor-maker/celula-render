@@ -105,17 +105,25 @@
     const projM = (x, y) => [AREA.cx + (x - VIEW.x) * VIEW.s, AREA.cy - (y - VIEW.y) * VIEW.s];
 
     // o mundo desenhado 3 vezes (-360, 0, +360): a camera pode cruzar o Pacifico
+    const paisPaths = new WeakMap();
     function caminhoPais(p, dx) {
-      c.beginPath();
+      let cache=paisPaths.get(p);
+      if(!cache){const base=new Path2D();
       p.a.forEach((r) => {
         for (let j = 0; j < r.length; j += 2) {
-          const q = projM(r[j] + dx, merc(r[j + 1]));
+          const q = [r[j], -merc(r[j + 1])];
           // trecho que pula mais de meio mundo e' a costura da linha de data:
           // ligar os dois lados riscaria a tela de ponta a ponta
-          if (j && Math.abs(r[j] - r[j - 2]) < 180) c.lineTo(q[0], q[1]); else c.moveTo(q[0], q[1]);
+          if (j && Math.abs(r[j] - r[j - 2]) < 180) base.lineTo(q[0], q[1]); else base.moveTo(q[0], q[1]);
         }
-        c.closePath();
+        base.closePath();
       });
+      cache={base, projetados:new Map()};paisPaths.set(p,cache);}
+      const key=[VIEW.x,VIEW.y,VIEW.s,dx].join(':');
+      if(!cache.projetados.has(key)){const path=new Path2D();
+        path.addPath(cache.base,new DOMMatrix([VIEW.s,0,0,VIEW.s,AREA.cx+(dx-VIEW.x)*VIEW.s,AREA.cy+VIEW.y*VIEW.s]));
+        if(cache.projetados.size>=3)cache.projetados.clear();cache.projetados.set(key,path);}
+      return cache.projetados.get(key);
     }
     function visivel(p, dx) {
       const a = projM(p.b[0] + dx, merc(p.b[3])), b = projM(p.b[2] + dx, merc(p.b[1]));
@@ -141,15 +149,15 @@
       const cp = copias();
       // sombra da terra (da relevo ao papel)
       c.save(); c.fillStyle = 'rgba(0,0,0,0.35)'; c.translate(0, 5);
-      cp.forEach((dx) => MUNDO.forEach((p) => { if (visivel(p, dx)) { caminhoPais(p, dx); c.fill('evenodd'); } })); c.restore();
+      cp.forEach((dx) => MUNDO.forEach((p) => { if (visivel(p, dx)) c.fill(caminhoPais(p,dx),'evenodd'); })); c.restore();
       c.lineJoin = 'round';
       cp.forEach((dx) => MUNDO.forEach((p, i) => {
         if (!visivel(p, dx)) return;
-        caminhoPais(p, dx);
-        c.fillStyle = p.n === 'Antarctica' ? '#E8EEF2' : '#EDE3CC'; c.fill('evenodd');
+        const path=caminhoPais(p, dx);
+        c.fillStyle = p.n === 'Antarctica' ? '#E8EEF2' : '#EDE3CC'; c.fill(path,'evenodd');
         const d = destaques[i];
-        if (d && d.a > 0.01) { c.globalAlpha = d.a; c.fillStyle = d.cor; c.fill('evenodd'); c.globalAlpha = 1; }
-        c.lineWidth = d && d.a > 0.3 ? 3 : 1.2; c.strokeStyle = d && d.a > 0.3 ? '#FFFFFF' : '#A8977A'; c.stroke();
+        if (d && d.a > 0.01) { c.globalAlpha = d.a; c.fillStyle = d.cor; c.fill(path,'evenodd'); c.globalAlpha = 1; }
+        c.lineWidth = d && d.a > 0.3 ? 3 : 1.2; c.strokeStyle = d && d.a > 0.3 ? '#FFFFFF' : '#A8977A'; c.stroke(path);
       }));
     }
 

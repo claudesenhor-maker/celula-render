@@ -20,6 +20,7 @@
     const R = new T.WebGLRenderer({ canvas: gl, antialias: true, preserveDrawingBuffer: true, logarithmicDepthBuffer: true }); R.setSize(W, H, false);
     const cam = new T.PerspectiveCamera(36, W / H, 0.001, 1e8);
     const sc = new T.Scene();
+    const nevoa=new T.Fog('#DDEFFF',10,100);sc.fog=nevoa;
     const num = (v, a, b, p) => { const x = Number(v); return Number.isFinite(x) ? U.clamp(x, a, b) : p; };
     const vet = (v, a, b, p) => [0, 1, 2].map((i) => num(Array.isArray(v) ? v[i] : undefined, a, b, p[i]));
     const corOk = (x, p) => (/^#[0-9a-fA-F]{3,6}$/.test(String(x || '')) ? x : p);
@@ -60,6 +61,7 @@
           add('capsula', roupa, [-0.135, 0.63, 0], [0.11, 0.36, 0.11], [0, 0, 6], 'tecido'); add('capsula', roupa, [0.135, 0.63, 0], [0.11, 0.36, 0.11], [0, 0, -6], 'tecido');
           add('esfera', pele, [-0.152, 0.445, 0], [0.055, 0.06, 0.055]); add('esfera', pele, [0.152, 0.445, 0], [0.055, 0.06, 0.055]);
           add('cilindro', pele, [0, 0.835, 0], [0.055, 0.04, 0.055]); add('esfera', pele, [0, 0.91, 0], [0.14, 0.16, 0.15]);
+          for(const lado of [-1,1])add('esfera','#302523',[lado*.025,.92,.071],[.014,.016,.012]);
           add('meia_esfera', '#3A2618', [0, 0.925, -0.006], [0.148, 0.15, 0.158], null, 'tecido'); break; }
         case 'arvore':
           add('cilindro', '#6E4A2C', [0, 0.22, 0], [0.07, 0.44, 0.07], null, 'madeira');
@@ -173,12 +175,12 @@
       cam.position.set(cx + Math.sin(ang) * d, cy * 0.55, Math.cos(ang) * d); cam.near = d / 5000; cam.far = d * 400; cam.updateProjectionMatrix();
       if (T3) {
         chao.position.set(cx, 0, 0); chao.scale.setScalar(d * 60);
-        sc.fog = new T.Fog('#DDEFFF', d * 6, d * 45);
+        nevoa.near=d*6;nevoa.far=d*45;
         sol.position.set(cx + d * 0.7, d * 1.4, d * 1.1); sol.target.position.set(cx, 0, 0);
         const sh = sol.shadow.camera; sh.left = sh.bottom = -d * 1.2; sh.right = sh.top = d * 1.2; sh.near = d * 0.05; sh.far = d * 5; sh.updateProjectionMatrix();
       }
       cam.lookAt(cx, miraY, 0);
-      R.render(sc, cam); c.drawImage(gl, 0, 0, W, H);
+      U3.render(R, sc, cam, spec, t); c.drawImage(gl, 0, 0, W, H);
       // etiquetas: nome e altura de cada item visivel, ancoradas no topo dele.
       // 23/10: o destaque e' posto primeiro; etiqueta secundaria que bateria
       // numa ja posta some (antes "1 BARCO" cobria "KHALIFA"); nunca sai pela
@@ -231,7 +233,7 @@
       U.cartaz(c, spec, t, { fonte: '84px "Lilita One", sans-serif', y: 170, fundo: '#FFD23F', borda: '#1B1B1B', cor: '#1B1B1B', altura_linha: 100, dur: 3.0 });
       U.legenda(c, spec, t, { fonte: '100px "Lilita One", sans-serif', y: H * 0.70, cor: '#FFFFFF', cor_ativa: '#FFD23F', contorno: 18, caixa: true, por_vez: 3 });
     }
-    return { quadro };
+    return { quadro, dispose: () => U3.liberar(R, sc) };
   }
   MOTORES.escala = { criar };
 })();

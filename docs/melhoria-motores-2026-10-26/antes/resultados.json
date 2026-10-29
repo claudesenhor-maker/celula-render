@@ -1,0 +1,352 @@
+[
+  {
+    "estilo": "lowpoly",
+    "erros": [],
+    "fontes": [
+      true,
+      true,
+      true,
+      true,
+      true,
+      true
+    ],
+    "ms": [
+      1813.2072339653969,
+      797.8861979842186,
+      742.5849789977074,
+      553.6757850050926
+    ],
+    "diferenca": {
+      "max": 0,
+      "alterados": 0,
+      "maiores4": 0
+    },
+    "suavizacao": true,
+    "metricas": null
+  },
+  {
+    "estilo": "mecanismo",
+    "erros": [],
+    "fontes": [
+      true,
+      true,
+      true,
+      true,
+      true,
+      true
+    ],
+    "ms": [
+      11348.465819001198,
+      1883.5300889611244,
+      1844.0323140025139,
+      1806.5545960068703
+    ],
+    "diferenca": {
+      "max": 0,
+      "alterados": 0,
+      "maiores4": 0
+    },
+    "suavizacao": true,
+    "metricas": null
+  },
+  {
+    "estilo": "escala",
+    "erros": [],
+    "fontes": [
+      true,
+      true,
+      true,
+      true,
+      true,
+      true
+    ],
+    "ms": [
+      9953.415984988213,
+      1658.5236220359802,
+      1212.7017059922218,
+      1233.3767229914665
+    ],
+    "diferenca": {
+      "max": 0,
+      "alterados": 0,
+      "maiores4": 0
+    },
+    "suavizacao": true,
+    "metricas": null
+  },
+  {
+    "estilo": "animal",
+    "erros": [],
+    "fontes": [
+      true,
+      true,
+      true,
+      true,
+      true,
+      true
+    ],
+    "ms": [
+      1334.7110019922256,
+      974.5373349785805,
+      1033.2650590538979,
+      957.3597009778023
+    ],
+    "diferenca": {
+      "max": 0,
+      "alterados": 0,
+      "maiores4": 0
+    },
+    "suavizacao": true,
+    "metricas": null
+  },
+  {
+    "estilo": "orbita",
+    "erros": [],
+    "fontes": [
+      true,
+      true,
+      true,
+      true,
+      true,
+      true
+    ],
+    "ms": [
+      900.9350980520248,
+      555.6641980409622,
+      558.2139959931374,
+      514.2560360431671
+    ],
+    "diferenca": {
+      "max": 0,
+      "alterados": 0,
+      "maiores4": 0
+    },
+    "suavizacao": true,
+    "metricas": null
+  },
+  {
+    "estilo": "micro",
+    "erros": [],
+    "fontes": [
+      true,
+      true,
+      true,
+      true,
+      true,
+      true
+    ],
+    "ms": [
+      4536.051567018032,
+      2319.2317749857903,
+      2545.745800971985,
+      2803.846898972988
+    ],
+    "diferenca": {
+      "max": 3,
+      "alterados": 1489,
+      "maiores4": 0
+    },
+    "suavizacao": true,
+    "metricas": null
+  },
+  {
+    "estilo": "pixel",
+    "erros": [],
+    "fontes": [
+      true,
+      true,
+      true,
+      true,
+      true,
+      true
+    ],
+    "ms": [
+      588.7498909831047,
+      746.896036028862,
+      340.47740000486374,
+      289.3182219862938
+    ],
+    "diferenca": {
+      "max": 0,
+      "alterados": 0,
+      "maiores4": 0
+    },
+    "suavizacao": true,
+    "metricas": null
+  },
+  {
+    "estilo": "mangueira",
+    "erros": [],
+    "fontes": [
+      true,
+      true,
+      true,
+      true,
+      true,
+      true
+    ],
+    "ms": [
+      1273.867438018322,
+      1261.611877977848,
+      1234.08688300848,
+      1076.293694972992
+    ],
+    "diferenca": {
+      "max": 23,
+      "alterados": 254,
+      "maiores4": 106
+    },
+    "suavizacao": true,
+    "metricas": null
+  },
+  {
+    "estilo": "silhueta",
+    "erros": [],
+    "fontes": [
+      true,
+      true,
+      true,
+      true,
+      true,
+      true
+    ],
+    "ms": [
+      1624.6949560046196,
+      1487.2669820189476,
+      1033.0988219976425,
+      926.8612859845161
+    ],
+    "diferenca": {
+      "max": 0,
+      "alterados": 0,
+      "maiores4": 0
+    },
+    "suavizacao": true,
+    "metricas": null
+  },
+  {
+    "estilo": "mapa",
+    "erros": [],
+    "fontes": [
+      true,
+      true,
+      true,
+      true,
+      true,
+      true
+    ],
+    "ms": [
+      1420.1155470013618,
+      1362.565967977047,
+      1429.8686190247536,
+      1583.8798530101776
+    ],
+    "diferenca": {
+      "max": 0,
+      "alterados": 0,
+      "maiores4": 0
+    },
+    "suavizacao": true,
+    "metricas": null
+  },
+  {
+    "estilo": "linha_tempo",
+    "erros": [],
+    "fontes": [
+      true,
+      true,
+      true,
+      true,
+      true,
+      true
+    ],
+    "ms": [
+      566.5191599726677,
+      603.0317190289497,
+      550.2487660050392,
+      506.2370619773865
+    ],
+    "diferenca": {
+      "max": 0,
+      "alterados": 0,
+      "maiores4": 0
+    },
+    "suavizacao": true,
+    "metricas": null
+  },
+  {
+    "estilo": "quiz",
+    "erros": [],
+    "fontes": [
+      true,
+      true,
+      true,
+      true,
+      true,
+      true
+    ],
+    "ms": [
+      379.3935859799385,
+      353.9584509730339,
+      340.7247330546379,
+      322.5824350118637
+    ],
+    "diferenca": {
+      "max": 0,
+      "alterados": 0,
+      "maiores4": 0
+    },
+    "suavizacao": true,
+    "metricas": null
+  },
+  {
+    "estilo": "fisica",
+    "erros": [],
+    "fontes": [
+      true,
+      true,
+      true,
+      true,
+      true,
+      true
+    ],
+    "ms": [
+      770.2043659687042,
+      1277.495602965355,
+      1182.8586969971657,
+      992.2061910033226
+    ],
+    "diferenca": {
+      "max": 0,
+      "alterados": 0,
+      "maiores4": 0
+    },
+    "suavizacao": true,
+    "metricas": null
+  },
+  {
+    "estilo": "enem",
+    "erros": [],
+    "fontes": [
+      true,
+      true,
+      true,
+      true,
+      true,
+      true
+    ],
+    "ms": [
+      774.8072969913483,
+      793.3204489946365,
+      725.553573012352,
+      717.0021730065346
+    ],
+    "diferenca": {
+      "max": 0,
+      "alterados": 0,
+      "maiores4": 0
+    },
+    "suavizacao": true,
+    "metricas": null
+  }
+]

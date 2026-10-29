@@ -57,7 +57,8 @@
   }
 
   function criar(tela, spec, U) {
-    const c = tela.getContext('2d'), W = spec.w, H = spec.h;
+    let c = tela.getContext('2d');const W = spec.w, H = spec.h;
+    let gradeCache=null,gradeIndice=-1;
     const num = (v, a, b, p) => { const x = Number(v); return Number.isFinite(x) ? U.clamp(x, a, b) : p; };
     const corOk = (x, p) => (/^#[0-9a-fA-F]{3,6}$/.test(String(x || '')) ? x : p);
     const FUNDOS = ['#FFD23F', '#3EC1F3', '#7CFF8A', '#FF8FB1', '#B07CFF', '#FF9F45'];
@@ -123,13 +124,14 @@
       // a grade: dentro da zona segura (topo 520, rodape H-520, margem direita do app)
       const x0 = 50, x1 = W - 190, y0 = 540, y1 = H - 540, cw = (x1 - x0) / nv.col, ch = (y1 - y0) / nv.lin;
       const tam = Math.floor(Math.min(cw * 0.86, ch * 0.86));
-      c.save(); c.font = tam + 'px "Lilita One", sans-serif'; c.textAlign = 'center'; c.textBaseline = 'middle'; c.fillStyle = '#111';
-      // cartao branco atras da grade nas formas/icones (contraste com qualquer fundo)
-      if (nv.tipo !== 'letras') { U.rr(c, x0 - 16, y0 - 16, x1 - x0 + 32, y1 - y0 + 32, 28); c.fillStyle = 'rgba(255,255,255,0.88)'; c.fill(); c.fillStyle = '#111'; }
       const entra = U.saida(U.clamp((local + 0.25) / 0.35, 0, 1));   // 23/10: a grade ja' aparece no 1o quadro
       // CAMUFLAGEM (23/10): do nivel de dificuldade 3 em diante todos os itens
       // tremem um pouco de lugar -- o diferente deixa de "saltar" da grade
       const rj = U.rng((spec.semente || 'quiz') + ':j' + i), tremor = nv.nivelDif >= 3 ? (nv.nivelDif - 2) * 0.05 : 0;
+      const desenharGrade=()=>{
+      c.save(); c.font = tam + 'px "Lilita One", sans-serif'; c.textAlign = 'center'; c.textBaseline = 'middle'; c.fillStyle = '#111';
+      // cartao branco atras da grade nas formas/icones (contraste com qualquer fundo)
+      if (nv.tipo !== 'letras') { U.rr(c, x0 - 16, y0 - 16, x1 - x0 + 32, y1 - y0 + 32, 28); c.fillStyle = 'rgba(255,255,255,0.88)'; c.fill(); c.fillStyle = '#111'; }
       for (let k = 0; k < nv.col * nv.lin; k++) {
         const jx = (rj() - 0.5) * 2 * tremor * cw, jy = (rj() - 0.5) * 2 * tremor * ch, jc = rj();
         const cx = x0 + (k % nv.col + 0.5) * cw + jx, cy = y0 + (Math.floor(k / nv.col) + 0.5) * ch + jy;
@@ -139,6 +141,12 @@
         if (nv._tom) { c.restore(); nv._tom = null; }
       }
       c.restore();
+      };
+      if(entra>=1){
+        if(gradeIndice!==i){const principal=c;
+          gradeCache=U.camada(W,H,g=>{c=g;try{desenharGrade();}finally{c=principal;}});gradeIndice=i;}
+        c.drawImage(gradeCache,0,0);
+      } else desenharGrade();
       if (resta <= 0) {
         const k = nv.alvo, rj2 = U.rng((spec.semente || 'quiz') + ':j' + i); let jx = 0, jy = 0;
         for (let n = 0; n <= k; n++) { const a = rj2(), b = rj2(); rj2(); if (n === k) { jx = (a - 0.5) * 2 * tremor * cw; jy = (b - 0.5) * 2 * tremor * ch; } }

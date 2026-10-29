@@ -1,0 +1,214 @@
+[
+  {
+    "motor": "lowpoly",
+    "antes_ms": 698,
+    "depois_ms": 699,
+    "variacao_pct": 0.2,
+    "primeiro_quadro_ms": 1789,
+    "metricas": {
+      "chamadas": 164,
+      "triangulos": 7652,
+      "geometrias": 288,
+      "texturas": 5
+    },
+    "diferenca_temporal": {
+      "max": 0,
+      "alterados": 0,
+      "maiores4": 0
+    }
+  },
+  {
+    "motor": "mecanismo",
+    "antes_ms": 1845,
+    "depois_ms": 1726,
+    "variacao_pct": -6.4,
+    "primeiro_quadro_ms": 11471,
+    "metricas": {
+      "chamadas": 22,
+      "triangulos": 17162,
+      "geometrias": 11,
+      "texturas": 5
+    },
+    "diferenca_temporal": {
+      "max": 0,
+      "alterados": 0,
+      "maiores4": 0
+    }
+  },
+  {
+    "motor": "escala",
+    "antes_ms": 1368,
+    "depois_ms": 1161,
+    "variacao_pct": -15.2,
+    "primeiro_quadro_ms": 9934,
+    "metricas": {
+      "chamadas": 20,
+      "triangulos": 15538,
+      "geometrias": 9,
+      "texturas": 4
+    },
+    "diferenca_temporal": {
+      "max": 0,
+      "alterados": 0,
+      "maiores4": 0
+    }
+  },
+  {
+    "motor": "animal",
+    "antes_ms": 988,
+    "depois_ms": 983,
+    "variacao_pct": -0.6,
+    "primeiro_quadro_ms": 1803,
+    "metricas": {
+      "chamadas": 18,
+      "triangulos": 9182,
+      "geometrias": 12,
+      "texturas": 3
+    },
+    "diferenca_temporal": {
+      "max": 0,
+      "alterados": 0,
+      "maiores4": 0
+    }
+  },
+  {
+    "motor": "orbita",
+    "antes_ms": 543,
+    "depois_ms": 639,
+    "variacao_pct": 17.7,
+    "primeiro_quadro_ms": 1605,
+    "metricas": {
+      "chamadas": 2,
+      "triangulos": 3968,
+      "geometrias": 3,
+      "texturas": 2
+    },
+    "diferenca_temporal": {
+      "max": 0,
+      "alterados": 0,
+      "maiores4": 0
+    }
+  },
+  {
+    "motor": "micro",
+    "antes_ms": 2556,
+    "depois_ms": 2267,
+    "variacao_pct": -11.3,
+    "primeiro_quadro_ms": 4198,
+    "metricas": {
+      "chamadas": 23,
+      "triangulos": 260026,
+      "geometrias": 27,
+      "texturas": 1
+    },
+    "diferenca_temporal": {
+      "max": 5,
+      "alterados": 1251,
+      "maiores4": 2
+    }
+  },
+  {
+    "motor": "pixel",
+    "antes_ms": 459,
+    "depois_ms": 334,
+    "variacao_pct": -27.3,
+    "primeiro_quadro_ms": 503,
+    "metricas": null,
+    "diferenca_temporal": {
+      "max": 0,
+      "alterados": 0,
+      "maiores4": 0
+    }
+  },
+  {
+    "motor": "mangueira",
+    "antes_ms": 1191,
+    "depois_ms": 995,
+    "variacao_pct": -16.5,
+    "primeiro_quadro_ms": 1222,
+    "metricas": null,
+    "diferenca_temporal": {
+      "max": 181,
+      "alterados": 2550,
+      "maiores4": 1453
+    }
+  },
+  {
+    "motor": "silhueta",
+    "antes_ms": 1149,
+    "depois_ms": 979,
+    "variacao_pct": -14.8,
+    "primeiro_quadro_ms": 1567,
+    "metricas": null,
+    "diferenca_temporal": {
+      "max": 0,
+      "alterados": 0,
+      "maiores4": 0
+    }
+  },
+  {
+    "motor": "mapa",
+    "antes_ms": 1459,
+    "depois_ms": 1402,
+    "variacao_pct": -3.9,
+    "primeiro_quadro_ms": 1431,
+    "metricas": null,
+    "diferenca_temporal": {
+      "max": 1,
+      "alterados": 1,
+      "maiores4": 0
+    }
+  },
+  {
+    "motor": "linha_tempo",
+    "antes_ms": 553,
+    "depois_ms": 530,
+    "variacao_pct": -4.1,
+    "primeiro_quadro_ms": 547,
+    "metricas": null,
+    "diferenca_temporal": {
+      "max": 0,
+      "alterados": 0,
+      "maiores4": 0
+    }
+  },
+  {
+    "motor": "quiz",
+    "antes_ms": 339,
+    "depois_ms": 324,
+    "variacao_pct": -4.6,
+    "primeiro_quadro_ms": 356,
+    "metricas": null,
+    "diferenca_temporal": {
+      "max": 0,
+      "alterados": 0,
+      "maiores4": 0
+    }
+  },
+  {
+    "motor": "fisica",
+    "antes_ms": 1151,
+    "depois_ms": 961,
+    "variacao_pct": -16.5,
+    "primeiro_quadro_ms": 743,
+    "metricas": null,
+    "diferenca_temporal": {
+      "max": 0,
+      "alterados": 0,
+      "maiores4": 0
+    }
+  },
+  {
+    "motor": "enem",
+    "antes_ms": 745,
+    "depois_ms": 426,
+    "variacao_pct": -42.8,
+    "primeiro_quadro_ms": 970,
+    "metricas": null,
+    "diferenca_temporal": {
+      "max": 0,
+      "alterados": 0,
+      "maiores4": 0
+    }
+  }
+]

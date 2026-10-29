@@ -19,7 +19,7 @@ const desenhar=function desenhar(fonte, comum, nome, tempo, acao = 'come', atore
   if (fonte.split(marcador).length!==2) throw new Error('Sonda objeto divergente');
   new Function('document','MOTORES','observar',fonte.replace(marcador,marcador+' observar(nome,x,y);'))(
     {createElement:()=>({getContext:()=>b})},motores,(nome,x,y)=>objetos.push({nome,x,y,inicio:pixels.length}));
-  const spec={w:1080,h:1920,titulo:'',cenas:[{ini:0,fim:3.4,acao,objeto:nome,atores,
+  const spec={qualidade:'legado',w:1080,h:1920,titulo:'',cenas:[{ini:0,fim:3.4,acao,objeto:nome,atores,
     cenario:'cozinha',texto:nome==='cafe'?'You used COFFEE.':'You used ITEM.',quem:'System',hud:{hp:38,ouro:40,nivel:7,energia:9}}]};
   motores.pixel.criar({getContext:()=>c},spec,janela.U).quadro(tempo);
   return {objetos,pixels,composicao};

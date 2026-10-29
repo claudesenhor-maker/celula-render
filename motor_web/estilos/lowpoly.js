@@ -1,4 +1,4 @@
-﻿// LOWPOLY v2 -- "E se...?" narrado num mundo-diorama 3D (22/10; v1 de 13/10, HISTORICO §109).
+// LOWPOLY v2 -- "E se...?" narrado num mundo-diorama 3D (22/10; v1 de 13/10, HISTORICO §109).
 //
 // POR QUE A v2 (22/10, ordem do dono: "a animacao do TINY WHAT IF esta ruim,
 // foque na qualidade e no SENTIDO da animacao")
@@ -134,6 +134,8 @@
     const cam = new T.PerspectiveCamera(38, W / H, 0.1, 400);
 
     // ---------------------------------------------------------- utilitarios
+    const caixas = new Map();
+    const caixaGeo=(...dims)=>{const k=dims.join(':');if(!caixas.has(k))caixas.set(k,new T.BoxGeometry(...dims));return caixas.get(k);};
     const matCache = {};
     const M = (cor, o) => {
       o = o || {};
@@ -149,12 +151,13 @@
     // ~1,3 s por quadro no SwiftShader do runner. Geometria nao-indexada com a
     // normal da FACE em cada vertice da o mesmo facetado no Lambert, que
     // ilumina por vertice.
-    const facetada = new WeakSet();
+    const facetada = new WeakMap();
     function facetar(raiz) {
-      raiz.traverse((q) => {
-        if (!q.isMesh || facetada.has(q.geometry) || q.material.isMeshBasicMaterial) return; // Basic nao usa normal (e a aurora ondula os vertices originais)
-        let g = q.geometry; if (g.index) g = g.toNonIndexed();
-        g.computeVertexNormals(); facetada.add(g); q.geometry = g;
+      raiz.traverse(q=>{
+        if(!q.isMesh || q.material.isMeshBasicMaterial)return;
+        if(facetada.has(q.geometry)){q.geometry=facetada.get(q.geometry);return;}
+        const original=q.geometry,g=original.index?original.toNonIndexed():original;
+        g.computeVertexNormals();facetada.set(original,g);facetada.set(g,g);q.geometry=g;
       });
     }
     // SOMBRA DE CONTATO (22/10): a sombra projetada de verdade custava ~240 ms
@@ -218,33 +221,37 @@
     }
     function predio(w, h, d, cor, r) {
       const g = new T.Group();
-      const b = new T.Mesh(new T.BoxGeometry(w, h, d), M(cor)); b.position.y = h / 2; g.add(b);
+      const b = new T.Mesh(caixaGeo(w, h, d), M(cor)); b.position.y = h / 2; g.add(b);
       const jan = M('#FFE9A8', { emis: '#000000' }), janN = M('#FFD66B', { emis: '#B88A1A' });
       const anda = Math.max(1, Math.floor(h / 0.7));
       g.userData.janelas = [];
+      const gruposJan = new Map();
       // 23/10: janelas nas QUATRO faces (so' a da frente tinha, e ela olhava para o centro: da camera o predio era uma caixa lisa)
       for (let k = 0; k < anda; k++) for (let f = 0; f < 4; f++) for (const s of [-1, 1]) {
         if (r() < 0.22) continue;
         const larg = f % 2 ? d : w, prof = f % 2 ? w : d;
-        const j = new T.Mesh(new T.BoxGeometry(larg * 0.22, 0.28, 0.04), jan);
+        const j = new T.Mesh(caixaGeo(larg * 0.22, 0.28, 0.04), jan);
         const ang = (f * Math.PI) / 2; j.position.set(Math.sin(ang) * (prof / 2 + 0.02) + Math.cos(ang) * s * larg * 0.24, 0.45 + k * 0.7, Math.cos(ang) * (prof / 2 + 0.02) - Math.sin(ang) * s * larg * 0.24);
-        j.rotation.y = ang; g.add(j); g.userData.janelas.push(j);
+        j.rotation.y = ang; j.updateMatrix();
+        if(!gruposJan.has(larg))gruposJan.set(larg,[]);gruposJan.get(larg).push(j.matrix.clone());
       }
-      const laje = new T.Mesh(new T.BoxGeometry(w * 1.06, 0.14, d * 1.06), M(new T.Color(cor).multiplyScalar(0.78).getStyle())); laje.position.y = h + 0.07; g.add(laje);
+      gruposJan.forEach((matrizes,larg)=>{const inst=new T.InstancedMesh(caixaGeo(larg*.22,.28,.04),jan,matrizes.length);
+        matrizes.forEach((m,i)=>inst.setMatrixAt(i,m));g.add(inst);g.userData.janelas.push(inst);});
+      const laje = new T.Mesh(caixaGeo(w * 1.06, 0.14, d * 1.06), M(new T.Color(cor).multiplyScalar(0.78).getStyle())); laje.position.y = h + 0.07; g.add(laje);
       g.userData.matNoite = janN; g.userData.matDia = jan;
       return sombra(g, true, true);
     }
     function casa(cor) {
       const g = new T.Group();
-      const b = new T.Mesh(new T.BoxGeometry(1.2, 0.9, 1.0), M(cor || '#F3E3C3')); b.position.y = 0.45; g.add(b);
+      const b = new T.Mesh(caixaGeo(1.2, 0.9, 1.0), M(cor || '#F3E3C3')); b.position.y = 0.45; g.add(b);
       const t = new T.Mesh(new T.ConeGeometry(0.98, 0.7, 4), M('#C8553D')); t.position.y = 1.25; t.rotation.y = Math.PI / 4; g.add(t);
-      const p = new T.Mesh(new T.BoxGeometry(0.28, 0.45, 0.04), M('#7A5232')); p.position.set(0, 0.23, 0.51); g.add(p);
+      const p = new T.Mesh(caixaGeo(0.28, 0.45, 0.04), M('#7A5232')); p.position.set(0, 0.23, 0.51); g.add(p);
       return sombra(g, true, true);
     }
     function carro(cor) {
       const g = new T.Group();
-      const b = new T.Mesh(new T.BoxGeometry(0.9, 0.3, 0.45), M(cor)); b.position.y = 0.25; g.add(b);
-      const t = new T.Mesh(new T.BoxGeometry(0.5, 0.22, 0.4), M('#DDEBF5')); t.position.set(-0.05, 0.5, 0); g.add(t);
+      const b = new T.Mesh(caixaGeo(0.9, 0.3, 0.45), M(cor)); b.position.y = 0.25; g.add(b);
+      const t = new T.Mesh(caixaGeo(0.5, 0.22, 0.4), M('#DDEBF5')); t.position.set(-0.05, 0.5, 0); g.add(t);
       [[-0.3, 0.23], [0.3, 0.23], [-0.3, -0.23], [0.3, -0.23]].forEach(([x, z]) => { const r = new T.Mesh(new T.CylinderGeometry(0.11, 0.11, 0.08, 8), M('#222')); r.rotation.x = Math.PI / 2; r.position.set(x, 0.11, z); g.add(r); });
       return sombra(g);
     }
@@ -283,7 +290,7 @@
       g.userData.lava = lava;
       return sombra(g, true, true);
     }
-    function gelo() { const m = new T.Mesh(new T.BoxGeometry(1.1, 2.9, 1.1), new T.MeshLambertMaterial({  color: '#BFE8FF', transparent: true, opacity: 0.55 })); m.position.y = 1.45; return m; }
+    function gelo() { const m = new T.Mesh(caixaGeo(1.1, 2.9, 1.1), new T.MeshLambertMaterial({  color: '#BFE8FF', transparent: true, opacity: 0.55 })); m.position.y = 1.45; return m; }
 
     // -------------------------------------------------------------- pessoa
     function pessoa(r, idx) {
@@ -305,13 +312,13 @@
         const b = new T.Mesh(new T.SphereGeometry(0.017, 5, 4), M('#FFFFFF')); b.position.set(x + 0.016, 0.05, 0.355); cabeca.add(b); olhos.push(b); });
       const bocaRiso = new T.Mesh(new T.TorusGeometry(0.075, 0.018, 4, 8, Math.PI), M('#5A2020')); bocaRiso.rotation.z = Math.PI; bocaRiso.position.set(0, -0.12, 0.315); cabeca.add(bocaRiso);
       const bocaO = new T.Mesh(new T.CircleGeometry(0.055, 8), M('#5A2020')); bocaO.position.set(0, -0.14, 0.335); cabeca.add(bocaO);
-      const bocaReta = new T.Mesh(new T.BoxGeometry(0.11, 0.022, 0.02), M('#5A2020')); bocaReta.position.set(0, -0.13, 0.335); cabeca.add(bocaReta);
+      const bocaReta = new T.Mesh(caixaGeo(0.11, 0.022, 0.02), M('#5A2020')); bocaReta.position.set(0, -0.13, 0.335); cabeca.add(bocaReta);
       const membros = [];
       [[-0.55, 1.6, 'b'], [0.55, 1.6, 'b'], [-0.2, 0.58, 'p'], [0.2, 0.58, 'p']].forEach(([x, y, tipo]) => {
         const piv = new T.Group(); piv.position.set(x, y, 0);
         const l = tipo === 'b' ? 0.75 : 0.6;
         const m = new T.Mesh(new T.CylinderGeometry(tipo === 'b' ? 0.11 : 0.14, tipo === 'b' ? 0.1 : 0.13, l, 6), M(tipo === 'b' ? roupa : COR.calca)); m.position.y = -l / 2; piv.add(m);
-        const ponta = new T.Mesh(tipo === 'b' ? new T.IcosahedronGeometry(0.12, 0) : new T.BoxGeometry(0.22, 0.12, 0.34), M(tipo === 'b' ? pele : '#2B2B2B'));
+        const ponta = new T.Mesh(tipo === 'b' ? new T.IcosahedronGeometry(0.12, 0) : caixaGeo(0.22, 0.12, 0.34), M(tipo === 'b' ? pele : '#2B2B2B'));
         ponta.position.set(0, -l, tipo === 'b' ? 0 : 0.06); piv.add(ponta);
         corpo.add(piv); membros.push(piv);
       });
@@ -413,7 +420,7 @@
     // Limites: 12 objetos e 14 partes por objeto; numeros fora da faixa sao
     // cortados. O tempo e' o `k` da cena (0..1): nada guarda estado entre quadros.
     const FORMAS = {
-      caixa: () => new T.BoxGeometry(1, 1, 1), esfera: () => new T.IcosahedronGeometry(0.5, 1), cone: () => new T.ConeGeometry(0.5, 1, 7),
+      caixa: () => caixaGeo(1, 1, 1), esfera: () => new T.IcosahedronGeometry(0.5, 1), cone: () => new T.ConeGeometry(0.5, 1, 7),
       cilindro: () => new T.CylinderGeometry(0.5, 0.5, 1, 8), icosa: () => new T.IcosahedronGeometry(0.5, 0), toro: () => new T.TorusGeometry(0.4, 0.12, 6, 12),
       piramide: () => new T.ConeGeometry(0.6, 1, 4),
     };
@@ -484,6 +491,7 @@
       const hemi = new T.HemisphereLight('#ffffff', '#5a6078', hora === 'noite' ? 0.35 : 0.62); sc.add(hemi); o.hemi = hemi;
       const sol = new T.DirectionalLight(hora === 'entardecer' || hora === 'quente' ? '#FFD2A0' : '#ffffff', hora === 'noite' ? 0.25 : 0.85);
       sol.position.set(8, 14, 9); sc.add(sol); o.sol = sol;
+      const recorte=new T.DirectionalLight('#BBD8F5',hora==='noite'?.10:.18);recorte.position.set(-7,5,-8);sc.add(recorte);
 
       if (globo) {
         const pts = new T.BufferGeometry(), v = [];
@@ -546,12 +554,12 @@
           if (cen === 'oceano' || acao === 'seca') { for (let k = 0; k < 5; k++) { const f = peixe(['#F28C38', '#F2B705', '#E46A86'][k % 3]); f.scale.setScalar(1.6); sc.add(f); o.peixes.push(f); } }
           if (cen === 'oceano' && acao !== 'inunda' && acao !== 'seca') { // 23/10: o pier onde a gente fica (antes: em pe dentro da agua)
             const pier = new T.Group(); const tabua = M('#A0703F'), tabua2 = M('#8C5F33');
-            for (let k = 0; k < 9; k++) { const tb = new T.Mesh(new T.BoxGeometry(4.2, 0.12, 0.34), k % 2 ? tabua : tabua2); tb.position.set(0, 0.42, -0.2 + k * 0.36); pier.add(tb); }
+            for (let k = 0; k < 9; k++) { const tb = new T.Mesh(caixaGeo(4.2, 0.12, 0.34), k % 2 ? tabua : tabua2); tb.position.set(0, 0.42, -0.2 + k * 0.36); pier.add(tb); }
             [[-1.9, -0.2], [1.9, -0.2], [-1.9, 2.7], [1.9, 2.7]].forEach(([x, z]) => { const st = new T.Mesh(new T.CylinderGeometry(0.1, 0.1, 1.2, 6), tabua2); st.position.set(x, 0.0, z); pier.add(st); });
             sombra(pier); sc.add(pier); o.pier = pier;
           }
           if (cen === 'oceano') { // um barquinho
-            const b = new T.Group(); const casco = new T.Mesh(new T.BoxGeometry(1.4, 0.35, 0.6), M('#C8553D')); b.add(casco); const v2 = new T.Mesh(new T.ConeGeometry(0.45, 1.1, 3), M('#FFFFFF')); v2.position.y = 0.7; b.add(v2); sombra(b); sc.add(b); o.barco = b;
+            const b = new T.Group(); const casco = new T.Mesh(caixaGeo(1.4, 0.35, 0.6), M('#C8553D')); b.add(casco); const v2 = new T.Mesh(new T.ConeGeometry(0.45, 1.1, 3), M('#FFFFFF')); v2.position.y = 0.7; b.add(v2); sombra(b); sc.add(b); o.barco = b;
           }
         }
         for (let k = 0; k < 4; k++) { const n = nuvem(r, hora === 'tempestade' || hora === 'cinza' ? '#9AA3B0' : '#FFFFFF'); n.userData = { a: r() * 6.28, h: 7 + r() * 3, d: 5 + r() * 4 }; sc.add(n); o.nuvens.push(n); }
@@ -592,7 +600,7 @@
       if (acao === 'lua_perto' && !globo) { const lu = new T.Mesh(new T.IcosahedronGeometry(3.2, 2), M('#CFCAC0')); lu.position.set(-5, 16, -26); sc.add(lu); o.luaGrande = lu; }
       if (!globo && (acao === 'compara' || acao === 'cresce' || acao === 'encolhe')) {
         // a regua de altura ao lado de quem cresce: a escala precisa de referencia
-        const regua = new T.Group(); for (let k = 0; k < 10; k++) { const s = new T.Mesh(new T.BoxGeometry(0.18, 0.5, 0.18), M(k % 2 ? '#1B1B1B' : '#FFD23F')); s.position.y = 0.25 + k * 0.5; regua.add(s); }
+        const regua = new T.Group(); for (let k = 0; k < 10; k++) { const s = new T.Mesh(caixaGeo(0.18, 0.5, 0.18), M(k % 2 ? '#1B1B1B' : '#FFD23F')); s.position.y = 0.25 + k * 0.5; regua.add(s); }
         regua.position.set(1.6, 0, 1.4); sc.add(regua); o.regua = regua;
       }
       Object.values(fx).forEach((f) => { if (f.isPoints || f.isLineSegments) sc.add(f); });
@@ -778,7 +786,7 @@
       if (fx.flutua) { const a = fx.flutua.geometry.attributes.position; for (let j = 0; j < a.count; j++) { const x0 = (rr() - 0.5) * 12, z0 = (rr() - 0.5) * 10, f = rr(); a.setXYZ(j, x0 + Math.sin(t * 0.5 + j) * 0.5, U.saida(k) * (1 + f * 6) + 0.2, z0); } a.needsUpdate = true; }
       animarCriados(o, k, t);
       // a ultima coisa do 3D: o desenho
-      R.render(o.sc, cam);
+      U3.render(R, o.sc, cam, spec, t);
     }
 
     // --------------------------------------------------- camada 2D por cima
@@ -842,7 +850,7 @@
       U.cartaz(c, spec, t, { fonte: '84px "Lilita One", sans-serif', y: 170, fundo: '#FFD23F', borda: '#1B1B1B', cor: '#1B1B1B', altura_linha: 100, dur: 3.0 });
       U.legenda(c, spec, t, { fonte: '104px "Lilita One", sans-serif', y: H * 0.70, cor: '#FFFFFF', cor_ativa: '#FFD23F', contorno: 18, caixa: true, por_vez: 3 });
     }
-    return { quadro };
+    return { quadro, dispose: () => { cenas.forEach(o => U3.liberarCena(o.sc)); R.dispose(); R.forceContextLoss(); } };
   }
   MOTORES.lowpoly = { criar };
 })();

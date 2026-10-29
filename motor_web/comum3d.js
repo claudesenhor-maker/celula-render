@@ -13,6 +13,32 @@
 (function (G) {
   'use strict';
   const U3 = {};
+  // Recursos pertencem a uma preparação; nenhuma qualidade varia pelo relógio.
+  U3.iniciar = function (spec) {
+    U3.spec = spec; U3._texturas = new Map();
+    U3.perfil = spec.qualidade === 'rapido' ? 'rapido' : 'detalhado';
+  };
+  U3.render = function (R, sc, cam, spec, t) {
+    const cn = window.U.cenaEm(spec, t).c, z = Number((cn.plano || {}).zoom);
+    const zoom = Number.isFinite(z) ? Math.max(0.75, Math.min(1.35, z)) : 1;
+    if(cam.zoom !== zoom){cam.zoom=zoom;cam.updateProjectionMatrix();}
+    const exposicao=Number((cn.plano || {}).exposicao);
+    R.toneMappingExposure=Number.isFinite(exposicao)?Math.max(.75,Math.min(1.3,exposicao)):(R._exposicaoBase || 1);
+    R.render(sc, cam);
+    window.METRICAS_RENDER = { chamadas: R.info.render.calls, triangulos: R.info.render.triangles,
+      geometrias: R.info.memory.geometries, texturas: R.info.memory.textures };
+  };
+  U3.liberarCena = function (sc) {
+    const gs = new Set(), ms = new Set(), ts = new Set();
+    sc.traverse(o => { if (o.geometry) gs.add(o.geometry); if (o.material)
+      (Array.isArray(o.material) ? o.material : [o.material]).forEach(m => ms.add(m)); });
+    ms.forEach(m => { Object.values(m).forEach(v => { if (v && v.isTexture) ts.add(v); }); m.dispose(); });
+    [sc.background, sc.environment].forEach(v => { if (v && v.isTexture) ts.add(v); });
+    sc.traverse(o => { if (o.shadow && o.shadow.map) o.shadow.map.dispose(); });
+    gs.forEach(g => g.dispose()); ts.forEach(t => t.dispose());
+    if(sc.userData.reflexo)sc.userData.reflexo.dispose();
+  };
+  U3.liberar = function (R, sc) { U3.liberarCena(sc); R.dispose(); R.forceContextLoss(); };
 
   // ------------------------------------------------------------------ luz
   U3.estudio = function (R, sc, T, opc) {
@@ -20,6 +46,7 @@
     R.outputEncoding = T.sRGBEncoding;
     R.toneMapping = T.ACESFilmicToneMapping;
     R.toneMappingExposure = opc.exposicao || 1.05;
+    R._exposicaoBase=R.toneMappingExposure;
     R.shadowMap.enabled = opc.sombra !== false;
     R.shadowMap.type = T.PCFShadowMap;
     // o reflexo NAO vai em sc.environment: no Chrome sem GPU (Actions) ele custava
@@ -28,7 +55,9 @@
     U3._env = null;
     if (T.RoomEnvironment && opc.reflexo !== false) {
       const pm = new T.PMREMGenerator(R);
-      U3._env = pm.fromScene(new T.RoomEnvironment(), 0.04).texture;
+      const sala = new T.RoomEnvironment(), rt = pm.fromScene(sala, 0.04);
+      U3._env = rt.texture;
+      sc.userData.reflexo = rt; U3.liberarCena(sala);
       pm.dispose();
     }
   };
@@ -99,7 +128,7 @@
       ns.forEach((g) => { pos.set(g.attributes.position.array, o * 3); nor.set(g.attributes.normal.array, o * 3); o += g.attributes.position.count; });
       const out = new T.BufferGeometry(); out.setAttribute('position', new T.BufferAttribute(pos, 3)); out.setAttribute('normal', new T.BufferAttribute(nor, 3)); return out;
     }
-    return {
+    const formas = {
       caixa: caixaArred, cubo: caixaArred, caixa_viva: () => new T.BoxGeometry(1, 1, 1),
       esfera: () => new T.SphereGeometry(0.5, 40, 24), meia_esfera: meiaEsfera,
       cone: () => new T.ConeGeometry(0.5, 1, 40), cilindro: () => new T.CylinderGeometry(0.5, 0.5, 1, 40),
@@ -109,6 +138,10 @@
       icosa: () => new T.IcosahedronGeometry(0.5, 0), piramide: () => new T.ConeGeometry(0.6, 1, 4),
       engrenagem: () => engrenagem(14), engrenagem_pequena: () => engrenagem(9), mola, seta, parafuso, capsula, helice,
     };
+    // As malhas transformam-se por Object3D; a geometria fica imutável e partilhada.
+    const cache = {};
+    return Object.fromEntries(Object.entries(formas).map(([nome, criar]) =>
+      [nome, () => cache[nome] || (cache[nome] = criar())]));
   };
   // curvas lisas (as outras ficam com a normal da propria forma)
   U3.FORMAS_LISAS = ['esfera', 'meia_esfera', 'cone', 'cilindro', 'tubo', 'disco', 'anel', 'toro', 'mola', 'capsula', 'helice', 'seta'];
@@ -119,15 +152,36 @@
     latao: { roughness: 0.3, metalness: 0.9 }, plastico: { roughness: 0.42, metalness: 0 }, borracha: { roughness: 0.92, metalness: 0 },
     madeira: { roughness: 0.75, metalness: 0 }, vidro: { roughness: 0.05, metalness: 0, opacity: 0.32 }, ceramica: { roughness: 0.22, metalness: 0 },
     tecido: { roughness: 1, metalness: 0 }, pedra: { roughness: 0.9, metalness: 0 },
+    pele: { roughness: 0.74, metalness: 0 }, fluido: { roughness: 0.15, metalness: 0, opacity: 0.6 },
   };
   U3.material = function (T, cor, tipo, metalAntigo) {
     const m = MATERIAIS[String(tipo || '').toLowerCase()] || (metalAntigo ? MATERIAIS.metal : MATERIAIS.plastico);
     const reflete = m.metalness > 0.5 || m.opacity || m.roughness < 0.25;
-    const mat = new T.MeshStandardMaterial({ color: cor, roughness: m.roughness, metalness: m.metalness, transparent: true, opacity: m.opacity || 1,
+    const mat = new T.MeshStandardMaterial({ color: cor, roughness: m.roughness, metalness: m.metalness, transparent: !!m.opacity, opacity: m.opacity || 1, depthWrite: !m.opacity,
       envMap: reflete ? U3._env : null, envMapIntensity: 1 });
+    if (U3.perfil !== 'rapido' && (tipo === 'madeira' || (U3.spec || {}).microtextura === true && ['tecido', 'pedra', 'pele'].includes(tipo))) {
+      const key = 'superficie-' + tipo;
+      if (!U3._texturas) U3._texturas = new Map();
+      if (!U3._texturas.has(key)) {
+        const [cv, g] = tela(128, 128), r = rng(431);
+        g.fillStyle = '#ddd'; g.fillRect(0, 0, 128, 128);
+        for (let i = 0; i < 900; i++) { g.fillStyle = r() > 0.5 ? '#d0d0d0' : '#eeeeee';
+          g.fillRect(Math.floor(r()*128), Math.floor(r()*128), tipo === 'madeira' ? 18 : 1, tipo === 'tecido' ? 3 : 1); }
+        const tx = tex(T, cv, 3, 3); tx.encoding = T.LinearEncoding; U3._texturas.set(key, tx);
+      }
+      mat.bumpMap = U3._texturas.get(key); mat.bumpScale = tipo === 'madeira' ? 0.016 : 0.006;
+    }
     // a saida e' sRGB (U3.estudio): a cor em hex precisa ir para o espaco linear,
     // senao tudo sai lavado, cor de pastel
     mat.color.convertSRGBToLinear();
+    if(tipo === 'vidro') {
+      // Fresnel visual leve: centro mais transparente, reflexo preservado na borda.
+      // Compatível com r128, sem passe de transmissão/refração de tela inteira.
+      mat.onBeforeCompile = shader => { shader.fragmentShader=shader.fragmentShader.replace(
+        'gl_FragColor = vec4( outgoingLight, diffuseColor.a );',
+        'float bordaVidro=pow(1.0-abs(dot(normalize(normal),normalize(vViewPosition))),2.0); gl_FragColor=vec4(outgoingLight,diffuseColor.a*mix(0.18,1.0,bordaVidro));'); };
+      mat.customProgramCacheKey=()=> 'vidro-fresnel-r128-v1';
+    }
     mat.userData.opacidadeBase = m.opacity || 1;
     return mat;
   };
@@ -227,6 +281,17 @@
     sc.fog = new T.Fog(A.nevoa, raio * 1.1, raio * 2.6);
     sc.background = new T.Color(A.nevoa);
     sc.add(new T.HemisphereLight('#ffffff', A.nevoa, 0.35));
+    // Contexto em volume, nas laterais e atrás do assunto; malhas simples e reutilizadas.
+    if (U3.perfil !== 'rapido' && tipo !== 'prancheta' && tipo !== 'externo') {
+      const geo = new T.BoxGeometry(1, 1, 1), mat = new T.MeshLambertMaterial({color:'#746553'});
+      const adicionar = (x,y,z,sx,sy,sz) => { const m = new T.Mesh(geo, mat); m.position.set(x,y,z);m.scale.set(sx,sy,sz);sc.add(m); };
+      const un = Math.max(1, tam * 0.35), z = -raio * 0.65;
+      adicionar(-raio*0.56, un*1.8, z, un*1.5, un*0.09, un*0.5);
+      adicionar(-raio*0.56, un*0.9, z, un*1.5, un*0.09, un*0.5);
+      const potGeo = new T.CylinderGeometry(0.16,0.13,0.4,12);
+      for(let i=0;i<5;i++){const m=new T.Mesh(potGeo,new T.MeshLambertMaterial({color:['#B4C8CE','#C69E5F','#839A7B'][i%3]}));
+        m.position.set(-raio*0.56+(i-2)*un*0.23,un*2.04,z);m.scale.setScalar(un);sc.add(m);}
+    }
     return { raio, luz: A.luz, piso, parede };
   };
 

@@ -98,7 +98,7 @@
     }
 
     // ---------- cenario fixo ----------
-    function fundo(t) {
+    function pintarFundo(c) {
       const g = c.createLinearGradient(0, 0, 0, H); g.addColorStop(0, '#1A2620'); g.addColorStop(1, '#0E1612'); c.fillStyle = g; c.fillRect(0, 0, W, H);
       // moldura de madeira e a lousa
       U.rr(c, BX - 26, BY - 26, BW + 52, BH + 52, 22); c.fillStyle = '#7A4E25'; c.fill();
@@ -113,6 +113,8 @@
       c.fillStyle = '#5A3818'; c.fillRect(BX + 40, BY + BH + 26, BW - 80, 22);
       c.fillStyle = '#F4F1E6'; c.fillRect(BX + 120, BY + BH + 14, 70, 16); c.fillStyle = AMARELO; c.fillRect(BX + 220, BY + BH + 14, 56, 16);
     }
+    const fundoFixo = U.camada(W,H,pintarFundo);
+    function fundo() { c.drawImage(fundoFixo,0,0); }
     function etiquetaArea(cn, local) {
       const a = AREAS[cn.area], s = U.clamp(U.mola(local, 9), 0, 1.2);
       c.save(); c.translate(BX + 30, BY + 30); c.scale(s, s);

@@ -151,14 +151,15 @@
       c.restore();
       if (cn.objeto === 'raio' || hora === 'tempestade') { const q = (t * 0.7) % 1; if (q < 0.06) { c.fillStyle = 'rgba(235,240,255,' + (0.7 * (1 - q / 0.06)) + ')'; c.fillRect(0, 0, W, H); } }
     }
+    const vinheta = U.camada(W,H,g=>{const v=g.createRadialGradient(W/2,H/2,H*.35,W/2,H/2,H*.8);v.addColorStop(0,'rgba(0,0,0,0)');v.addColorStop(1,'rgba(0,0,0,.5)');g.fillStyle=v;g.fillRect(0,0,W,H);});
     function quadro(t) {
       const { c: cn, i, k, local } = U.cenaEm(spec, t);
       cena(cn, t, k, local);
       // passagem entre cenas: mergulho no preto de 0,3 s
       const borda = Math.min(t - cn.ini, cn.fim - t), dip = U.clamp(1 - borda / 0.18, 0, 1);
-      if (i > 0 && t - cn.ini < 0.18 || i < spec.cenas.length - 1 && cn.fim - t < 0.18) { c.fillStyle = 'rgba(0,0,0,' + dip.toFixed(3) + ')'; c.fillRect(0, 0, W, H); }
+      if (i > 0 && t - cn.ini < 0.18 || i < spec.cenas.length - 1 && cn.fim - t < 0.18) { c.fillStyle = 'rgba(0,0,0,' + (dip*0.4).toFixed(3) + ')'; c.fillRect(0, 0, W, H); }
       // vinheta de cinema
-      const v = c.createRadialGradient(W / 2, H / 2, H * 0.35, W / 2, H / 2, H * 0.8); v.addColorStop(0, 'rgba(0,0,0,0)'); v.addColorStop(1, 'rgba(0,0,0,.5)'); c.fillStyle = v; c.fillRect(0, 0, W, H);
+      c.drawImage(vinheta,0,0);
       U.cartaz(c, spec, t, { fonte: '700 76px Cinzel, serif', y: 170, cor: '#F3E7D0', contorno: 14, cor_contorno: 'rgba(0,0,0,.85)', altura_linha: 96, dur: 3.2 });
       U.legenda(c, spec, t, { fonte: '600 92px Oswald, sans-serif', y: H * 0.70, cor: '#FFFFFF', cor_ativa: '#FFC94A', contorno: 16, caixa: true, por_vez: 3 });
     }

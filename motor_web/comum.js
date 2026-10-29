@@ -20,6 +20,7 @@
 (function (G) {
   'use strict';
   const TAU = Math.PI * 2;
+  const quebraCache = new Map();
   const U = {
     TAU,
     clamp: (v, a, b) => Math.max(a, Math.min(b, v)),
@@ -51,13 +52,31 @@
     },
     // quebra o texto em linhas que cabem em `max` px
     linhas(c, texto, max) {
+      const key = c.font + '|' + max + '|' + String(texto || '');
+      if (quebraCache.has(key)) return quebraCache.get(key).slice();
       const out = []; let lin = '';
       String(texto || '').split(/\s+/).filter(Boolean).forEach((w) => {
         const tenta = lin ? lin + ' ' + w : w;
         if (c.measureText(tenta).width > max && lin) { out.push(lin); lin = w; } else lin = tenta;
       });
       if (lin) out.push(lin);
+      if (quebraCache.size > 512) quebraCache.clear();
+      quebraCache.set(key, out.slice());
       return out;
+    },
+    areaSegura(spec) {
+      return { x: spec.w * 0.035, y: spec.h * 0.078, w: spec.w * 0.79, h: spec.h * 0.66, cx: spec.w * 0.43 };
+    },
+    camada(w, h, pintar) {
+      const cv = document.createElement('canvas'); cv.width=w;cv.height=h;pintar(cv.getContext('2d'));return cv;
+    },
+    textoAjustado(c, texto, largura, altura, pxMin = 24) {
+      const fonte = c.font, m = /([\d.]+)px/.exec(fonte); let px = m ? Number(m[1]) : 40;
+      let linhas = U.linhas(c, texto, largura);
+      while (px > pxMin && (linhas.length * px * 1.35 > altura || linhas.some(l => c.measureText(l).width > largura))) {
+        px -= 2; c.font = fonte.replace(/[\d.]+px/, px + 'px'); linhas = U.linhas(c, texto, largura);
+      }
+      return { linhas, px, lh: px * 1.35, cabe: linhas.length * px * 1.35 <= altura && linhas.every(l => c.measureText(l).width <= largura) };
     },
     // O SELO DO ALTO (hud): antes cada estilo cortava em 14 caracteres e saia
     // "1.5 M AT THE S" (23/10). Agora corta so' entre palavras (ate `maxCar`)
@@ -83,11 +102,12 @@
       c.font = est.fonte; c.textAlign = 'left'; c.textBaseline = 'middle';
       const esp = c.measureText(' ').width;
       const larg = grupo.reduce((s, p) => s + c.measureText(est.caixa ? p.palavra.toUpperCase() : p.palavra).width, 0) + esp * (grupo.length - 1);
-      let x = spec.w / 2 - larg / 2; const y = est.y;
+      const area = U.areaSegura(spec), centroX = area.cx;
+      let x = centroX - larg / 2; const y = Math.min(est.y, spec.h * 0.70);
       const pop = U.mola(t - pw[g0].ini, 14);
       // palavra longa ("23-DEGREE") nunca sai pela borda: o grupo encolhe
-      const cabe = Math.min(1, (spec.w * 0.9) / Math.max(1, larg));
-      c.translate(spec.w / 2, y); c.scale(cabe * (0.85 + 0.15 * pop), cabe * (0.85 + 0.15 * pop)); c.translate(-spec.w / 2, -y);
+      const cabe = Math.min(1, (area.w - (est.contorno || 14)*2) / Math.max(1, larg));
+      c.translate(centroX, y); c.scale(cabe * (0.85 + 0.15 * pop), cabe * (0.85 + 0.15 * pop)); c.translate(-centroX, -y);
       grupo.forEach((p, k) => {
         const w = est.caixa ? p.palavra.toUpperCase() : p.palavra;
         const ativa = g0 + k === i;
@@ -110,13 +130,15 @@
       const ent = U.mola(t + 0.35, 11), sai = U.clamp((t - dur) / 0.4, 0, 1);
       c.save();
       c.font = est.fonte; c.textAlign = 'center'; c.textBaseline = 'middle';
-      const ls = U.linhas(c, est.caixa ? spec.titulo.toUpperCase() : spec.titulo, spec.w * 0.8);
-      const lh = est.altura_linha || 96, h = ls.length * lh + 60, w = Math.min(spec.w * 0.9, Math.max(...ls.map((l) => c.measureText(l).width)) + 90);
+      const area = U.areaSegura(spec);
+      const layout = U.textoAjustado(c, est.caixa ? spec.titulo.toUpperCase() : spec.titulo, area.w - 100, 280, 32);
+      const ls = layout.linhas;
+      const lh = Math.min(est.altura_linha || 96, layout.lh), h = ls.length * lh + 60, w = Math.min(area.w, Math.max(...ls.map((l) => c.measureText(l).width)) + 90);
       // Alguns motores reservam espaço abaixo do título para o cronômetro.
       // O limite inclui a mola de entrada e títulos com mais de duas linhas.
       const altura = Math.min(h, est.altura_max || h);
       const escala = Math.min(ent, est.altura_max ? est.altura_max / h : ent) * (1 - sai * 0.3);
-      c.translate(spec.w / 2, est.y + altura / 2); c.scale(escala, escala); c.globalAlpha = 1 - sai;
+      c.translate(area.cx, est.y + altura / 2); c.scale(escala, escala); c.globalAlpha = 1 - sai;
       if (est.fundo) { U.rr(c, -w / 2, -h / 2, w, h, est.raio || 28); c.fillStyle = est.fundo; c.fill(); if (est.borda) { c.lineWidth = 8; c.strokeStyle = est.borda; c.stroke(); } }
       ls.forEach((l, k) => {
         const y = -h / 2 + 30 + lh / 2 + k * lh;
@@ -147,10 +169,12 @@ function ritmoInicio(spec, t) {
 // A cópia raster funciona para Canvas 2D e WebGL e não altera MOTOR.quadro(t).
 // `saida` é só o destino: seu conteúdo é sobrescrito integralmente a cada chamada.
 function quadroComRitmo(tela, spec, t, saida) {
-  const z = ritmoInicio(spec, t).zoom, w = tela.width, h = tela.height;
+  // O zoom deve acontecer na câmera/mundo. Texto/HUD final não se recorta.
+  const z = spec.ritmo_raster === true && spec.estilo !== 'pixel' ? ritmoInicio(spec, t).zoom : 1, w = tela.width, h = tela.height;
   const ctx = saida.getContext('2d');
   ctx.setTransform(1, 0, 0, 1, 0, 0);
   ctx.clearRect(0, 0, w, h);
+  ctx.imageSmoothingEnabled = spec.estilo !== 'pixel';
   ctx.drawImage(tela, (w-w/z)/2, (h-h/z)/2, w/z, h/z, 0, 0, w, h);
   return saida;
 }

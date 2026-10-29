@@ -18,49 +18,67 @@
     const R = new T.WebGLRenderer({ canvas: gl, antialias: true, preserveDrawingBuffer: true }); R.setSize(W, H, false);
     const cam = new T.PerspectiveCamera(36, W / H, 0.01, 5000);
     const sc = new T.Scene();
+    U3.estudio(R, sc, T, { reflexo: false, sombra: false, exposicao: 1.1 });
+    const habitat = String((spec.animal || {}).habitat || 'savana');
+    const HAB = { savana: ['#C9A46A','#F0C890','#5E7A3A'], floresta: ['#6F8254','#92B1A5','#305C48'], gelo: ['#E2EBF1','#CFDFEB','#BBCAD8'], deserto: ['#D6AE78','#E2C7A5','#B89870'] }[habitat] || ['#C9A46A','#F0C890','#5E7A3A'];
     const num = (v, a, b, p) => { const x = Number(v); return Number.isFinite(x) ? U.clamp(x, a, b) : p; };
     const vet = (v, a, b, p) => [0, 1, 2].map((i) => num(Array.isArray(v) ? v[i] : undefined, a, b, p[i]));
     const corOk = (x, p) => (/^#[0-9a-fA-F]{3,6}$/.test(String(x || '')) ? x : p);
-    const M = (cor) => new T.MeshStandardMaterial({ color: cor, roughness: 0.8, metalness: 0.02, flatShading: true });
-    const F = {
-      caixa: () => new T.BoxGeometry(1, 1, 1), esfera: () => new T.IcosahedronGeometry(0.5, 1), cone: () => new T.ConeGeometry(0.5, 1, 9),
-      cilindro: () => new T.CylinderGeometry(0.5, 0.5, 1, 12), icosa: () => new T.IcosahedronGeometry(0.5, 0), toro: () => new T.TorusGeometry(0.4, 0.12, 8, 18),
-      piramide: () => new T.ConeGeometry(0.6, 1, 4), capsula: () => (T.CapsuleGeometry ? new T.CapsuleGeometry(0.3, 0.4, 4, 10) : new T.CylinderGeometry(0.5, 0.5, 1, 14)),
-    };
+    const materiais = new Map();
+    const M = (cor, tipo='pele') => { const k=cor+tipo; if(!materiais.has(k)) materiais.set(k,U3.material(T,cor,tipo));return materiais.get(k); };
+    const F = U3.formas(T);
+    // Curvas suaves no protagonista; não gastar tesselação de macro nos olhos/fundo.
+    const esferaAnimal=new T.SphereGeometry(.5,24,16),cilindroAnimal=new T.CylinderGeometry(.5,.5,1,20);
+    F.esfera=()=>esferaAnimal;F.cilindro=()=>cilindroAnimal;
 
     // ---- savana ao entardecer: ceu quente, chao de terra com faixas de capim
     { const cv = document.createElement('canvas'); cv.width = 4; cv.height = 256; const g = cv.getContext('2d'); const gr = g.createLinearGradient(0, 0, 0, 256);
-      gr.addColorStop(0, '#2B5C8A'); gr.addColorStop(0.55, '#E8A86A'); gr.addColorStop(0.8, '#F6D29A'); gr.addColorStop(1, '#F6D29A'); g.fillStyle = gr; g.fillRect(0, 0, 4, 256); sc.background = new T.CanvasTexture(cv); }
-    sc.fog = new T.Fog('#F0C890', 40, 260);
+      gr.addColorStop(0, '#2B5C8A'); gr.addColorStop(0.55, '#E8A86A'); gr.addColorStop(0.8, '#F6D29A'); gr.addColorStop(1, '#F6D29A'); g.fillStyle = gr; g.fillRect(0, 0, 4, 256); sc.background = new T.CanvasTexture(cv); sc.background.encoding = T.sRGBEncoding; }
+    sc.fog = new T.Fog(HAB[1], 40, 260);
     sc.add(new T.HemisphereLight('#FFF4E0', '#6B5A3A', 0.7));
     const sol = new T.DirectionalLight('#FFE2B8', 0.95); sol.position.set(-6, 9, 7); sc.add(sol);
-    const texChao = (() => { const cv = document.createElement('canvas'); cv.width = cv.height = 256; const g = cv.getContext('2d'); g.fillStyle = '#C9A46A'; g.fillRect(0, 0, 256, 256);
+    const texChao = (() => { const cv = document.createElement('canvas'); cv.width = cv.height = 256; const g = cv.getContext('2d'); g.fillStyle = HAB[0]; g.fillRect(0, 0, 256, 256);
       const r = U.rng(5); for (let i = 0; i < 900; i++) { g.fillStyle = r() < 0.5 ? 'rgba(120,96,50,0.25)' : 'rgba(150,170,80,0.28)'; g.fillRect(r() * 256, r() * 256, 2 + r() * 6, 2 + r() * 3); }
-      const t = new T.CanvasTexture(cv); t.wrapS = t.wrapT = T.RepeatWrapping; return t; })();
-    const chao = new T.Mesh(new T.PlaneGeometry(2000, 2000), new T.MeshStandardMaterial({ map: texChao, roughness: 1 })); chao.rotation.x = -Math.PI / 2; sc.add(chao);
+      const t = new T.CanvasTexture(cv); t.encoding = T.sRGBEncoding; t.wrapS = t.wrapT = T.RepeatWrapping; return t; })();
+    const chao = new T.Mesh(new T.PlaneGeometry(2000, 2000), new T.MeshLambertMaterial({ map: texChao })); chao.rotation.x = -Math.PI / 2; sc.add(chao);
     // acacias e pedras ao longe (paisagem fixa, da semente)
-    { const r = U.rng(spec.semente || 'savana');
-      for (let i = 0; i < 26; i++) { const g = new T.Group(); const d = 30 + r() * 150, a = (r() - 0.5) * Math.PI * 1.6;
-        const tr = new T.Mesh(F.cilindro(), M('#5B4128')); tr.scale.set(0.35, 3, 0.35); tr.position.y = 1.5; g.add(tr);
-        const cp = new T.Mesh(F.esfera(), M('#5E7A3A')); cp.scale.set(5, 1.3, 4); cp.position.y = 3.3; g.add(cp);
-        g.position.set(Math.sin(a) * d, 0, -Math.cos(a) * d); g.scale.setScalar(0.8 + r() * 1.4); sc.add(g); } }
+    { const r = U.rng(spec.semente || 'savana'), n = 26;
+      const fundoMat=cor=>new T.MeshLambertMaterial({color:new T.Color(cor).convertSRGBToLinear()});
+      const troncos = new T.InstancedMesh(new T.CylinderGeometry(.5,.5,1,10), fundoMat('#5B4128'), n);
+      const copas = new T.InstancedMesh(new T.IcosahedronGeometry(.5,1), fundoMat(HAB[2]), n);
+      const o = new T.Object3D();
+      for (let i=0;i<n;i++) {const d=30+r()*150,a=(r()-.5)*Math.PI*1.6,x=Math.sin(a)*d,z=-Math.cos(a)*d,s=.8+r()*1.4;
+        o.position.set(x,1.5*s,z);o.scale.set(.35*s,3*s,.35*s);o.updateMatrix();troncos.setMatrixAt(i,o.matrix);
+        const rocha = habitat === 'gelo' || habitat === 'deserto';
+        o.position.set(x,(rocha ? .6 : 3.3)*s,z);o.scale.set(5*s,(rocha?1:1.3)*s,4*s);o.updateMatrix();copas.setMatrixAt(i,o.matrix);}
+      if(habitat !== 'gelo' && habitat !== 'deserto') sc.add(troncos);sc.add(copas); }
+
 
     // ---- o animal (normalizado: o COMPRIMENTO vira `tamanho_m` metros)
     const an = spec.animal || {}, tamReal = num(an.tamanho_m, 0.01, 40, 2);
     const bicho = new T.Group(), corpo = new T.Group(); bicho.add(corpo); sc.add(bicho);
     const moveis = [];
     (Array.isArray(an.partes) ? an.partes.slice(0, 30) : []).forEach((p, i) => {
-      const m = new T.Mesh((F[p.forma] || F.caixa)(), M(corOk(p.cor, '#9A7B55')));
+      const m = new T.Mesh((F[p.forma] || F.caixa)(), M(corOk(p.cor, '#9A7B55'), p.material || 'pele'));
       const pos = vet(p.pos, -10, 10, [0, 0.5, 0]), tam = vet(p.tam, 0.01, 10, [1, 1, 1]), giro = vet(p.giro, -360, 360, [0, 0, 0]).map((a) => (a * Math.PI) / 180);
       m.position.set(...pos); m.scale.set(...tam); m.rotation.set(...giro);
       const nome = String(p.nome || '').toLowerCase();
       const tipo = /leg|perna|pata|paw|foot|pe\b/.test(nome) ? 'perna' : /tail|cauda|rabo/.test(nome) ? 'cauda' : /wing|asa|fin|nadadeira/.test(nome) ? 'asa' : /jaw|mandibula|boca|mouth/.test(nome) ? 'boca' : null;
-      m.userData = { giro, tipo, fase: i * 1.7 }; corpo.add(m); if (tipo) moveis.push(m);
+      // Pivôs nas juntas: pata no topo, asa/mandíbula no encaixe explícito.
+      const pv = new T.Vector3(...vet(p.pivo, -2, 2, tipo === 'perna' ? [0, 0.5, 0] : [0,0,0]));
+      if (pv.lengthSq()) { m.geometry=m.geometry.clone();m.geometry.translate(-pv.x,-pv.y,-pv.z);
+        pv.multiply(m.scale).applyEuler(m.rotation);m.position.add(pv); }
+      m.userData = { giro, tipo, fase: Number.isFinite(p.fase) ? p.fase : (pos[0] >= 0 ? 0 : Math.PI) + (pos[2] >= 0 ? 0 : Math.PI) }; corpo.add(m); if (tipo) moveis.push(m);
     });
     if (!corpo.children.length) { const m = new T.Mesh(F.capsula(), M('#9A7B55')); m.rotation.z = Math.PI / 2; m.scale.set(1, 2, 1); m.position.y = 0.6; corpo.add(m); }
     { const b = new T.Box3().setFromObject(corpo), s = new T.Vector3(); b.getSize(s); const comp = Math.max(1e-3, s.x, s.z, s.y * 0.6);
       const k = tamReal / comp; corpo.scale.setScalar(k); corpo.position.y = -b.min.y * k; }
     const caixaB = new T.Box3().setFromObject(bicho), tamB = new T.Vector3(); caixaB.getSize(tamB);
+    const sombraCv=document.createElement('canvas');sombraCv.width=sombraCv.height=64;const sg=sombraCv.getContext('2d'),gr=sg.createRadialGradient(32,32,0,32,32,32);
+    gr.addColorStop(0,'rgba(0,0,0,.4)');gr.addColorStop(1,'rgba(0,0,0,0)');sg.fillStyle=gr;sg.fillRect(0,0,64,64);
+    const sombra=new T.Mesh(new T.PlaneGeometry(1,1),new T.MeshBasicMaterial({map:new T.CanvasTexture(sombraCv),transparent:true,depthWrite:false}));
+    sombra.rotation.x=-Math.PI/2;sombra.position.y=.008;sombra.scale.set(tamB.x*1.25,tamB.z*1.7,1);sc.add(sombra);
+
     // a pessoa de referencia (1,75 m), que aparece no `compara`
     const pessoa = new T.Group();
     { const add = (geo, cor, p, s) => { const m = new T.Mesh(geo, M(cor)); m.position.set(...p); m.scale.set(...s); pessoa.add(m); };
@@ -92,7 +110,7 @@
       let x = 0, y = 0;
       if (corre) y = Math.abs(Math.sin(t * 11)) * tamB.y * 0.05;
       if (ataca) x = Math.sin(U.clamp(k * 1.6, 0, 1) * Math.PI) * tamB.x * 0.35;
-      bicho.position.set(x, y, 0);
+      bicho.position.set(x, y, 0); sombra.position.x=x;
       // o chao anda debaixo de quem corre (a textura desliza)
       texChao.offset.x = corre ? -local * 0.9 : 0; texChao.repeat.set(400, 400);
       // a pessoa entra de lado no `compara` (e fica nas cenas seguintes se a anterior comparou)
@@ -107,7 +125,7 @@
       cam.position.set(cx + Math.sin(ang) * dd, cy + dd * 0.22 + shake, Math.cos(ang) * dd); cam.near = dd / 500; cam.far = dd * 60; cam.updateProjectionMatrix();
       // mirar ABAIXO do animal o sobe na tela: o meio fica livre para o cartao e a legenda mora em 70%
       cam.lookAt(cx, cy * (acao === 'stat' || corre ? 0.05 : 0.4), 0);
-      R.render(sc, cam); c.drawImage(gl, 0, 0, W, H);
+      U3.render(R, sc, cam, spec, t); c.drawImage(gl, 0, 0, W, H);
       return { cn, i, k, local, acao };
     }
 
@@ -171,7 +189,7 @@
       U.cartaz(c, spec, t, { fonte: '84px "Lilita One", sans-serif', y: 150, fundo: '#F6C445', borda: '#1B1B1B', cor: '#1B1B1B', altura_linha: 100, dur: 3.0 });
       U.legenda(c, spec, t, { fonte: '100px "Lilita One", sans-serif', y: H * 0.70, cor: '#FFFFFF', cor_ativa: '#F6C445', contorno: 18, caixa: true, por_vez: 3 });
     }
-    return { quadro };
+    return { quadro, dispose: () => U3.liberar(R, sc) };
   }
   MOTORES.animal = { criar };
 })();

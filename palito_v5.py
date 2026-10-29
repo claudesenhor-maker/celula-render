@@ -1,4 +1,4 @@
-﻿#!/usr/bin/env python3
+#!/usr/bin/env python3
 """
 palito_v5 — VOZ PRIMEIRO, CENA DEPOIS.
 
@@ -1084,12 +1084,16 @@ def render_spec(spec, saida, modo="demo", tmpdir=None):
                         "[0:a][m]amix=inputs=2:duration=first:dropout_transition=0[a]",
                         "-map", "[a]", mix], check=True)
 
+    from qualidade_render import codificacao, conferir_quadros
+    perfil_video = codificacao(spec, n / FPS)
+    conferir_quadros(spec, fd, n, FPS, saida)
     subprocess.run(["ffmpeg", "-y", "-v", "error",
                     "-framerate", str(FPS), "-i", os.path.join(fd, "%05d.png"),
                     "-i", mix,
                     "-vf", "noise=alls=4:allf=t,eq=saturation=0.94",
                     "-af", spec.get("loudnorm", "loudnorm=I=-9:LRA=8:TP=-1.5"),
-                    "-c:v", "libx264", "-preset", "medium", "-crf", "21",
+                    "-c:v", "libx264", "-preset", "medium", "-crf", perfil_video["crf"], "-maxrate", perfil_video["maxrate"],
+                    "-bufsize", perfil_video["bufsize"],
                     "-pix_fmt", "yuv420p", "-c:a", "aac", "-b:a", "192k",
                     "-shortest", "-movflags", "+faststart", saida], check=True)
     return saida, round(n / FPS, 2)

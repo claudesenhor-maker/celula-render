@@ -6896,7 +6896,10 @@ def render(pasta_partes, spec, saida, tmpdir=None, amostra=0):
                 "-shortest", "-movflags", "+faststart", saida]
         subprocess.run(cmd, check=True)
 
-    _encodar(23, "4M")
+    from qualidade_render import codificacao, conferir_quadros
+    perfil_video = codificacao(spec, n / FPS)
+    conferir_quadros(spec, fd, n, FPS, saida)
+    _encodar(int(perfil_video["crf"]), perfil_video["maxrate"])
     # REDE DE SEGURANÃ‡A: se ainda passar do teto, reencoda mais apertado em
     # vez de deixar o upload falhar. Perder qualidade Ã© ruim; perder o vÃ­deo
     # inteiro depois de 15 min de render Ã© pior.

@@ -19,7 +19,7 @@ function desenhar(fonte, comum, cena, tempo) {
   if (fonte.split(marcador).length!==2) throw new Error('Sonda divergente');
   new Function('document','MOTORES','observar',fonte.replace(marcador,marcador+' observar(nome,x,y);'))(
     {createElement:()=>({getContext:()=>b})},motores,(nome,x,y)=>objetos.push({nome,x,y}));
-  const spec={w:1080,h:1920,titulo:'',cenas:[Object.assign({ini:0,fim:3.4,atores:['heroi'],cenario:'cozinha'},cena)]};
+  const spec={qualidade:'legado',w:1080,h:1920,titulo:'',cenas:[Object.assign({ini:0,fim:3.4,atores:['heroi'],cenario:'cozinha'},cena)]};
   const antes=JSON.stringify(spec);
   motores.pixel.criar({getContext:()=>c},spec,janela.U).quadro(tempo);
   if (JSON.stringify(spec)!==antes) throw new Error('Renderer alterou o spec');

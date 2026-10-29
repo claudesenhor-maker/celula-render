@@ -1,0 +1,56 @@
+name: validar-motores
+on:
+  push:
+    branches: [main, deploy-motores-20261029]
+    paths:
+      - 'motor_web/**'
+      - 'qualidade_render.py'
+      - '.github/workflows/validar-motores.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  validar:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    env:
+      CHROME: /usr/bin/google-chrome
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: npm ci --prefix motor_web --no-audit --no-fund
+      - run: pip install Pillow
+      - name: Dependência de exportação
+        run: |
+          sudo apt-get update -qq || true
+          sudo apt-get install -y -qq ffmpeg
+      - run: npm test --prefix motor_web
+      - run: python -m unittest discover -s motor_web/tests -p 'test_*.py'
+      - name: Amostras dos 14 motores
+        run: node motor_web/tests/auditar_graficos.mjs motor_web /tmp/motores-validacao
+      - name: Ciclo de revisão no navegador
+        run: node motor_web/tests/revisao.browser.mjs
+      - name: Exportar MP4 sem publicação
+        run: |
+          node --input-type=module - <<'JS'
+          import fs from 'node:fs';
+          import {fixture} from './motor_web/tests/fixtures_graficos.mjs';
+          const s=fixture('pixel');s.fps=4;s.dur_s=2;
+          s.cenas.forEach((c,i)=>{c.ini=i;c.fim=i+1;});
+          fs.writeFileSync('/tmp/pixel-validacao.json',JSON.stringify(s));
+          JS
+          node motor_web/render_web.mjs --spec /tmp/pixel-validacao.json --saida /tmp/pixel-validacao.mp4
+          ffmpeg -v error -i /tmp/pixel-validacao.mp4 -f null -
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: validacao-motores
+          path: |
+            /tmp/motores-validacao/
+            /tmp/pixel-validacao.mp4*
+          retention-days: 7

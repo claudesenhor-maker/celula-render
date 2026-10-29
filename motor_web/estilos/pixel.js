@@ -1,4 +1,4 @@
-﻿// PIXEL -- a vida adulta como RPG de 8 bits, sem voz (13/10, HISTORICO §109).
+// PIXEL -- a vida adulta como RPG de 8 bits, sem voz (13/10, HISTORICO §109).
 //
 // O canal transforma o cotidiano adulto em jogo: o boleto e' um chefe de fase,
 // o salario cai como ouro e some na loja, segunda-feira tira HP. Sem voz: o
@@ -35,16 +35,28 @@
 
   function criar(tela, spec, U) {
     const c = tela.getContext('2d'), W = spec.w, H = spec.h;
+    const legado = spec.qualidade === 'legado';
     const PW = 180, PH = 320, K = W / PW;
     const buf = document.createElement('canvas'); buf.width = PW; buf.height = PH; const b = buf.getContext('2d');
-    const px = (x, y, w, h, cor) => { b.fillStyle = cor; b.fillRect(Math.round(x), Math.round(y), w, h); };
+    const px = (x, y, w, h, cor) => { b.fillStyle = cor; b.fillRect(Math.round(x), Math.round(y), Math.max(1,Math.round(w)), Math.max(1,Math.round(h))); };
+    const fundos = new Map(), sprites = new Map();
     function sprite(nome, x, y, quadro, dir, esc) {
       const sp = S[nome] || S.heroi, e = esc || 3;
+      if(legado){sp.forEach((lin,j)=>{let l=lin;if(quadro && j>=12 && nome!=='gato')l=j%2?lin.replace('dd..dd','d...dd').replace('gg..gg','g...gg'):lin.replace('dd..dd','dd...d').replace('gg..gg','gg...g');for(let i=0;i<12;i++){const ch=l[dir<0?11-i:i];if(ch&&ch!=='.'&&ch!==' '&&COR[ch])px(x+i*e,y+j*e,e,e,COR[ch]);}});return;}
+      // Contato e volume desenhados na grade, nunca blur em resolução final.
+      px(x+e,y+16*e-1,10*e,2,'#00000044');
+      const key = [nome,quadro,dir,e].join(':');
+      if(sprites.has(key)){b.drawImage(sprites.get(key),Math.round(x),Math.round(y));return;}
+      const cv=document.createElement('canvas');cv.width=12*e;cv.height=16*e;const g=cv.getContext('2d');
       sp.forEach((lin, j) => {
         let l = lin;
         if (quadro && j >= 12 && nome !== 'gato') l = j % 2 ? lin.replace('dd..dd', 'd...dd').replace('gg..gg', 'g...gg') : lin.replace('dd..dd', 'dd...d').replace('gg..gg', 'gg...g');
-        for (let i = 0; i < 12; i++) { const ch = l[dir < 0 ? 11 - i : i]; if (ch && ch !== '.' && ch !== ' ' && COR[ch]) px(x + i * e, y + j * e, e, e, COR[ch]); }
+        for (let i = 0; i < 12; i++) { const ch = l[dir < 0 ? 11 - i : i]; if (ch && ch !== '.' && ch !== ' ' && COR[ch]) {
+          g.fillStyle=COR[ch];g.fillRect(i*e,j*e,e,e);
+          if(i>6 && ['a','g','v','r','d'].includes(ch)){g.fillStyle='#00000024';g.fillRect(i*e,j*e,e,e);}
+        } }
       });
+      sprites.set(key,cv);b.drawImage(cv,Math.round(x),Math.round(y));
     }
     function objeto(nome, x, y) {
       if (nome === 'cafe') { px(x, y, 6, 6, PAL.branco); px(x + 6, y + 1, 2, 3, PAL.branco); px(x + 1, y + 1, 4, 2, PAL.madeira); }
@@ -68,6 +80,8 @@
       const paredes = { quarto: [PAL.parede2, '#6B5D88'], escritorio: [PAL.parede, '#A8A9AD'], cozinha: ['#F2D3AB', '#E0B98D'], mercado: [PAL.branco, '#E6D9CC'], academia: ['#3B3B4F', '#2C2C3B'], chefe_arena: [PAL.noite, '#121A36'] }[nome] || [PAL.parede, '#A8A9AD'];
       px(0, 0, PW, 210, paredes[0]); for (let y = 0; y < 210; y += 16) px(0, y, PW, 1, paredes[1]);
       px(0, 210, PW, 110, nome === 'chefe_arena' ? '#3B1F2B' : PAL.madeira); for (let x = 0; x < PW; x += 20) px(x, 210, 1, 110, PAL.madeira2);
+      if(!legado){px(0,204,PW,6,paredes[1]);px(0,210,PW,2,'#00000044');
+      for(let row=0;row<6;row++)for(let col=0;col<10;col++){const x=col*20+(row%2?10:0),y=212+row*18;px(x,y,1,18,'#00000033');px(x+4,y+7,7,1,'#FFFFFF10');}}
       if (nome === 'quarto') { px(14, 40, 40, 30, PAL.ceu); px(33, 40, 2, 30, PAL.branco); px(14, 54, 40, 2, PAL.branco); px(110, 150, 62, 30, PAL.branco); px(110, 140, 16, 12, PAL.branco); px(110, 176, 62, 34, PAL.madeira); px(70, 60, 24, 32, PAL.rosa); }
       if (nome === 'escritorio') { px(20, 150, 90, 8, PAL.madeira); px(24, 158, 6, 52, PAL.madeira2); px(100, 158, 6, 52, PAL.madeira2); px(40, 118, 44, 30, PAL.preto); px(43, 121, 38, 24, (f % 2) ? PAL.azul : '#29ADFFCC'); px(58, 148, 8, 3, PAL.cinza);
         px(140, 30, 24, 24, PAL.branco); px(151, 34, 2, 10, PAL.preto); px(151, 42, 8, 2, PAL.preto); px(150, 170, 14, 40, PAL.verde2); px(146, 150, 22, 24, PAL.verde); }
@@ -109,7 +123,7 @@
       barra(70, ZS.topo + 24, 400, 'HP', h.hp, h.hp < 30 ? PAL.vermelho : PAL.verde); barra(70, ZS.topo + 72, 400, 'NRG', h.energia, PAL.amarelo);
       c.font = F(30); c.textAlign = 'right'; c.textBaseline = 'middle'; c.fillStyle = PAL.amarelo; c.fillText('G ' + Math.round(h.ouro), ZS.dir - 40, ZS.topo + 42); c.fillStyle = PAL.branco; c.fillText('LV ' + Math.round(h.nivel), ZS.dir - 40, ZS.topo + 90); c.restore();
     }
-    function dialogo(texto, local, quem) {
+    function dialogoLegado(texto, local, quem) {
       if (!texto) return;
       // a caixa ja' mostra quem fala: "MOM: MOM: ..." era o roteiro repetindo
       if (quem && texto.toUpperCase().startsWith(String(quem).toUpperCase() + ':')) texto = texto.slice(String(quem).length + 1).trim();
@@ -121,6 +135,25 @@
       const sx = DLG.x + DLG.w - 70, sy = DLG.y + DLG.h - 60;
       if (n >= texto.length && Math.floor(local * 3) % 2) { c.beginPath(); c.moveTo(sx - 20, sy); c.lineTo(sx + 20, sy); c.lineTo(sx, sy + 26); c.closePath(); c.fill(); }
     }
+    function dialogo(texto, local, quem) {
+      if(legado)return dialogoLegado(texto,local,quem);
+      if (!texto) return;
+      // a caixa ja' mostra quem fala: "MOM: MOM: ..." era o roteiro repetindo
+      if (quem && texto.toUpperCase().startsWith(String(quem).toUpperCase() + ':')) texto = texto.slice(String(quem).length + 1).trim();
+      // Páginas calculadas com o texto completo: uma linha não salta ao digitar.
+      c.font = F(32);
+      const completas = U.linhas(c, texto, DLG.w - 100), porPagina = quem ? 3 : 4;
+      const paginas=[];for(let i=0;i<completas.length;i+=porPagina)paginas.push(completas.slice(i,i+porPagina));
+      const cps=32, tempos=paginas.map(ls=>ls.join(' ').length/cps+0.8);
+      let pagina=0, inicio=0;while(pagina<tempos.length-1 && local>=inicio+tempos[pagina])inicio+=tempos[pagina++];
+      const n=Math.floor(Math.max(0,local-inicio)*cps), vis=paginas[pagina] || [], textoPagina=vis.join(' ');
+      caixa(DLG.x, DLG.y, DLG.w, DLG.h);
+      c.font = F(32); c.fillStyle = PAL.branco; c.textAlign = 'left'; c.textBaseline = 'top';
+      if (quem) { c.fillStyle = PAL.amarelo; c.fillText(String(quem).toUpperCase(), DLG.x + 50, DLG.y + 45); }
+      let escrito=0;c.fillStyle = PAL.branco; vis.forEach((l,i)=>{const trecho=l.slice(0,Math.max(0,n-escrito));escrito+=l.length+1;c.fillText(trecho,DLG.x+50,DLG.y+(quem?110:60)+i*55);});
+      const sx = DLG.x + DLG.w - 70, sy = DLG.y + DLG.h - 60;
+      if (n >= textoPagina.length && Math.floor(local * 3) % 2) { c.beginPath(); c.moveTo(sx - 20, sy); c.lineTo(sx + 20, sy); c.lineTo(sx, sy + 26); c.closePath(); c.fill(); }
+    }
     function banner(txt, local, cor) {
       const p = U.mola(local, 10); c.save(); c.translate(W / 2, 760); c.scale(p, p); c.fillStyle = cor || PAL.vermelho; c.fillRect(-470, -90, 940, 180); c.lineWidth = 10; c.strokeStyle = PAL.branco; c.strokeRect(-450, -70, 900, 140);
       c.font = F(54); c.fillStyle = PAL.branco; c.textAlign = 'center'; c.textBaseline = 'middle'; c.fillText(txt, 0, 4); c.restore();
@@ -131,13 +164,24 @@
       const { c: cn, k, local } = U.cenaEm(spec, t);
       const passo = Math.floor(t * 6) % 2, at = cn.atores && cn.atores.length ? cn.atores : ['heroi'];
       const cen = cn.acao === 'batalha' ? 'chefe_arena' : (cn.cenario || 'quarto');
-      b.save(); cenario(cen, t);
+      b.save();
+      const estatico = !legado && !['onibus','escritorio'].includes(cen);
+      if(estatico && fundos.has(cen))b.drawImage(fundos.get(cen),0,0);
+      else {cenario(cen,t);if(estatico){const cv=document.createElement('canvas');cv.width=PW;cv.height=PH;cv.getContext('2d').drawImage(buf,0,0);fundos.set(cen,cv);}}
       const yb = 162;
       let extraUI = null;
       switch (cn.acao) {
         case 'acorda': { const ant = k < 0.5; sprite(at[0], ant ? 112 : 70, ant ? 112 : yb, 0, 1); if (ant) px(106, 150, 66, 18, PAL.branco); if (cn.objeto && cn.objeto !== 'alarme') objeto(cn.objeto, ant ? 140 : 98, ant ? 142 : 192); else objeto('alarme', 40, 140 + (Math.floor(t * 12) % 2)); break; }
         case 'anda': sprite(at[0], U.lerp(-36, 150, k), yb, passo, 1); if (at[1]) sprite(at[1], 128, yb, 0, -1); break;
-        case 'digita': sprite(at[0], 54, 150, passo, 1); if (Math.floor(t * 3) % 2) px(80, 132, 3, 5, PAL.azul); objeto(cn.objeto || 'cafe', cn.objeto ? 82 : 92, cn.objeto ? 180 : 142); break;
+        case 'digita': {
+          if(legado){sprite(at[0],54,150,passo,1);if(Math.floor(t*3)%2)px(80,132,3,5,PAL.azul);objeto(cn.objeto||'cafe',cn.objeto?82:92,cn.objeto?180:142);break;}
+          px(18,151,17,39,PAL.azul2);sprite(at[0],22,130,0,1);
+          px(28,166,20,6,PAL.azul2);px(43,170,5,18,PAL.azul2);px(42,187,10,3,PAL.preto);
+          px(44,151,14,4,PAL.azul);px(56,150+(passo?0:1),7,3,PAL.pele);
+          px(60,152,21,2,PAL.cinza);for(let j=0;j<7;j++)px(61+j*3,152,1,1,PAL.branco);
+          objeto(cn.objeto || 'cafe', cn.objeto ? 82 : 92, cn.objeto ? 180 : 142);
+          if(!cn.objeto || cn.objeto === 'cafe')for(let j=0;j<3;j++)px(94+j*2,138-((Math.floor(t*5)+j*2)%8),1,2,'#FFFFFF88');break;
+        }
         case 'come': {
           // T324: evento literal, nunca uma palavra solta, hipótese ou pergunta.
           const texto = typeof cn.texto === 'string' ? cn.texto.normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim().replace(/\s+/g, ' ').toLowerCase() : '';
@@ -175,7 +219,7 @@
       if (cn.texto && cn.acao === 'missao') { c.font = F(40); c.fillStyle = PAL.branco; c.textAlign = 'center'; }
       U.cartaz(c, spec, t, { fonte: F(48), y: ZS.topo + 165, fundo: PAL.vermelho, borda: PAL.branco, cor: PAL.branco, altura_linha: 70, raio: 0, dur: 2.6, caixa: true });
       // linhas de varredura de tela de tubo
-      c.fillStyle = 'rgba(0,0,0,.08)'; for (let y = 0; y < H; y += 6) c.fillRect(0, y, W, 2);
+      if(legado || spec.crt === true){c.fillStyle = legado ? 'rgba(0,0,0,.08)' : 'rgba(0,0,0,.045)'; for (let y = 0; y < H; y += 6) c.fillRect(0, y, W, legado ? 2 : 1);}
     }
     return { quadro };
   }

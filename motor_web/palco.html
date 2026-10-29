@@ -30,6 +30,9 @@
 <script>
 let MOTOR = null;
 window.preparar = async function (spec) {
+  if (MOTOR && MOTOR.dispose) MOTOR.dispose();
+  U3.iniciar(spec);
+  window.EVENTOS_SOM = []; window.METRICAS_RENDER = null;
   if (spec._teste) window.U3_TESTE = spec._teste;
   const tela = document.getElementById('tela');
   tela.width = spec.w; tela.height = spec.h;

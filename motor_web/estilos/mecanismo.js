@@ -59,6 +59,7 @@
     // banheiro, garagem, escritorio, laboratorio, externo, prancheta) entra
     // depois que o objeto tem tamanho. Sem comum3d, o estudio azul de antes.
     const AMB = String(spec.ambiente || (spec.modelo || {}).ambiente || 'prancheta').toLowerCase();
+    R.localClippingEnabled = true;
     if (window.U3) U3.estudio(R, sc, T);
     else { sc.background = new T.Color('#1D4A7A'); sc.add(new T.HemisphereLight('#dfefff', '#1a2a40', 0.65)); }
     const rim = new T.DirectionalLight('#9fd0ff', 0.55); rim.position.set(-8, 4, -6); sc.add(rim);
@@ -76,11 +77,19 @@
       // ceramica, tecido, pedra) decide brilho e reflexo; `metal: true` antigo vale
       const mat = window.U3 ? U3.material(T, cor, p.material, p.metal)
         : new T.MeshStandardMaterial({ color: cor, roughness: p.metal ? 0.35 : 0.7, metalness: p.metal ? 0.6 : 0.05, flatShading: true, transparent: true, opacity: 1 });
+      mat.transparent = true; // estas peças podem desaparecer no raio X
       mat.emissive = new T.Color('#000000'); mat.side = p.forma === 'tubo' ? T.DoubleSide : T.FrontSide;
       const m = new T.Mesh((F[p.forma] || F.caixa)(), mat); m.castShadow = true; m.receiveShadow = true;
       const pos = vet(p.pos, -20, 20, [0, 0.5, 0]), tam = vet(p.tam, 0.01, 20, [1, 1, 1]), giro = vet(p.giro, -360, 360, [0, 0, 0]).map((a) => (a * Math.PI) / 180);
       m.position.set(...pos); m.scale.set(...tam); m.rotation.set(...giro);
-      m.userData = { nome, pos, giro, casca: !!p.casca, explode: vet(p.explode, -20, 20, [0, 0, 0]), eixo: vet(p.eixo, -1, 1, [0, 1, 0]), cor: window.U3 ? new T.Color(cor).convertSRGBToLinear() : new T.Color(cor) };
+      // Pivô em unidades locais da forma (antes de escala/giro), mantendo a pose inicial.
+      if (Array.isArray(p.pivo)) {
+        const pv = new T.Vector3(...vet(p.pivo, -2, 2, [0, 0, 0]));
+        m.geometry = m.geometry.clone(); m.geometry.translate(-pv.x, -pv.y, -pv.z);
+        pv.multiply(m.scale).applyEuler(m.rotation); pos[0] += pv.x; pos[1] += pv.y; pos[2] += pv.z;
+        m.position.set(...pos);
+      }
+      m.userData = { nome, pos, giro, transmissao: p.transmissao || null, casca: !!p.casca, explode: vet(p.explode, -20, 20, [0, 0, 0]), eixo: vet(p.eixo, -1, 1, [0, 1, 0]), cor: window.U3 ? new T.Color(cor).convertSRGBToLinear() : new T.Color(cor) };
       raiz.add(m); pecas[nome.toLowerCase()] = m; lista.push(m);
     });
     // enquadra: o objeto cabe na tela inteira, sobre o chao
@@ -120,6 +129,9 @@
 
     const alvos = (cn) => (Array.isArray(cn.alvo) ? cn.alvo : cn.alvo ? [cn.alvo] : []).map((n) => pecas[String(n).toLowerCase()]).filter(Boolean);
     const cenas = spec.cenas;
+    const curvasFluxo = cenas.map(cn => cn.fluxo && Array.isArray(cn.fluxo.caminho) && cn.fluxo.caminho.length >= 2
+      ? new T.CatmullRomCurve3(cn.fluxo.caminho.slice(0, 40).map(p => new T.Vector3(...vet(p, -20, 20, [0, 0, 0])))) : null);
+    const planoCorte = new T.Plane(new T.Vector3(0, 0, -1), E0.c.z);
     // estado de cada peca no instante t: o que as cenas ANTERIORES deixaram
     // (explodido continua explodido ate um "monta"), mais a cena atual
     function explodeEm(i, k) {
@@ -146,7 +158,9 @@
         m.position.set(u.pos[0] + u.explode[0] * ex, u.pos[1] + u.explode[1] * ex, u.pos[2] + u.explode[2] * ex);
         m.rotation.set(...u.giro);
         const base = m.material.userData.opacidadeBase || 1;
-        m.material.opacity = (u.casca ? U.lerp(1, 0.14, co) : 1) * base; m.material.depthWrite = m.material.opacity > 0.5;
+        const secao = cn.corte_modo === 'secao' && co > 0;
+        m.material.clippingPlanes = u.casca && secao ? [planoCorte] : null;
+        m.material.opacity = (u.casca && !secao ? U.lerp(1, 0.14, co) : 1) * base; m.material.depthWrite = m.material.opacity > 0.5;
         m.castShadow = m.material.opacity > 0.5;
         m.material.emissive.setRGB(0, 0, 0); m.material.color.copy(u.cor);
         if (acao === 'destaque' && al.length && al.indexOf(m) < 0) { m.material.color.copy(u.cor).multiplyScalar(U.lerp(1, 0.35, U.suave(k * 3))); }
@@ -157,12 +171,20 @@
         if (acao === 'gira') { const ang = local * Math.PI * 2 * num(cn.voltas_por_s, 0.05, 4, 0.6); const e = new T.Vector3(...u.eixo).normalize(); m.rotateOnAxis(e, ang); }
         if (acao === 'move') { const mv = vet(cn.mover, -20, 20, [0, 0.5, 0]), q = 0.5 - 0.5 * Math.cos(Math.min(1, k * 1.15) * Math.PI * 2 * num(cn.ciclos, 0.5, 6, 1)); m.position.x += mv[0] * q; m.position.y += mv[1] * q; m.position.z += mv[2] * q; }
       });
+      // Engrenagens acopladas compartilham fase/velocidade com o alvo motor.
+      if (acao === 'gira') lista.forEach(m => {
+        const tr = m.userData.transmissao;
+        if (!tr || !al.some(a => a.userData.nome.toLowerCase() === String(tr.parte).toLowerCase()) || al.includes(m)) return;
+        const ang = local * Math.PI * 2 * num(cn.voltas_por_s, 0.05, 4, 0.6) * num(tr.razao, -20, 20, -1) + num(tr.fase, -360, 360, 0) * Math.PI / 180;
+        m.rotateOnAxis(new T.Vector3(...m.userData.eixo).normalize(), ang);
+      });
       // fluxo: pontos correndo pelo caminho (coordenadas do modelo)
-      const cam_ = cn.fluxo && Array.isArray(cn.fluxo.caminho) ? cn.fluxo.caminho.slice(0, 12).map((p) => new T.Vector3(...vet(p, -20, 20, [0, 0, 0]))) : null;
-      fluxo.visible = acao === 'fluxo' && cam_ && cam_.length >= 2;
+      const curva = curvasFluxo[i];
+      fluxo.visible = acao === 'fluxo' && !!curva;
       if (fluxo.visible) {
         fluxoMat.color.set(corOk(cn.fluxo.cor, '#7CE0FF'));
-        const curva = new T.CatmullRomCurve3(cam_), a = fluxoGeo.attributes.position, r = U.rng(31);
+        fluxoMat.depthTest = cn.fluxo.raio_x !== true;
+        const a = fluxoGeo.attributes.position, r = U.rng(31);
         for (let j = 0; j < NP; j++) { const q = (j / NP + local * 0.35) % 1, p = curva.getPointAt(q); a.setXYZ(j, p.x + (r() - 0.5) * 0.08, p.y + (r() - 0.5) * 0.08, p.z + (r() - 0.5) * 0.08); }
         a.needsUpdate = true; fluxoMat.opacity = 0.95 * U.suave(k * 4);
       }
@@ -207,13 +229,13 @@
 
     function quadro(t) {
       const { cn, i, k, local } = pose(t);
-      R.render(sc, cam); c.imageSmoothingQuality = 'high'; c.drawImage(gl, 0, 0, W, H);
+      U3.render(R, sc, cam, spec, t); c.imageSmoothingQuality = 'high'; c.drawImage(gl, 0, 0, W, H);
       if (i > 0 && local < 0.12) { c.fillStyle = 'rgba(255,255,255,' + (0.35 * (1 - local / 0.12)).toFixed(2) + ')'; c.fillRect(0, 0, W, H); }
       rotulos(cn, k, local); numero(cn, local);
       U.cartaz(c, spec, t, { fonte: '84px "Lilita One", sans-serif', y: 170, fundo: '#FFFFFF', borda: '#10243F', cor: '#10243F', altura_linha: 100, dur: 3.0 });
       U.legenda(c, spec, t, { fonte: '100px "Lilita One", sans-serif', y: H * 0.70, cor: '#FFFFFF', cor_ativa: '#FFD23F', contorno: 18, caixa: true, por_vez: 3 });
     }
-    return { quadro };
+    return { quadro, dispose: () => U3.liberar(R, sc) };
   }
   MOTORES.mecanismo = { criar };
 })();
