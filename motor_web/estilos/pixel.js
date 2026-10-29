@@ -169,7 +169,7 @@
       if (extraUI === 'missao') banner('NEW QUEST', local, PAL.azul2);
       if (extraUI === 'batalha') { if (!cn.texto) { caixa(DLG.x, DLG.y, DLG.w, DLG.h); c.font = F(46); c.textAlign = 'left'; c.textBaseline = 'middle'; ['FIGHT', 'ITEM', 'RUN', 'CRY'].forEach((o, i) => { c.fillStyle = PAL.branco; c.fillText(o, DLG.x + 130 + (i % 2) * 380, DLG.y + 140 + Math.floor(i / 2) * 120); });
         const sel = Math.min(3, Math.floor(k * 4)); c.fillStyle = PAL.amarelo; { const ax = DLG.x + 70 + (sel % 2) * 380, ay = DLG.y + 140 + Math.floor(sel / 2) * 120; c.beginPath(); c.moveTo(ax, ay - 20); c.lineTo(ax + 32, ay); c.lineTo(ax, ay + 20); c.closePath(); c.fill(); } }
-        if (k > 0.45 && k < 0.8) { c.font = F(70); c.fillStyle = PAL.vermelho; c.textAlign = 'center'; c.fillText('-' + (cn.dano || 40), W * 0.3, 1100 - MUNDO_DY - (k - 0.45) * 400); } }
+        if (k > 0.45 && k < 0.8 && Number.isFinite(cn.dano) && cn.dano > 0) { c.font = F(70); c.fillStyle = PAL.vermelho; c.textAlign = 'center'; c.fillText('-' + cn.dano, W * 0.3, 1100 - MUNDO_DY - (k - 0.45) * 400); } }
       if (cn.texto) dialogo(cn.texto, local, cn.quem);
       if (cn.texto && cn.acao === 'missao') { c.font = F(40); c.fillStyle = PAL.branco; c.textAlign = 'center'; }
       U.cartaz(c, spec, t, { fonte: F(48), y: ZS.topo + 165, fundo: PAL.vermelho, borda: PAL.branco, cor: PAL.branco, altura_linha: 70, raio: 0, dur: 2.6, caixa: true });
