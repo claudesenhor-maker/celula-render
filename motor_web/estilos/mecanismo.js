@@ -89,7 +89,7 @@
         pv.multiply(m.scale).applyEuler(m.rotation); pos[0] += pv.x; pos[1] += pv.y; pos[2] += pv.z;
         m.position.set(...pos);
       }
-      m.userData = { nome, pos, giro, transmissao: p.transmissao || null, casca: !!p.casca, explode: vet(p.explode, -20, 20, [0, 0, 0]), eixo: vet(p.eixo, -1, 1, [0, 1, 0]), cor: window.U3 ? new T.Color(cor).convertSRGBToLinear() : new T.Color(cor) };
+      m.userData = { nome, pos, giro, transmissao: p.transmissao || null, ladoBase: mat.side, casca: !!p.casca, explode: vet(p.explode, -20, 20, [0, 0, 0]), eixo: vet(p.eixo, -1, 1, [0, 1, 0]), cor: window.U3 ? new T.Color(cor).convertSRGBToLinear() : new T.Color(cor) };
       raiz.add(m); pecas[nome.toLowerCase()] = m; lista.push(m);
     });
     // enquadra: o objeto cabe na tela inteira, sobre o chao
@@ -159,6 +159,8 @@
         m.rotation.set(...u.giro);
         const base = m.material.userData.opacidadeBase || 1;
         const secao = cn.corte_modo === 'secao' && co > 0;
+        const lado=u.casca && secao ? T.DoubleSide : u.ladoBase;
+        if(m.material.side !== lado){m.material.side=lado;m.material.needsUpdate=true;}
         m.material.clippingPlanes = u.casca && secao ? [planoCorte] : null;
         m.material.opacity = (u.casca && !secao ? U.lerp(1, 0.14, co) : 1) * base; m.material.depthWrite = m.material.opacity > 0.5;
         m.castShadow = m.material.opacity > 0.5;
@@ -192,7 +194,14 @@
       const foco = E0.c.clone().lerp(E1.c, ex), D = distPara({ r: U.lerp(E0.r, E1.r, ex), lh: U.lerp(E0.lh, E1.lh, ex), ah: U.lerp(E0.ah, E1.ah, ex) });
       let ang = 0.6 + t * 0.12 + Math.sin(t * 0.21) * 0.15, dist = D, y = foco.y + D * 0.3;
       const camN = cn.camera || 'orbita';
-      if (camN === 'perto' && al.length) { const wp = new T.Vector3(); al[0].getWorldPosition(wp); const q = U.suave(k * 2); foco.lerp(wp, q * 0.7); dist = D * U.lerp(1, 0.7, q); y = foco.y + dist * 0.25; }
+      if (camN === 'perto' && al.length) {
+        // Enquadra a geometria selecionada, não o pivô nem o objeto inteiro.
+        raiz.updateMatrixWorld(true);
+        const b = new T.Box3(); al.forEach(m => b.union(new T.Box3().setFromObject(m)));
+        const wp = b.getCenter(new T.Vector3()), sz = b.getSize(new T.Vector3());
+        const q = U.suave(k * 2), detalhe = Math.max(sz.x / Math.tan(hfov/2),sz.y / Math.tan(vfov/2))*0.9 + sz.z;
+        foco.lerp(wp, q); dist = U.lerp(D, U.clamp(detalhe,D*.42,D*.9), q); y = foco.y + dist * .18;
+      }
       if (camN === 'frente') { ang = 0.15 * Math.sin(t * 0.3); y = foco.y + D * 0.12; }
       if (camN === 'cima') { y = foco.y + D * 0.85; dist = D * 0.55; }
       dist *= 1 - 0.08 * (1 - U.saida(U.clamp(local / 0.5, 0, 1)));   // empurrao de entrada
@@ -211,13 +220,19 @@
         const px = (wp.x * 0.5 + 0.5) * W, py = (-wp.y * 0.5 + 0.5) * H;
         // coluna fixa a esquerda (a direita da tela tem os botoes do app): uma
         // etiqueta por linha, nunca uma sobre a outra
-        c.save(); c.font = '56px "Lilita One", sans-serif';
-        const txt = String(r.texto).toUpperCase().slice(0, 20), w = c.measureText(txt).width + 44, bx = 40, ey = 470 + j * 112;
-        const lx = bx + w, ly = ey;
-        c.globalAlpha = q; c.strokeStyle = '#FFD23F'; c.lineWidth = 5; c.beginPath(); c.moveTo(lx, ly); c.lineTo(lx + (px - lx) * q, ly + (py - ly) * q); c.stroke();
-        if (q > 0.95) { c.fillStyle = '#FFD23F'; c.beginPath(); c.arc(px, py, 11, 0, Math.PI * 2); c.fill(); }
-        U.rr(c, bx, ey - 42, w, 84, 20); c.fillStyle = '#FFD23F'; c.fill();
-        c.fillStyle = '#10243F'; c.textAlign = 'left'; c.textBaseline = 'middle'; c.fillText(txt, bx + 22, ey + 3); c.restore();
+        if(wp.z < -1 || wp.z > 1 || px < 0 || px > W || py < 0 || py > H) return;
+        c.save();
+        const txt = String(r.texto).toUpperCase().slice(0, 48), bx = 42, maxW = W * .78;
+        let fonte=42; c.font = fonte+'px "Lilita One", sans-serif';
+        while(fonte>28 && c.measureText(txt).width>maxW-36){fonte-=2;c.font=fonte+'px "Lilita One", sans-serif';}
+        const linhas=U.linhas(c,txt,maxW-36), w=Math.min(maxW,Math.max(...linhas.map(l=>c.measureText(l).width))+36);
+        const h=linhas.length*(fonte+8)+24, topo=H*.18+j*136, ey=topo+h/2, lx=bx+w;
+        c.globalAlpha=q;c.strokeStyle='#FFD23F';c.lineWidth=3;
+        c.beginPath();c.moveTo(lx,ey);c.lineTo(lx+22,ey);c.lineTo(lx+22+(px-lx-22)*q,ey+(py-ey)*q);c.stroke();
+        if(q>.95){c.fillStyle='#FFD23F';c.beginPath();c.arc(px,py,7,0,Math.PI*2);c.fill();}
+        U.rr(c,bx,topo,w,h,12);c.fillStyle='#10243F';c.fill();c.lineWidth=2;c.strokeStyle='#FFD23F';c.stroke();
+        c.fillStyle='#FFF6DB';c.textAlign='left';c.textBaseline='middle';
+        linhas.forEach((l,n)=>c.fillText(l,bx+18,topo+12+(n+.5)*(fonte+8)));c.restore();
       });
     }
     function numero(cn, local) {

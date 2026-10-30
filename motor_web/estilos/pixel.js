@@ -40,18 +40,18 @@
     const buf = document.createElement('canvas'); buf.width = PW; buf.height = PH; const b = buf.getContext('2d');
     const px = (x, y, w, h, cor) => { b.fillStyle = cor; b.fillRect(Math.round(x), Math.round(y), Math.max(1,Math.round(w)), Math.max(1,Math.round(h))); };
     const fundos = new Map(), sprites = new Map();
-    function sprite(nome, x, y, quadro, dir, esc) {
+    function sprite(nome, x, y, quadro, dir, esc, pose) {
       const sp = S[nome] || S.heroi, e = esc || 3;
       if(legado){sp.forEach((lin,j)=>{let l=lin;if(quadro && j>=12 && nome!=='gato')l=j%2?lin.replace('dd..dd','d...dd').replace('gg..gg','g...gg'):lin.replace('dd..dd','dd...d').replace('gg..gg','gg...g');for(let i=0;i<12;i++){const ch=l[dir<0?11-i:i];if(ch&&ch!=='.'&&ch!==' '&&COR[ch])px(x+i*e,y+j*e,e,e,COR[ch]);}});return;}
       // Contato e volume desenhados na grade, nunca blur em resolução final.
       px(x+e,y+16*e-1,10*e,2,'#00000044');
-      const key = [nome,quadro,dir,e].join(':');
+      const key = [nome,quadro,dir,e,pose].join(':');
       if(sprites.has(key)){b.drawImage(sprites.get(key),Math.round(x),Math.round(y));return;}
       const cv=document.createElement('canvas');cv.width=12*e;cv.height=16*e;const g=cv.getContext('2d');
       sp.forEach((lin, j) => {
         let l = lin;
         if (quadro && j >= 12 && nome !== 'gato') l = j % 2 ? lin.replace('dd..dd', 'd...dd').replace('gg..gg', 'g...gg') : lin.replace('dd..dd', 'dd...d').replace('gg..gg', 'gg...g');
-        for (let i = 0; i < 12; i++) { const ch = l[dir < 0 ? 11 - i : i]; if (ch && ch !== '.' && ch !== ' ' && COR[ch]) {
+        for (let i = 0; i < 12; i++) { const ch = l[dir < 0 ? 11 - i : i]; if(pose === 'consome' && j >= 8 && j <= 9 && i > 6 && ch === 'p') continue; if (ch && ch !== '.' && ch !== ' ' && COR[ch]) {
           g.fillStyle=COR[ch];g.fillRect(i*e,j*e,e,e);
           if(i>6 && ['a','g','v','r','d'].includes(ch)){g.fillStyle='#00000024';g.fillRect(i*e,j*e,e,e);}
         } }
@@ -189,7 +189,22 @@
           // T337: só consumo afirmativo completo; objeto explícito distinto vence.
           const sorveteLiteral = /^(?:you ate ice cream|comiste helado|voce comeu sorvete)[.!](?:\s|$)/.test(texto);
           const item = (!cn.objeto || cn.objeto === 'pizza') && sorveteLiteral ? 'sorvete' : (cafeLiteral && (!cn.objeto || cn.objeto === 'pizza') ? 'cafe' : (cn.objeto || 'pizza'));
-          sprite(at[0], 70, yb, 0, 1); objeto(item, 98, 184 - Math.floor(k * 3) * 2); break;
+          if(legado || !['cafe','pizza','sorvete'].includes(item) || at[0] === 'gato') {
+            sprite(at[0], 70, yb, 0, 1); objeto(item, 98, 184 - Math.floor(k * 3) * 2); break;
+          }
+          // Uma ação completa, presa à mão: repouso -> boca -> repouso.
+          // A fase depende só do instante da cena, inclusive em busca aleatória.
+          const levantar = U.suave(U.clamp((k - .12) / .28, 0, 1));
+          const baixar = U.suave(U.clamp((k - .72) / .23, 0, 1));
+          const gesto = levantar * (1 - baixar), ox = Math.round(U.lerp(98, 88, gesto)), oy = Math.round(U.lerp(184, 173, gesto));
+          sprite(at[0], 70, yb, 0, 1, 3, 'consome');
+          const manga = {chefe:'#3B3B4F',mae:PAL.branco,npc:PAL.verde2}[at[0]] || PAL.azul;
+          const segmento = (x0,y0,x1,y1,cor) => {const n=Math.max(Math.abs(x1-x0),Math.abs(y1-y0),1);for(let j=0;j<=n;j++)px(U.lerp(x0,x1,j/n),U.lerp(y0,y1,j/n),3,3,cor);};
+          segmento(96,183,103,181-gesto*3,manga);
+          segmento(103,181-gesto*3,ox+6,oy+5,PAL.pele);
+          objeto(item,ox,oy);px(ox+6,oy+4,3,3,PAL.pele);
+          if(item==='cafe')for(let j=0;j<2;j++)px(ox+1+j*3,oy-3-((Math.floor(local*5)+j*2)%5),1,2,'#FFF1E899');
+          break;
         }
         case 'dorme': sprite(at[0], 112, 112, 0, 1); px(106, 150, 66, 18, PAL.branco); break;
         case 'compra': case 'recebe': { sprite(at[0], 70, yb, 0, 1); const h = hudEm(t); if (cn.acao === 'compra' || !Number.isFinite(cn.hud?.ouro) || !Number.isFinite(h.ouroAntes) || cn.hud.ouro > h.ouroAntes) for (let i = 0; i < 6; i++) { const q = (local * 1.5 + i / 6) % 1; objeto('moeda', 80 + Math.sin(i * 2) * 20, cn.acao === 'recebe' ? 40 + q * 150 : 180 - q * 150); } if (cn.objeto && cn.objeto !== 'moeda') objeto(cn.objeto, 98, yb + 30); break; }

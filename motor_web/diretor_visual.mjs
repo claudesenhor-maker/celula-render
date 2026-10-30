@@ -40,6 +40,11 @@ export function prepararSpec(entrada) {
  if(spec.estilo==='escala' && (!Array.isArray(spec.itens)||!spec.itens.length))erros.push('escala sem itens');
  if(spec.estilo==='animal' && !spec.animal?.partes?.length)erros.push('animal sem partes: fallback não é modelo apto a publicar');
  if(spec.estilo==='orbita') {spec.data_referencia ??='2000-01-01T12:00:00Z';if(!Number.isFinite(Date.parse(spec.data_referencia)))erros.push('data_referencia inválida');}
+ if(spec.estilo==='enem')spec.cenas.forEach((c,i)=>{
+  if(c.acao==='esquema' && c.esquema==='escala' &&
+    (!Array.isArray(c.itens)||c.itens.length<2||c.itens.length>4||!Array.isArray(c.valores)||c.valores.length!==c.itens.length||c.valores.some(v=>!finite(v)||v<=0)))
+   erros.push(`cena ${i}: escala exige 2 a 4 itens e medidas positivas na mesma unidade`);
+ });
  if(spec.estilo==='pixel')spec.cenas.forEach((c,i)=>{if(c.texto && c.fim-c.ini < c.texto.length/14+.4)avisos.push(`cena ${i}: pouco tempo para leitura`);});
  if(erros.length)throw Error('[diretor] '+erros.join('; '));
  spec.direcao_visual={versao:1,estrategia:'planejar-amostrar-revisar-renderizar',avisos};
