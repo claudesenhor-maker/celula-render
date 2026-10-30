@@ -143,6 +143,45 @@
     return Object.fromEntries(Object.entries(formas).map(([nome, criar]) =>
       [nome, () => cache[nome] || (cache[nome] = criar())]));
   };
+  // Extensões declarativas: perfil [raio,y] ou caminho [x,y,z], em espaço local.
+  // Uma única alocação por peça/preparação; limites também valem sem o diretor.
+  U3.geometriaPeca = function (T, p, fallback) {
+    const pontos = (v, dim, min, max) => Array.isArray(v) && v.length >= min && v.length <= max &&
+      v.every(q => Array.isArray(q) && q.length === dim && q.every(n => typeof n === 'number' && Number.isFinite(n) && Math.abs(n) <= 2));
+    if (p.perfil != null && p.caminho != null) throw Error('use perfil ou caminho');
+    if (p.perfil != null) {
+      if (!pontos(p.perfil, 2, 3, 32) || p.perfil.some(q => q[0] < 0) ||
+          !p.perfil.some(q => q[0] > 0) || p.perfil.some((q,i,a) => i && q[1]-a[i-1][1] < .0001))
+        throw Error('perfil: 3..32 pares [raio>=0,y crescente passo>=.0001], limites -2..2');
+      // Interpolação cúbica monótona do raio em Y: suaviza a silhueta sem
+      // ultrapassar os raios dos pontos de controle ou inverter o eixo.
+      const a = p.perfil, h = a.slice(1).map((q,i) => q[1]-a[i][1]);
+      const d = h.map((v,i) => (a[i+1][0]-a[i][0])/v);
+      const slope = a.map((q,i) => {
+        if (!i) return d[0]; if (i===a.length-1) return d[d.length-1];
+        if (d[i-1]*d[i]<=0) return 0;
+        const w1=2*h[i]+h[i-1],w2=h[i]+2*h[i-1];
+        return (w1+w2)/(w1/d[i-1]+w2/d[i]);
+      });
+      const pts=[];
+      for(let i=0;i<a.length-1;i++)for(let j=0;j<4;j++){
+        const t=j/4,t2=t*t,t3=t2*t;
+        const r=(2*t3-3*t2+1)*a[i][0]+(t3-2*t2+t)*h[i]*slope[i]+
+          (-2*t3+3*t2)*a[i+1][0]+(t3-t2)*h[i]*slope[i+1];
+        pts.push(new T.Vector2(Math.max(0,Math.min(Math.max(a[i][0],a[i+1][0]),Math.max(Math.min(a[i][0],a[i+1][0]),r))),a[i][1]+t*h[i]));
+      }
+      pts.push(new T.Vector2(...a[a.length-1]));
+      return new T.LatheGeometry(pts, 48);
+    }
+    if (p.caminho != null) {
+      if (!pontos(p.caminho, 3, 2, 32) || p.caminho.some((q,i,a) => i && q.every((n,j) => n === a[i-1][j])) ||
+          typeof p.raio !== 'number' || !Number.isFinite(p.raio) || p.raio < .005 || p.raio > .25)
+        throw Error('caminho: 2..32 pontos distintos consecutivos, raio .005...25');
+      const curva = new T.CatmullRomCurve3(p.caminho.map(q => new T.Vector3(...q)), false, 'centripetal');
+      return new T.TubeGeometry(curva, Math.min(256, Math.max(24, p.caminho.length * 8)), p.raio, 12, false);
+    }
+    return fallback();
+  };
   // curvas lisas (as outras ficam com a normal da propria forma)
   U3.FORMAS_LISAS = ['esfera', 'meia_esfera', 'cone', 'cilindro', 'tubo', 'disco', 'anel', 'toro', 'mola', 'capsula', 'helice', 'seta'];
 

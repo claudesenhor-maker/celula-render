@@ -1,0 +1,73 @@
+{
+  "modo": "tecnico-local",
+  "avaliacao_semantica_automatica": false,
+  "clips": [
+    {
+      "arquivo": "antes-lampada.mp4",
+      "sha256": "126e10fc660c5ce135991fff45c27f8632c4bf64098590cc7482bb06c586ec01",
+      "codec": "h264",
+      "w": 1080,
+      "h": 1920,
+      "fps": "12/1",
+      "frames": "72",
+      "dur_s": "6.000000"
+    },
+    {
+      "arquivo": "antes-serpentina.mp4",
+      "sha256": "2fef9ca65c9f6bf81659fb6c099983a05b94e51ca72027d90d2f64942f1c7bef",
+      "codec": "h264",
+      "w": 1080,
+      "h": 1920,
+      "fps": "12/1",
+      "frames": "72",
+      "dur_s": "6.000000"
+    },
+    {
+      "arquivo": "antes-pixel.mp4",
+      "sha256": "11b6bd145c89fec1d2cd3118269f9cde45ff605f6ef811e8872ef045d5bfade7",
+      "codec": "h264",
+      "w": 1080,
+      "h": 1920,
+      "fps": "12/1",
+      "frames": "72",
+      "dur_s": "6.000000"
+    },
+    {
+      "arquivo": "depois-lampada.mp4",
+      "sha256": "b3ce8bbd8a1c1c2feb55bb44cd46f135b3315856e3564fa95b4fa20fc29ef51a",
+      "codec": "h264",
+      "w": 1080,
+      "h": 1920,
+      "fps": "12/1",
+      "frames": "72",
+      "dur_s": "6.000000"
+    },
+    {
+      "arquivo": "depois-serpentina.mp4",
+      "sha256": "90fd57c078f5643cc1807eec3eded0c86a11c0b0b25ff2e353a4972e12bdb052",
+      "codec": "h264",
+      "w": 1080,
+      "h": 1920,
+      "fps": "12/1",
+      "frames": "72",
+      "dur_s": "6.000000"
+    },
+    {
+      "arquivo": "depois-pixel.mp4",
+      "sha256": "11b6bd145c89fec1d2cd3118269f9cde45ff605f6ef811e8872ef045d5bfade7",
+      "codec": "h264",
+      "w": 1080,
+      "h": 1920,
+      "fps": "12/1",
+      "frames": "72",
+      "dur_s": "6.000000"
+    }
+  ],
+  "pixel_72_png_identicos": true,
+  "specs_sha256": "60d75eb78dbfc9d09318a0b28ead576dc505fa621c557b871428e3cec1468ce0",
+  "limitacoes": [
+    "clipes sem áudio",
+    "12fps não valida movimento em 30fps",
+    "heap JS não inclui memória completa do browser/GPU"
+  ]
+}

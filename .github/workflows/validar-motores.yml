@@ -35,6 +35,8 @@ jobs:
         run: node motor_web/tests/auditar_graficos.mjs motor_web /tmp/motores-validacao
       - name: Ciclo de revisão no navegador
         run: node motor_web/tests/revisao.browser.mjs
+      - name: Rótulo ancorado na curva com pivô
+        run: node motor_web/tests/rotulo_curva.browser.mjs
       - name: Exportar MP4 sem publicação
         run: |
           node --input-type=module - <<'JS'

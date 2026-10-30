@@ -1,0 +1,518 @@
+[
+  {
+    "id": 40971438851,
+    "head_sha": "358566fd814ec05d12194670aa5c5008ef23196a",
+    "name": "render-palito",
+    "event": "repository_dispatch",
+    "conclusion": "failure",
+    "html_url": "https://github.com/claudesenhor-maker/celula-render/actions/runs/40971438851",
+    "created_at": "2026-10-29T23:11:49Z",
+    "jobs": [
+      {
+        "name": "render",
+        "conclusion": "failure",
+        "steps": [
+          {
+            "name": "Set up job",
+            "status": "completed",
+            "conclusion": "success",
+            "number": 1,
+            "started_at": "2026-10-29T23:11:53Z",
+            "completed_at": "2026-10-29T23:11:54Z"
+          },
+          {
+            "name": "Run actions/checkout@v4",
+            "status": "completed",
+            "conclusion": "success",
+            "number": 2,
+            "started_at": "2026-10-29T23:11:54Z",
+            "completed_at": "2026-10-29T23:12:02Z"
+          },
+          {
+            "name": "Run actions/setup-python@v5",
+            "status": "completed",
+            "conclusion": "success",
+            "number": 3,
+            "started_at": "2026-10-29T23:12:02Z",
+            "completed_at": "2026-10-29T23:12:05Z"
+          },
+          {
+            "name": "Dependencias do sistema",
+            "status": "completed",
+            "conclusion": "success",
+            "number": 4,
+            "started_at": "2026-10-29T23:12:05Z",
+            "completed_at": "2026-10-29T23:13:36Z"
+          },
+          {
+            "name": "Dependencias Python",
+            "status": "completed",
+            "conclusion": "success",
+            "number": 5,
+            "started_at": "2026-10-29T23:13:36Z",
+            "completed_at": "2026-10-29T23:13:42Z"
+          },
+          {
+            "name": "Dependencias do motor web",
+            "status": "completed",
+            "conclusion": "success",
+            "number": 6,
+            "started_at": "2026-10-29T23:13:42Z",
+            "completed_at": "2026-10-29T23:13:45Z"
+          },
+          {
+            "name": "Verificar contratos e dire\u00e7\u00e3o visual",
+            "status": "completed",
+            "conclusion": "success",
+            "number": 7,
+            "started_at": "2026-10-29T23:13:45Z",
+            "completed_at": "2026-10-29T23:13:48Z"
+          },
+          {
+            "name": "Render",
+            "status": "completed",
+            "conclusion": "failure",
+            "number": 8,
+            "started_at": "2026-10-29T23:13:48Z",
+            "completed_at": "2026-10-29T23:15:39Z"
+          },
+          {
+            "name": "Guardar o MP4 como artefato (util para depurar)",
+            "status": "completed",
+            "conclusion": "success",
+            "number": 9,
+            "started_at": "2026-10-29T23:15:39Z",
+            "completed_at": "2026-10-29T23:15:39Z"
+          },
+          {
+            "name": "Avisar o n8n se o job falhou",
+            "status": "completed",
+            "conclusion": "success",
+            "number": 10,
+            "started_at": "2026-10-29T23:15:39Z",
+            "completed_at": "2026-10-29T23:15:40Z"
+          },
+          {
+            "name": "Post Run actions/setup-python@v5",
+            "status": "completed",
+            "conclusion": "skipped",
+            "number": 19,
+            "started_at": "2026-10-29T23:15:40Z",
+            "completed_at": "2026-10-29T23:15:40Z"
+          },
+          {
+            "name": "Post Run actions/checkout@v4",
+            "status": "completed",
+            "conclusion": "success",
+            "number": 20,
+            "started_at": "2026-10-29T23:15:40Z",
+            "completed_at": "2026-10-29T23:15:40Z"
+          },
+          {
+            "name": "Complete job",
+            "status": "completed",
+            "conclusion": "success",
+            "number": 21,
+            "started_at": "2026-10-29T23:15:40Z",
+            "completed_at": "2026-10-29T23:15:40Z"
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": 40970255754,
+    "head_sha": "358566fd814ec05d12194670aa5c5008ef23196a",
+    "name": "render-palito",
+    "event": "repository_dispatch",
+    "conclusion": "failure",
+    "html_url": "https://github.com/claudesenhor-maker/celula-render/actions/runs/40970255754",
+    "created_at": "2026-10-29T23:02:02Z",
+    "jobs": [
+      {
+        "name": "render",
+        "conclusion": "failure",
+        "steps": [
+          {
+            "name": "Set up job",
+            "status": "completed",
+            "conclusion": "success",
+            "number": 1,
+            "started_at": "2026-10-29T23:02:04Z",
+            "completed_at": "2026-10-29T23:02:05Z"
+          },
+          {
+            "name": "Run actions/checkout@v4",
+            "status": "completed",
+            "conclusion": "success",
+            "number": 2,
+            "started_at": "2026-10-29T23:02:05Z",
+            "completed_at": "2026-10-29T23:02:12Z"
+          },
+          {
+            "name": "Run actions/setup-python@v5",
+            "status": "completed",
+            "conclusion": "success",
+            "number": 3,
+            "started_at": "2026-10-29T23:02:12Z",
+            "completed_at": "2026-10-29T23:02:14Z"
+          },
+          {
+            "name": "Dependencias do sistema",
+            "status": "completed",
+            "conclusion": "success",
+            "number": 4,
+            "started_at": "2026-10-29T23:02:14Z",
+            "completed_at": "2026-10-29T23:02:31Z"
+          },
+          {
+            "name": "Dependencias Python",
+            "status": "completed",
+            "conclusion": "success",
+            "number": 5,
+            "started_at": "2026-10-29T23:02:31Z",
+            "completed_at": "2026-10-29T23:02:36Z"
+          },
+          {
+            "name": "Dependencias do motor web",
+            "status": "completed",
+            "conclusion": "success",
+            "number": 6,
+            "started_at": "2026-10-29T23:02:36Z",
+            "completed_at": "2026-10-29T23:02:37Z"
+          },
+          {
+            "name": "Verificar contratos e dire\u00e7\u00e3o visual",
+            "status": "completed",
+            "conclusion": "success",
+            "number": 7,
+            "started_at": "2026-10-29T23:02:37Z",
+            "completed_at": "2026-10-29T23:02:40Z"
+          },
+          {
+            "name": "Render",
+            "status": "completed",
+            "conclusion": "failure",
+            "number": 8,
+            "started_at": "2026-10-29T23:02:40Z",
+            "completed_at": "2026-10-29T23:04:09Z"
+          },
+          {
+            "name": "Guardar o MP4 como artefato (util para depurar)",
+            "status": "completed",
+            "conclusion": "success",
+            "number": 9,
+            "started_at": "2026-10-29T23:04:09Z",
+            "completed_at": "2026-10-29T23:04:09Z"
+          },
+          {
+            "name": "Avisar o n8n se o job falhou",
+            "status": "completed",
+            "conclusion": "success",
+            "number": 10,
+            "started_at": "2026-10-29T23:04:09Z",
+            "completed_at": "2026-10-29T23:04:09Z"
+          },
+          {
+            "name": "Post Run actions/setup-python@v5",
+            "status": "completed",
+            "conclusion": "skipped",
+            "number": 19,
+            "started_at": "2026-10-29T23:04:09Z",
+            "completed_at": "2026-10-29T23:04:09Z"
+          },
+          {
+            "name": "Post Run actions/checkout@v4",
+            "status": "completed",
+            "conclusion": "success",
+            "number": 20,
+            "started_at": "2026-10-29T23:04:09Z",
+            "completed_at": "2026-10-29T23:04:09Z"
+          },
+          {
+            "name": "Complete job",
+            "status": "completed",
+            "conclusion": "success",
+            "number": 21,
+            "started_at": "2026-10-29T23:04:09Z",
+            "completed_at": "2026-10-29T23:04:09Z"
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": 40971371481,
+    "head_sha": "358566fd814ec05d12194670aa5c5008ef23196a",
+    "name": "render-palito",
+    "event": "repository_dispatch",
+    "conclusion": "failure",
+    "html_url": "https://github.com/claudesenhor-maker/celula-render/actions/runs/40971371481",
+    "created_at": "2026-10-29T23:11:15Z",
+    "jobs": [
+      {
+        "name": "render",
+        "conclusion": "failure",
+        "steps": [
+          {
+            "name": "Set up job",
+            "status": "completed",
+            "conclusion": "success",
+            "number": 1,
+            "started_at": "2026-10-29T23:11:18Z",
+            "completed_at": "2026-10-29T23:11:18Z"
+          },
+          {
+            "name": "Run actions/checkout@v4",
+            "status": "completed",
+            "conclusion": "success",
+            "number": 2,
+            "started_at": "2026-10-29T23:11:18Z",
+            "completed_at": "2026-10-29T23:11:25Z"
+          },
+          {
+            "name": "Run actions/setup-python@v5",
+            "status": "completed",
+            "conclusion": "success",
+            "number": 3,
+            "started_at": "2026-10-29T23:11:25Z",
+            "completed_at": "2026-10-29T23:11:26Z"
+          },
+          {
+            "name": "Dependencias do sistema",
+            "status": "completed",
+            "conclusion": "success",
+            "number": 4,
+            "started_at": "2026-10-29T23:11:26Z",
+            "completed_at": "2026-10-29T23:11:46Z"
+          },
+          {
+            "name": "Dependencias Python",
+            "status": "completed",
+            "conclusion": "success",
+            "number": 5,
+            "started_at": "2026-10-29T23:11:46Z",
+            "completed_at": "2026-10-29T23:11:53Z"
+          },
+          {
+            "name": "Dependencias do motor web",
+            "status": "completed",
+            "conclusion": "success",
+            "number": 6,
+            "started_at": "2026-10-29T23:11:53Z",
+            "completed_at": "2026-10-29T23:11:59Z"
+          },
+          {
+            "name": "Verificar contratos e dire\u00e7\u00e3o visual",
+            "status": "completed",
+            "conclusion": "success",
+            "number": 7,
+            "started_at": "2026-10-29T23:11:59Z",
+            "completed_at": "2026-10-29T23:12:02Z"
+          },
+          {
+            "name": "Render",
+            "status": "completed",
+            "conclusion": "failure",
+            "number": 8,
+            "started_at": "2026-10-29T23:12:02Z",
+            "completed_at": "2026-10-29T23:19:09Z"
+          },
+          {
+            "name": "Guardar o MP4 como artefato (util para depurar)",
+            "status": "completed",
+            "conclusion": "success",
+            "number": 9,
+            "started_at": "2026-10-29T23:19:09Z",
+            "completed_at": "2026-10-29T23:19:10Z"
+          },
+          {
+            "name": "Avisar o n8n se o job falhou",
+            "status": "completed",
+            "conclusion": "success",
+            "number": 10,
+            "started_at": "2026-10-29T23:19:10Z",
+            "completed_at": "2026-10-29T23:19:10Z"
+          },
+          {
+            "name": "Post Run actions/setup-python@v5",
+            "status": "completed",
+            "conclusion": "skipped",
+            "number": 19,
+            "started_at": "2026-10-29T23:19:10Z",
+            "completed_at": "2026-10-29T23:19:10Z"
+          },
+          {
+            "name": "Post Run actions/checkout@v4",
+            "status": "completed",
+            "conclusion": "success",
+            "number": 20,
+            "started_at": "2026-10-29T23:19:10Z",
+            "completed_at": "2026-10-29T23:19:10Z"
+          },
+          {
+            "name": "Complete job",
+            "status": "completed",
+            "conclusion": "success",
+            "number": 21,
+            "started_at": "2026-10-29T23:19:10Z",
+            "completed_at": "2026-10-29T23:19:10Z"
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": 40960935130,
+    "head_sha": "85851b4d245db1cef02ae8f2d23d02c913aab202",
+    "name": "validar-motores",
+    "event": "push",
+    "conclusion": "success",
+    "html_url": "https://github.com/claudesenhor-maker/celula-render/actions/runs/40960935130",
+    "created_at": "2026-10-29T21:49:06Z",
+    "jobs": [
+      {
+        "name": "validar",
+        "conclusion": "success",
+        "steps": [
+          {
+            "name": "Set up job",
+            "status": "completed",
+            "conclusion": "success",
+            "number": 1,
+            "started_at": "2026-10-29T21:49:12Z",
+            "completed_at": "2026-10-29T21:49:13Z"
+          },
+          {
+            "name": "Run actions/checkout@v4",
+            "status": "completed",
+            "conclusion": "success",
+            "number": 2,
+            "started_at": "2026-10-29T21:49:13Z",
+            "completed_at": "2026-10-29T21:49:20Z"
+          },
+          {
+            "name": "Run actions/setup-node@v4",
+            "status": "completed",
+            "conclusion": "success",
+            "number": 3,
+            "started_at": "2026-10-29T21:49:20Z",
+            "completed_at": "2026-10-29T21:49:24Z"
+          },
+          {
+            "name": "Run actions/setup-python@v5",
+            "status": "completed",
+            "conclusion": "success",
+            "number": 4,
+            "started_at": "2026-10-29T21:49:24Z",
+            "completed_at": "2026-10-29T21:49:24Z"
+          },
+          {
+            "name": "Run npm ci --prefix motor_web --no-audit --no-fund",
+            "status": "completed",
+            "conclusion": "success",
+            "number": 5,
+            "started_at": "2026-10-29T21:49:24Z",
+            "completed_at": "2026-10-29T21:49:26Z"
+          },
+          {
+            "name": "Run pip install Pillow",
+            "status": "completed",
+            "conclusion": "success",
+            "number": 6,
+            "started_at": "2026-10-29T21:49:26Z",
+            "completed_at": "2026-10-29T21:49:28Z"
+          },
+          {
+            "name": "Depend\u00eancia de exporta\u00e7\u00e3o",
+            "status": "completed",
+            "conclusion": "success",
+            "number": 7,
+            "started_at": "2026-10-29T21:49:28Z",
+            "completed_at": "2026-10-29T21:49:48Z"
+          },
+          {
+            "name": "Run npm test --prefix motor_web",
+            "status": "completed",
+            "conclusion": "success",
+            "number": 8,
+            "started_at": "2026-10-29T21:49:48Z",
+            "completed_at": "2026-10-29T21:49:52Z"
+          },
+          {
+            "name": "Run python -m unittest discover -s motor_web/tests -p 'test_*.py'",
+            "status": "completed",
+            "conclusion": "success",
+            "number": 9,
+            "started_at": "2026-10-29T21:49:52Z",
+            "completed_at": "2026-10-29T21:49:53Z"
+          },
+          {
+            "name": "Amostras dos 14 motores",
+            "status": "completed",
+            "conclusion": "success",
+            "number": 10,
+            "started_at": "2026-10-29T21:49:53Z",
+            "completed_at": "2026-10-29T21:51:03Z"
+          },
+          {
+            "name": "Ciclo de revis\u00e3o no navegador",
+            "status": "completed",
+            "conclusion": "success",
+            "number": 11,
+            "started_at": "2026-10-29T21:51:03Z",
+            "completed_at": "2026-10-29T21:51:18Z"
+          },
+          {
+            "name": "Exportar MP4 sem publica\u00e7\u00e3o",
+            "status": "completed",
+            "conclusion": "success",
+            "number": 12,
+            "started_at": "2026-10-29T21:51:18Z",
+            "completed_at": "2026-10-29T21:51:23Z"
+          },
+          {
+            "name": "Run actions/upload-artifact@v4",
+            "status": "completed",
+            "conclusion": "success",
+            "number": 13,
+            "started_at": "2026-10-29T21:51:23Z",
+            "completed_at": "2026-10-29T21:51:26Z"
+          },
+          {
+            "name": "Post Run actions/setup-python@v5",
+            "status": "completed",
+            "conclusion": "success",
+            "number": 24,
+            "started_at": "2026-10-29T21:51:26Z",
+            "completed_at": "2026-10-29T21:51:26Z"
+          },
+          {
+            "name": "Post Run actions/setup-node@v4",
+            "status": "completed",
+            "conclusion": "success",
+            "number": 25,
+            "started_at": "2026-10-29T21:51:26Z",
+            "completed_at": "2026-10-29T21:51:26Z"
+          },
+          {
+            "name": "Post Run actions/checkout@v4",
+            "status": "completed",
+            "conclusion": "success",
+            "number": 26,
+            "started_at": "2026-10-29T21:51:26Z",
+            "completed_at": "2026-10-29T21:51:26Z"
+          },
+          {
+            "name": "Complete job",
+            "status": "completed",
+            "conclusion": "success",
+            "number": 27,
+            "started_at": "2026-10-29T21:51:27Z",
+            "completed_at": "2026-10-29T21:51:27Z"
+          }
+        ]
+      }
+    ]
+  }
+]

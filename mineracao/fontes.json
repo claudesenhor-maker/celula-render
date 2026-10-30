@@ -1,0 +1,481 @@
+{
+  "versao": 1,
+  "max_execucao_s": 120,
+  "max_fontes": 10,
+  "max_requests_execucao": 8,
+  "max_requests_dia": 16,
+  "retries": 1,
+  "timeout_s": 10,
+  "max_propostas_execucao": 3,
+  "intervalo_fonte_s": 82800,
+  "max_bytes_resposta": 1500000,
+  "max_bytes_arquivo": 100000000,
+  "max_storage_bytes": 100000000,
+  "hosts": [
+    "threejs.org",
+    "developer.mozilla.org",
+    "ai.google.dev",
+    "github.com",
+    "api.github.com"
+  ],
+  "raizes_locais": [
+    "/home/azureuser"
+  ],
+  "fontes": [
+    {
+      "arquivo": "/home/azureuser/Gravando 2026-10-26 195402.mp4",
+      "url": "https://www.instagram.com/desmontandoomundo/",
+      "tipo": "gravacao-usuario",
+      "hash_revisado": "df93d1f0ce9b4b93557ba4119e4d8277bf1599ffb8d0fea36855f6eea7a12018",
+      "nivel": "quadros-observados",
+      "proveniencia": {
+        "autor": "perfil visível desmontandoomundo; atribuição da captura, autoria não verificada",
+        "direitos": "obra de terceiro; consulta privada, sem reutilização de imagens/assets",
+        "recebido_em": "2026-10-26",
+        "analisado_em": "2026-10-29",
+        "metodo": "inspeção de quadros nas folhas de contato fornecidas; sem análise do áudio nem visão contínua",
+        "url_contexto": "https://www.instagram.com/desmontandoomundo/"
+      },
+      "observacoes": [
+        "Lâmpada ocupa close aos 17.5s e 36.9s, com contorno distinto entre pescoço e bulbo; interior e filamento são localizados por rótulos.",
+        "Aos 1.9s há personagem e mesa; aos 36.9s o enquadramento privilegia o detalhe. Não é evidência do software usado."
+      ],
+      "timecodes": [
+        {
+          "ini_s": 17.5,
+          "fim_s": 21.4,
+          "observacao": "silhueta/interior"
+        },
+        {
+          "ini_s": 36.9,
+          "fim_s": 40.8,
+          "observacao": "close/filamento"
+        }
+      ],
+      "quadros": [
+        "/home/azureuser/retomada-videos-auto/referencias-20261026/referencia1.jpg"
+      ],
+      "oportunidades": [
+        {
+          "motor": "mecanismo",
+          "tecnica": "perfil-revolucao",
+          "lacuna": "Bulbo esférico genérico perde a relação pescoço/ombro.",
+          "proposta": "Adicionar perfil axial limitado, preservando material, pivô e corte existentes.",
+          "criterios": [
+            "Lâmpada tem pescoço estreito e ombro contínuo nos mesmos enquadramentos.",
+            "Filamento permanece no interior e legível após corte.",
+            "Sem pageerror; repetição temporal estável; render médio até +20% na mesma máquina."
+          ],
+          "impacto": 5,
+          "esforco": 2,
+          "custo": "sem API paga; medir CPU/memória no experimento",
+          "confianca": 0.85
+        },
+        {
+          "motor": "lowpoly",
+          "tecnica": "contexto-para-detalhe",
+          "lacuna": "A cena tende a manter enquadramento amplo e atuação genérica.",
+          "proposta": "Planejar plano de contexto e detalhe com foco no evento, sem zoom raster da UI.",
+          "criterios": [
+            "Evento ocupa área legível; título e legenda não são cortados.",
+            "Avaliar início, contato e desfecho em clipe 30fps."
+          ],
+          "impacto": 4,
+          "esforco": 3,
+          "custo": "sem API paga; medir CPU/memória no experimento",
+          "confianca": 0.85
+        },
+        {
+          "motor": "animal",
+          "tecnica": "anatomia-articulada",
+          "lacuna": "Partes paramétricas ainda parecem volumes genéricos no diagnóstico histórico.",
+          "proposta": "Criar fixture anatômica com ombro/quadril e duas articulações por membro.",
+          "criterios": [
+            "Sem deslizamento do pé apoiado em 3 ciclos.",
+            "Silhueta reconhecível frontal/lateral; pivôs não abrem lacunas."
+          ],
+          "impacto": 5,
+          "esforco": 5,
+          "custo": "sem API paga; medir CPU/memória no experimento",
+          "confianca": 0.85
+        },
+        {
+          "motor": "micro",
+          "tecnica": "causalidade-oclusao",
+          "lacuna": "Camadas esquemáticas não provam mecanismo nem eficácia.",
+          "proposta": "Separar corte didático, percurso e desfecho com oclusão e escala declaradas.",
+          "criterios": [
+            "Nenhuma eficácia afirmada a partir do desenho.",
+            "Partícula segue caminho explícito sem cruzar barreira opaca sem corte."
+          ],
+          "impacto": 4,
+          "esforco": 3,
+          "custo": "sem API paga; medir CPU/memória no experimento",
+          "confianca": 0.85
+        },
+        {
+          "motor": "escala",
+          "tecnica": "composicao-medida",
+          "lacuna": "Medida correta pode ter leitura fraca em plano muito aberto.",
+          "proposta": "Planejar comparação e âncoras de escala sem alterar medidas.",
+          "criterios": [
+            "Valores e proporções preservados.",
+            "Âncora humana e rótulo legíveis na transição."
+          ],
+          "impacto": 4,
+          "esforco": 3,
+          "custo": "sem API paga; medir CPU/memória no experimento",
+          "confianca": 0.85
+        },
+        {
+          "motor": "orbita",
+          "tecnica": "continuidade-celeste",
+          "lacuna": "Textura melhorada não resolve transições nem legibilidade das distâncias.",
+          "proposta": "Planejar corte sistema→planeta com escala e data explícitas.",
+          "criterios": [
+            "Data e modo esquemático visíveis.",
+            "Sem salto de alvo ou rótulo no corte."
+          ],
+          "impacto": 4,
+          "esforco": 3,
+          "custo": "sem API paga; medir CPU/memória no experimento",
+          "confianca": 0.85
+        },
+        {
+          "motor": "palito_v5",
+          "tecnica": "piloto-contato-leitura",
+          "lacuna": "Render vetorial narrado de fallback; visemas/contato precisam piloto.",
+          "proposta": "Renderizar piloto original com assets licenciados, voz e ação sincronizadas antes de alterar o motor.",
+          "criterios": [
+            "Inspecionar abertura, contato e final com narração real.",
+            "Texto legível em área segura; tempo, RSS e falhas registrados.",
+            "Nenhuma publicação automática; manter fallback existente."
+          ],
+          "impacto": 3,
+          "esforco": 4,
+          "custo": "sem API paga; medir CPU/memória no experimento",
+          "confianca": 0.85
+        },
+        {
+          "motor": "palito_v4",
+          "tecnica": "piloto-contato-leitura",
+          "lacuna": "Biblioteca de rig SVG de palito_v5/cutout; articulação exige piloto no motor consumidor, não há render de vídeo isolado.",
+          "proposta": "Verificar ombro, alcance e contato em piloto de palito_v5/cutout antes de alterar o rig partilhado.",
+          "criterios": [
+            "Inspecionar abertura, contato e final com narração real.",
+            "Texto legível em área segura; tempo, RSS e falhas registrados.",
+            "Nenhuma publicação automática; manter fallback existente."
+          ],
+          "impacto": 3,
+          "esforco": 4,
+          "custo": "sem API paga; medir CPU/memória no experimento",
+          "confianca": 0.85
+        },
+        {
+          "motor": "palito_cutout",
+          "tecnica": "piloto-contato-leitura",
+          "lacuna": "Recorte por partes; depende dos assets reais do canal.",
+          "proposta": "Renderizar piloto original com assets licenciados, voz e ação sincronizadas antes de alterar o motor.",
+          "criterios": [
+            "Inspecionar abertura, contato e final com narração real.",
+            "Texto legível em área segura; tempo, RSS e falhas registrados.",
+            "Nenhuma publicação automática; manter fallback existente."
+          ],
+          "impacto": 3,
+          "esforco": 4,
+          "custo": "sem API paga; medir CPU/memória no experimento",
+          "confianca": 0.85
+        },
+        {
+          "motor": "cartao",
+          "tecnica": "piloto-contato-leitura",
+          "lacuna": "Cartão composto por partes; depende de tipografia e assets reais.",
+          "proposta": "Renderizar piloto original com assets licenciados, voz e ação sincronizadas antes de alterar o motor.",
+          "criterios": [
+            "Inspecionar abertura, contato e final com narração real.",
+            "Texto legível em área segura; tempo, RSS e falhas registrados.",
+            "Nenhuma publicação automática; manter fallback existente."
+          ],
+          "impacto": 3,
+          "esforco": 4,
+          "custo": "sem API paga; medir CPU/memória no experimento",
+          "confianca": 0.85
+        }
+      ]
+    },
+    {
+      "arquivo": "/home/azureuser/Gravando 2026-10-26 195512.mp4",
+      "url": "https://www.instagram.com/desmontandoomundo/",
+      "tipo": "gravacao-usuario",
+      "hash_revisado": "a6410155875441f0eb6be7b8ee19da4b96fda82b76f2b80588e1e0db36260c05",
+      "nivel": "quadros-observados",
+      "proveniencia": {
+        "autor": "perfil visível desmontandoomundo; atribuição da captura, autoria não verificada",
+        "direitos": "obra de terceiro; consulta privada, sem reutilização de imagens/assets",
+        "recebido_em": "2026-10-26",
+        "analisado_em": "2026-10-29",
+        "metodo": "inspeção de quadros nas folhas de contato fornecidas; sem análise do áudio nem visão contínua",
+        "url_contexto": "https://www.instagram.com/desmontandoomundo/"
+      },
+      "observacoes": [
+        "Aos 6.6s há serpentina conectada; aos 14.5s e 17.2s o cano e o percurso recebem close.",
+        "Composição alterna ambiente doméstico e percurso; sem inferência sobre Blender/Three.js ou ferramenta do autor."
+      ],
+      "timecodes": [
+        {
+          "ini_s": 6.6,
+          "fim_s": 9.2,
+          "observacao": "serpentina/contexto"
+        },
+        {
+          "ini_s": 14.5,
+          "fim_s": 17.2,
+          "observacao": "cano/percurso"
+        }
+      ],
+      "quadros": [
+        "/home/azureuser/retomada-videos-auto/referencias-20261026/referencia2.jpg"
+      ],
+      "oportunidades": [
+        {
+          "motor": "mecanismo",
+          "tecnica": "tubo-continuo",
+          "lacuna": "Cilindros retos isolados não descrevem um percurso curvo conectado.",
+          "proposta": "Extrudar tubo numa curva centrípeta declarada; usar as mesmas coordenadas no fluxo.",
+          "criterios": [
+            "Extremidades coincidem com a curva a 1e-6.",
+            "Serpentina contínua visível no plano de contexto.",
+            "Fluxo obedece à oclusão; não representa simulação termodinâmica."
+          ],
+          "impacto": 5,
+          "esforco": 2,
+          "custo": "sem API paga; medir CPU/memória no experimento",
+          "confianca": 0.85
+        }
+      ]
+    },
+    {
+      "url": "https://threejs.org/docs/pages/LatheGeometry.html",
+      "tipo": "documentacao-primaria",
+      "nivel": "documentacao-revisada",
+      "proveniencia": {
+        "direitos": "somente URL/título/hash e notas próprias; sem assets baixados",
+        "analisado_em": "2026-10-29",
+        "metodo": "consulta da documentação primária via web"
+      },
+      "observacoes": [
+        "A API constrói superfícies de simetria axial em torno de Y a partir de pontos."
+      ],
+      "oportunidades": [],
+      "hash_revisado": "53edcc9aed98fa32fbf648a0d5a8691f6eb8c8c09381abf4dcfab531bb1a1677"
+    },
+    {
+      "url": "https://threejs.org/docs/pages/TubeGeometry.html",
+      "tipo": "documentacao-primaria",
+      "nivel": "documentacao-revisada",
+      "proveniencia": {
+        "direitos": "somente URL/título/hash e notas próprias; sem assets baixados",
+        "analisado_em": "2026-10-29",
+        "metodo": "consulta da documentação primária via web"
+      },
+      "observacoes": [
+        "A API extruda tubo ao longo de uma curva; permite controlar custo por segmentos."
+      ],
+      "oportunidades": [],
+      "hash_revisado": "4c1abf0b852a3d727a3d86442c7818f4667444a56a8feec57db2bee4fa6b4dc1"
+    },
+    {
+      "url": "https://developer.mozilla.org/en-US/docs/Web/API/CanvasRenderingContext2D/imageSmoothingEnabled",
+      "tipo": "documentacao-primaria",
+      "nivel": "documentacao-revisada",
+      "proveniencia": {
+        "direitos": "somente URL/título/hash e notas próprias; sem assets baixados",
+        "analisado_em": "2026-10-29",
+        "metodo": "consulta da documentação primária via web"
+      },
+      "observacoes": [
+        "Desativar suavização preserva bordas ao ampliar pixel art; isso não valida atuação nem semântica."
+      ],
+      "oportunidades": [
+        {
+          "motor": "pixel",
+          "tecnica": "atuacao-na-grade",
+          "lacuna": "Grade e semântica têm guardas; atuação e contato ainda precisam revisão temporal.",
+          "proposta": "Comparar digitação, consumo e entrega em três beats: antecipação, contato e recuperação, mantendo objetos explícitos.",
+          "criterios": [
+            "Sem interpolação da grade; sprites em coordenadas inteiras.",
+            "Café/sorvete permanecem na mão durante consumo.",
+            "Sem ouro ou dano inventado; replay T392 e testes semânticos passam."
+          ],
+          "impacto": 5,
+          "esforco": 4,
+          "custo": "sem API paga; medir CPU/memória no experimento",
+          "confianca": 0.85
+        }
+      ],
+      "hash_revisado": "e8e7423e98a70a8a98e222130b2675e590fa8052c091976304038d41cbb061bd"
+    },
+    {
+      "url": "https://developer.mozilla.org/en-US/docs/Web/API/Canvas_API/Tutorial/Optimizing_canvas",
+      "tipo": "documentacao-primaria",
+      "nivel": "documentacao-revisada",
+      "proveniencia": {
+        "direitos": "somente URL/título/hash e notas próprias; sem assets baixados",
+        "analisado_em": "2026-10-29",
+        "metodo": "consulta da documentação primária via web"
+      },
+      "observacoes": [
+        "Camadas fora da tela permitem reutilizar desenho estático; melhoria de desempenho não implica qualidade visual."
+      ],
+      "oportunidades": [
+        {
+          "motor": "mangueira",
+          "tecnica": "contato-e-silhueta",
+          "lacuna": "Textura de película não resolve atuação.",
+          "proposta": "Criar gag original com antecipação e contato verificáveis.",
+          "criterios": [
+            "Objeto explícito toca mão no beat correto.",
+            "Leitura sem legenda em plano geral."
+          ],
+          "impacto": 4,
+          "esforco": 3,
+          "custo": "sem API paga; medir CPU/memória no experimento",
+          "confianca": 0.85
+        },
+        {
+          "motor": "silhueta",
+          "tecnica": "separacao-de-planos",
+          "lacuna": "Baixa luz pode apagar a ação.",
+          "proposta": "Criar separação por valor tonal e posição sem depender de partículas.",
+          "criterios": [
+            "Membros e objeto se distinguem em 3 poses.",
+            "Sem cruzamento confuso com fundo."
+          ],
+          "impacto": 4,
+          "esforco": 3,
+          "custo": "sem API paga; medir CPU/memória no experimento",
+          "confianca": 0.85
+        },
+        {
+          "motor": "mapa",
+          "tecnica": "rotulos-e-percurso",
+          "lacuna": "Sobreposição de rotas/rótulos depende do spec.",
+          "proposta": "Reservar faixa de rótulos e testar duas rotas próximas.",
+          "criterios": [
+            "Sem sobreposição de nomes na fixture.",
+            "Fronteiras e coordenadas existentes preservadas."
+          ],
+          "impacto": 4,
+          "esforco": 3,
+          "custo": "sem API paga; medir CPU/memória no experimento",
+          "confianca": 0.85
+        },
+        {
+          "motor": "linha_tempo",
+          "tecnica": "hierarquia-temporal",
+          "lacuna": "Texto longo pode competir com marcos.",
+          "proposta": "Projetar densidade e duração de leitura por evento.",
+          "criterios": [
+            "Texto integral cabe na área segura.",
+            "Cronologia e números preservados."
+          ],
+          "impacto": 4,
+          "esforco": 3,
+          "custo": "sem API paga; medir CPU/memória no experimento",
+          "confianca": 0.85
+        },
+        {
+          "motor": "quiz",
+          "tecnica": "legibilidade-do-desafio",
+          "lacuna": "Contraste e densidade podem ocultar o alvo.",
+          "proposta": "Avaliar grades difíceis em tela reduzida sem mudar a resposta.",
+          "criterios": [
+            "Mesmo diferente e posição com semente fixa.",
+            "Revelação inequívoca no final."
+          ],
+          "impacto": 4,
+          "esforco": 3,
+          "custo": "sem API paga; medir CPU/memória no experimento",
+          "confianca": 0.85
+        },
+        {
+          "motor": "fisica",
+          "tecnica": "causa-e-contato",
+          "lacuna": "Eficiência de fundo não prova coerência do movimento.",
+          "proposta": "Registrar contato, trajetória e resolução num clipe com eventos marcados.",
+          "criterios": [
+            "Nenhuma penetração maior que raio/4 na fixture.",
+            "Evento de som coincide com contato no mesmo frame."
+          ],
+          "impacto": 4,
+          "esforco": 3,
+          "custo": "sem API paga; medir CPU/memória no experimento",
+          "confianca": 0.85
+        },
+        {
+          "motor": "enem",
+          "tecnica": "hierarquia-na-lousa",
+          "lacuna": "Muita informação compete com explicação.",
+          "proposta": "Distribuir um conceito por beat com espaço para legenda.",
+          "criterios": [
+            "Texto integral sem sobreposição.",
+            "Diagrama corresponde à frase em três tempos."
+          ],
+          "impacto": 4,
+          "esforco": 3,
+          "custo": "sem API paga; medir CPU/memória no experimento",
+          "confianca": 0.85
+        }
+      ],
+      "hash_revisado": "fff2524593f242f708ebc3d7b5cb65bdb4ebaa1ad0e87a87a22ab6ac6036ae8a"
+    },
+    {
+      "url": "https://ai.google.dev/gemini-api/docs/video-understanding",
+      "tipo": "documentacao-primaria",
+      "nivel": "documentacao-revisada",
+      "proveniencia": {
+        "direitos": "somente URL/título/hash e notas próprias; sem assets baixados",
+        "analisado_em": "2026-10-29",
+        "metodo": "consulta da documentação primária via web"
+      },
+      "observacoes": [
+        "Documentação aceita timestamps e explica amostragem visual; amostragem padrão pode perder movimento rápido. Não foi contratado/chamado um serviço."
+      ],
+      "oportunidades": [],
+      "hash_revisado": "2d20cf30271a9cbac4c05e54187b7e3c072bfc5c32f9b4120d9cb73d1d141b34"
+    },
+    {
+      "url": "https://api.github.com/repos/mrdoob/three.js/releases?per_page=5",
+      "tipo": "feed-github",
+      "proveniencia": {
+        "autor": "three.js / mrdoob",
+        "direitos": "links/metadados; sem download de código/assets",
+        "metodo": "descoberta em feed primário, triagem visual pendente"
+      }
+    }
+  ],
+  "max_descobertas_execucao": 5,
+  "intervalo_falha_s": 3600,
+  "motores": [
+    "lowpoly",
+    "mecanismo",
+    "escala",
+    "animal",
+    "orbita",
+    "micro",
+    "pixel",
+    "mangueira",
+    "silhueta",
+    "mapa",
+    "linha_tempo",
+    "quiz",
+    "fisica",
+    "enem",
+    "palito_v5",
+    "palito_cutout",
+    "cartao"
+  ],
+  "componentes": [
+    "palito_v4"
+  ]
+}

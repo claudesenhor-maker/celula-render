@@ -1,0 +1,36 @@
+{
+  "data": "2026-10-29",
+  "base": "358566fd814ec05d12194670aa5c5008ef23196a",
+  "testes": {
+    "node_unitarios": 22,
+    "node_historicos": "T392 423 cenas; T294, T302, T337 passaram",
+    "python_motor_web": 7,
+    "python_mineracao": 8,
+    "revisor_browser": "servidor simulado, duas respostas e repreparação; não é serviço de IA"
+  },
+  "revisor_browser": {
+    "aprovado": true,
+    "chamadas": 2,
+    "repreparacao": true,
+    "erros": [],
+    "relatorio": "/tmp/revisao-browser-YOBBpo/ensaio.mp4.direcao.json"
+  },
+  "fontes_visao_externas_executadas": false,
+  "rotulo_browser": {
+    "teste": "rotulo-na-curva-com-pivo",
+    "expected": [
+      752.6734318933065,
+      1215.268016044335
+    ],
+    "dot": [
+      752.6734318933065,
+      1215.268016044335
+    ],
+    "distancia": 0,
+    "errors": []
+  },
+  "falhas_infraestrutura_durante_reexportacao": [
+    "timeout de startup Chrome (30s), teste de âncora recuperado com timeout 90s",
+    "Target closed em reexportação do bulbo; recuperação sequencial em curso; não atribuído a geometria sem diagnóstico adicional"
+  ]
+}

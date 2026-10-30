@@ -1,0 +1,45 @@
+{
+  "natureza": "snapshot histórico local; não é auditoria ao vivo",
+  "coletado_originalmente_em": "2026-10-29T21:43:00.140476+00:00",
+  "workflows": [
+    {
+      "id": "Fqzk8FNbYsmLmgK3",
+      "name": "Célula IA · 1 Planejamento Diário",
+      "active": true,
+      "updatedAt": "2026-10-29T19:15:46.867Z"
+    },
+    {
+      "id": "fMgDq0e0BX05ljlc",
+      "name": "Célula IA · Minerador de Concorrentes",
+      "active": true,
+      "updatedAt": "2026-10-23T07:12:41.820Z"
+    },
+    {
+      "id": "1Q6setMpKBcxrv99",
+      "name": "Célula IA · 1a Planejamento por canal",
+      "active": true,
+      "updatedAt": "2026-10-29T07:10:19.775Z"
+    }
+  ],
+  "producao": {
+    "id": "j5isodnFq9dD6cRk",
+    "name": "Célula IA · 3 Produção (sub)",
+    "active": true,
+    "versionId": "06526505-af64-46aa-873b-b1ab32eddec7",
+    "activeVersionId": "06526505-af64-46aa-873b-b1ab32eddec7",
+    "updatedAt": "2026-10-29T21:10:08.475Z"
+  },
+  "acesso_atual": {
+    "vm_token": "PermissionError: rota não permitida para este processo",
+    "identidade_emitir": "PermissionError: rota não permitida para este processo"
+  },
+  "nao_verificados": [
+    "DAG ativo do minerador",
+    "últimas execuções",
+    "banco padroes_externos e contagens",
+    "quotas e custo YouTube",
+    "consumidores SQL atuais",
+    "draft versus active atual",
+    "configuração de visão na VM"
+  ]
+}

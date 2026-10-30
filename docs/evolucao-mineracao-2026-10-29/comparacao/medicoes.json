@@ -1,0 +1,116 @@
+[
+  {
+    "version": "antes",
+    "name": "lampada",
+    "width": 1080,
+    "height": 1920,
+    "fps": 12,
+    "frames": 72,
+    "preparation_ms": 431.2139389514923,
+    "frame_mean_ms": 3622.9503863602877,
+    "frame_p95_ms": 6290.2148950099945,
+    "js_heap_bytes": 4322712,
+    "metrics": {
+      "chamadas": 15,
+      "triangulos": 16898,
+      "geometrias": 9,
+      "texturas": 5
+    },
+    "deterministic": true,
+    "errors": []
+  },
+  {
+    "version": "antes",
+    "name": "serpentina",
+    "width": 1080,
+    "height": 1920,
+    "fps": 12,
+    "frames": 72,
+    "preparation_ms": 914.0292390584946,
+    "frame_mean_ms": 4535.056260590752,
+    "frame_p95_ms": 7893.178562998772,
+    "js_heap_bytes": 3639308,
+    "metrics": {
+      "chamadas": 12,
+      "triangulos": 806,
+      "geometrias": 9,
+      "texturas": 5
+    },
+    "deterministic": true,
+    "errors": []
+  },
+  {
+    "version": "antes",
+    "name": "pixel",
+    "width": 1080,
+    "height": 1920,
+    "fps": 12,
+    "frames": 72,
+    "preparation_ms": 52.71120095252991,
+    "frame_mean_ms": 797.4237935592731,
+    "frame_p95_ms": 1385.93259704113,
+    "js_heap_bytes": 2513776,
+    "metrics": null,
+    "deterministic": true,
+    "errors": []
+  },
+  {
+    "version": "depois",
+    "name": "serpentina",
+    "width": 1080,
+    "height": 1920,
+    "fps": 12,
+    "frames": 72,
+    "preparation_ms": 494.44125401973724,
+    "frame_mean_ms": 3705.1183602015176,
+    "frame_p95_ms": 3854.4093310832977,
+    "js_heap_bytes": 3591276,
+    "metrics": {
+      "chamadas": 12,
+      "triangulos": 5526,
+      "geometrias": 9,
+      "texturas": 5
+    },
+    "deterministic": true,
+    "errors": []
+  },
+  {
+    "version": "depois",
+    "name": "pixel",
+    "width": 1080,
+    "height": 1920,
+    "fps": 12,
+    "frames": 72,
+    "preparation_ms": 45.89558696746826,
+    "frame_mean_ms": 812.9430194579893,
+    "frame_p95_ms": 1303.892550945282,
+    "js_heap_bytes": 2510088,
+    "metrics": null,
+    "deterministic": true,
+    "errors": []
+  },
+  {
+    "version": "depois",
+    "name": "lampada",
+    "sourceHashes": {
+      "comum3d.js": "8f7758145c447f3ee3220a74c34fd22cef02e8d2ee474d40d6184f9da3c39380",
+      "estilos/mecanismo.js": "c077aa2eadb4a81f3ef3f709b2aac0a42bee0c45769b75afcabf84325f23cf11"
+    },
+    "width": 1080,
+    "height": 1920,
+    "fps": 12,
+    "frames": 72,
+    "preparation_ms": 1853.9906690120697,
+    "frame_mean_ms": 9691.3698954665,
+    "frame_p95_ms": 14326.41874408722,
+    "js_heap_bytes": 3786336,
+    "metrics": {
+      "chamadas": 15,
+      "triangulos": 18514,
+      "geometrias": 9,
+      "texturas": 5
+    },
+    "deterministic": true,
+    "errors": []
+  }
+]

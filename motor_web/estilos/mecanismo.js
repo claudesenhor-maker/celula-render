@@ -79,17 +79,22 @@
         : new T.MeshStandardMaterial({ color: cor, roughness: p.metal ? 0.35 : 0.7, metalness: p.metal ? 0.6 : 0.05, flatShading: true, transparent: true, opacity: 1 });
       mat.transparent = true; // estas peças podem desaparecer no raio X
       mat.emissive = new T.Color('#000000'); mat.side = p.forma === 'tubo' ? T.DoubleSide : T.FrontSide;
-      const m = new T.Mesh((F[p.forma] || F.caixa)(), mat); m.castShadow = true; m.receiveShadow = true;
+      const m = new T.Mesh(U3.geometriaPeca(T, p, F[p.forma] || F.caixa), mat); m.castShadow = true; m.receiveShadow = true;
       const pos = vet(p.pos, -20, 20, [0, 0.5, 0]), tam = vet(p.tam, 0.01, 20, [1, 1, 1]), giro = vet(p.giro, -360, 360, [0, 0, 0]).map((a) => (a * Math.PI) / 180);
       m.position.set(...pos); m.scale.set(...tam); m.rotation.set(...giro);
       // Pivô em unidades locais da forma (antes de escala/giro), mantendo a pose inicial.
-      if (Array.isArray(p.pivo)) {
-        const pv = new T.Vector3(...vet(p.pivo, -2, 2, [0, 0, 0]));
-        m.geometry = m.geometry.clone(); m.geometry.translate(-pv.x, -pv.y, -pv.z);
+      const pivoLocal = Array.isArray(p.pivo) ? vet(p.pivo, -2, 2, [0, 0, 0]) : null;
+      if (pivoLocal) {
+        const pv = new T.Vector3(...pivoLocal);
+        // Geometria paramétrica já pertence à peça; clone só as formas partilhadas.
+        if (p.perfil == null && p.caminho == null) m.geometry = m.geometry.clone();
+        m.geometry.translate(-pv.x, -pv.y, -pv.z);
         pv.multiply(m.scale).applyEuler(m.rotation); pos[0] += pv.x; pos[1] += pv.y; pos[2] += pv.z;
         m.position.set(...pos);
       }
-      m.userData = { nome, pos, giro, transmissao: p.transmissao || null, casca: !!p.casca, explode: vet(p.explode, -20, 20, [0, 0, 0]), eixo: vet(p.eixo, -1, 1, [0, 1, 0]), cor: window.U3 ? new T.Color(cor).convertSRGBToLinear() : new T.Color(cor) };
+      const rotuloLocal = Array.isArray(p.caminho)
+        ? p.caminho[Math.floor(p.caminho.length / 2)].map((v,j) => v - (pivoLocal ? pivoLocal[j] : 0)) : null;
+      m.userData = { nome, pos, giro, rotuloLocal, transmissao: p.transmissao || null, casca: !!p.casca, explode: vet(p.explode, -20, 20, [0, 0, 0]), eixo: vet(p.eixo, -1, 1, [0, 1, 0]), cor: window.U3 ? new T.Color(cor).convertSRGBToLinear() : new T.Color(cor) };
       raiz.add(m); pecas[nome.toLowerCase()] = m; lista.push(m);
     });
     // enquadra: o objeto cabe na tela inteira, sobre o chao
@@ -207,7 +212,11 @@
       lst.forEach((r, j) => {
         const m = pecas[String(r.parte || '').toLowerCase()]; if (!m || !r.texto) return;
         const q = U.saida(U.clamp((local - 0.25 - j * 0.35) / 0.4, 0, 1)); if (q <= 0) return;
-        const wp = new T.Vector3(); m.getWorldPosition(wp); wp.project(cam);
+        const wp = new T.Vector3();
+        // Em canos curvos a origem pode estar no vazio; ancora num ponto da curva.
+        if (m.userData.rotuloLocal) { wp.set(...m.userData.rotuloLocal); m.localToWorld(wp); }
+        else m.getWorldPosition(wp);
+        wp.project(cam);
         const px = (wp.x * 0.5 + 0.5) * W, py = (-wp.y * 0.5 + 0.5) * H;
         // coluna fixa a esquerda (a direita da tela tem os botoes do app): uma
         // etiqueta por linha, nunca uma sobre a outra

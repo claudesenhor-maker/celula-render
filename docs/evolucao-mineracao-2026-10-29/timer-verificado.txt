@@ -1,0 +1,11 @@
+NEXT                            LEFT LAST PASSED UNIT                        ACTIVATES
+Fri 2026-10-30 04:01:49 UTC 4h 32min -         - videos-auto-mineracao.timer videos-auto-mineracao.service
+
+1 timers listed.
+Pass --all to see loaded but inactive timers, too.
+TimeoutStartUSec=2min 30s
+Result=success
+ExecStart={ path=/usr/bin/python3 ; argv[]=/usr/bin/python3 /home/azureuser/celula-render-mineracao/mineracao/ciclo.py --config /home/azureuser/celula-render-mineracao/mineracao/fontes.json --estado /home/azureuser/videos-auto-mineracao-estado ; ignore_errors=no ; start_time=[n/a] ; stop_time=[n/a] ; pid=0 ; code=(null) ; status=0/0 }
+CPUQuotaPerSecUSec=500ms
+MemoryMax=268435456
+Linger=yes
