@@ -1,0 +1,43 @@
+{
+  "videos": [
+    {
+      "largura": 540,
+      "altura": 960,
+      "duracao": 6,
+      "formato": "data:video/webm;base"
+    },
+    {
+      "largura": 540,
+      "altura": 960,
+      "duracao": 6,
+      "formato": "data:video/webm;base"
+    },
+    {
+      "largura": 540,
+      "altura": 960,
+      "duracao": 6,
+      "formato": "data:video/webm;base"
+    },
+    {
+      "largura": 540,
+      "altura": 960,
+      "duracao": 6,
+      "formato": "data:video/webm;base"
+    },
+    {
+      "largura": 540,
+      "altura": 960,
+      "duracao": 6,
+      "formato": "data:video/webm;base"
+    },
+    {
+      "largura": 540,
+      "altura": 960,
+      "duracao": 6,
+      "formato": "data:video/webm;base"
+    }
+  ],
+  "controles_sincronizados": true,
+  "reproduz_e_pausa": true,
+  "erros": []
+}

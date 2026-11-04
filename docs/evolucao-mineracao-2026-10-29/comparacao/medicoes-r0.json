@@ -1,0 +1,112 @@
+[
+  {
+    "version": "antes",
+    "name": "lampada",
+    "width": 1080,
+    "height": 1920,
+    "fps": 12,
+    "frames": 72,
+    "preparation_ms": 431.2139389514923,
+    "frame_mean_ms": 3622.9503863602877,
+    "frame_p95_ms": 6290.2148950099945,
+    "js_heap_bytes": 4322712,
+    "metrics": {
+      "chamadas": 15,
+      "triangulos": 16898,
+      "geometrias": 9,
+      "texturas": 5
+    },
+    "deterministic": true,
+    "errors": []
+  },
+  {
+    "version": "antes",
+    "name": "serpentina",
+    "width": 1080,
+    "height": 1920,
+    "fps": 12,
+    "frames": 72,
+    "preparation_ms": 914.0292390584946,
+    "frame_mean_ms": 4535.056260590752,
+    "frame_p95_ms": 7893.178562998772,
+    "js_heap_bytes": 3639308,
+    "metrics": {
+      "chamadas": 12,
+      "triangulos": 806,
+      "geometrias": 9,
+      "texturas": 5
+    },
+    "deterministic": true,
+    "errors": []
+  },
+  {
+    "version": "antes",
+    "name": "pixel",
+    "width": 1080,
+    "height": 1920,
+    "fps": 12,
+    "frames": 72,
+    "preparation_ms": 52.71120095252991,
+    "frame_mean_ms": 797.4237935592731,
+    "frame_p95_ms": 1385.93259704113,
+    "js_heap_bytes": 2513776,
+    "metrics": null,
+    "deterministic": true,
+    "errors": []
+  },
+  {
+    "version": "depois",
+    "name": "lampada",
+    "width": 1080,
+    "height": 1920,
+    "fps": 12,
+    "frames": 72,
+    "preparation_ms": 855.658949971199,
+    "frame_mean_ms": 3855.651338360376,
+    "frame_p95_ms": 5682.216450929642,
+    "js_heap_bytes": 4540560,
+    "metrics": {
+      "chamadas": 15,
+      "triangulos": 15922,
+      "geometrias": 9,
+      "texturas": 5
+    },
+    "deterministic": true,
+    "errors": []
+  },
+  {
+    "version": "depois",
+    "name": "serpentina",
+    "width": 1080,
+    "height": 1920,
+    "fps": 12,
+    "frames": 72,
+    "preparation_ms": 494.44125401973724,
+    "frame_mean_ms": 3705.1183602015176,
+    "frame_p95_ms": 3854.4093310832977,
+    "js_heap_bytes": 3591276,
+    "metrics": {
+      "chamadas": 12,
+      "triangulos": 5526,
+      "geometrias": 9,
+      "texturas": 5
+    },
+    "deterministic": true,
+    "errors": []
+  },
+  {
+    "version": "depois",
+    "name": "pixel",
+    "width": 1080,
+    "height": 1920,
+    "fps": 12,
+    "frames": 72,
+    "preparation_ms": 45.89558696746826,
+    "frame_mean_ms": 812.9430194579893,
+    "frame_p95_ms": 1303.892550945282,
+    "js_heap_bytes": 2510088,
+    "metrics": null,
+    "deterministic": true,
+    "errors": []
+  }
+]

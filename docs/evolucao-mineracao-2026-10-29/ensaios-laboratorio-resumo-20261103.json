@@ -1,0 +1,164 @@
+{
+  "encerramento": "2026-11-03",
+  "base": "358566fd814ec05d12194670aa5c5008ef23196a",
+  "testes_node": 21,
+  "testes_python": 7,
+  "pixel_regressoes": {
+    "T392_cenas": 423,
+    "T392_assertivas": 7128,
+    "T294_assertivas": 242,
+    "T302_assertivas": 498,
+    "T337_assertivas": 592
+  },
+  "motores": {
+    "antes": [
+      {
+        "nome": "pixel",
+        "fontes": [
+          true,
+          true,
+          true,
+          true,
+          true,
+          true
+        ],
+        "erros": [],
+        "quadro_repetido_identico": true,
+        "ms_amostras": [
+          10527.921123981476,
+          6342.488619923592,
+          2461.2518409490585,
+          2011.9433349370956
+        ],
+        "metricas": null,
+        "fps_previa": 12,
+        "escala_interna_3d_previa": 1,
+        "duracao_s": 6
+      },
+      {
+        "nome": "escala",
+        "fontes": [
+          true,
+          true,
+          true,
+          true,
+          true,
+          true
+        ],
+        "erros": [],
+        "quadro_repetido_identico": true,
+        "ms_amostras": [
+          7140.977625012398,
+          2802.080157995224,
+          2109.4664800167084,
+          1974.6635460853577
+        ],
+        "metricas": null,
+        "fps_previa": 12,
+        "escala_interna_3d_previa": 1,
+        "duracao_s": 6
+      },
+      {
+        "nome": "mecanismo",
+        "fontes": [
+          true,
+          true,
+          true,
+          true,
+          true,
+          true
+        ],
+        "erros": [],
+        "quadro_repetido_identico": true,
+        "ms_amostras": [],
+        "metricas": {
+          "chamadas": 15,
+          "triangulos": 16898,
+          "geometrias": 10,
+          "texturas": 5
+        },
+        "fps_previa": 12,
+        "escala_interna_3d_previa": 0.5,
+        "duracao_s": 6
+      }
+    ],
+    "depois": [
+      {
+        "nome": "pixel",
+        "fontes": [
+          true,
+          true,
+          true,
+          true,
+          true,
+          true
+        ],
+        "erros": [],
+        "quadro_repetido_identico": true,
+        "ms_amostras": [
+          9274.781847953796,
+          9518.224094986916,
+          2357.415946006775,
+          1970.6268070936203
+        ],
+        "metricas": null,
+        "fps_previa": 12,
+        "escala_interna_3d_previa": 1,
+        "duracao_s": 6
+      },
+      {
+        "nome": "mecanismo",
+        "fontes": [
+          true,
+          true,
+          true,
+          true,
+          true,
+          true
+        ],
+        "erros": [],
+        "quadro_repetido_identico": true,
+        "ms_amostras": [],
+        "metricas": {
+          "chamadas": 13,
+          "triangulos": 15170,
+          "geometrias": 10,
+          "texturas": 5
+        },
+        "fps_previa": 12,
+        "escala_interna_3d_previa": 0.5,
+        "duracao_s": 6
+      },
+      {
+        "nome": "escala",
+        "fontes": [
+          true,
+          true,
+          true,
+          true,
+          true,
+          true
+        ],
+        "erros": [],
+        "quadro_repetido_identico": false,
+        "diferenca_repeticao": {
+          "delta_maximo": 1,
+          "pixels_alterados": 1002,
+          "equivalente": true
+        },
+        "ms_amostras": [
+          1698.9294979572296,
+          523.6176478862762,
+          414.8559789657593,
+          417.1442310810089
+        ],
+        "metricas": null,
+        "fps_previa": 12,
+        "escala_interna_3d_previa": 1,
+        "duracao_s": 6
+      }
+    ]
+  },
+  "publicado_producao": false,
+  "visao_externa_configurada": false
+}

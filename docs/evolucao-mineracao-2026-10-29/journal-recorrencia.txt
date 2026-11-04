@@ -1,0 +1,31 @@
+Oct 29 23:20:33 master systemd[1707]: Starting videos-auto-mineracao.service - videos-auto coleta limitada de referências e propostas visuais...
+Oct 29 23:20:34 master python3[2443294]: {"id": "48d0fd17fbcf43aaa47eb5a026eb99b5", "inicio": "2026-10-29T23:20:34.121426+00:00", "fim": "2026-10-29T23:20:34.152383+00:00", "estado": "ok", "requests": 0, "coletadas": 0, "bytes_lidos": 0, "falhas": 0, "ignoradas_intervalo": 8, "propostas_novas": 0, "custo_api_monetario": 0, "descobertas_novas": 0}
+Oct 29 23:20:34 master systemd[1707]: Finished videos-auto-mineracao.service - videos-auto coleta limitada de referências e propostas visuais.
+Oct 29 23:51:36 master systemd[1707]: Starting videos-auto-mineracao.service - videos-auto coleta limitada de referências e propostas visuais...
+Oct 29 23:51:36 master python3[2548779]: {"id": "830c16cff6874d028c458404ed79567b", "inicio": "2026-10-29T23:51:36.263841+00:00", "fim": "2026-10-29T23:51:36.303317+00:00", "estado": "ok", "requests": 0, "coletadas": 0, "bytes_lidos": 0, "falhas": 0, "ignoradas_intervalo": 8, "propostas_novas": 0, "custo_api_monetario": 0, "descobertas_novas": 0}
+Oct 29 23:51:36 master systemd[1707]: Finished videos-auto-mineracao.service - videos-auto coleta limitada de referências e propostas visuais.
+Oct 30 04:05:14 master systemd[1707]: Starting videos-auto-mineracao.service - videos-auto coleta limitada de referências e propostas visuais...
+Oct 30 04:05:15 master python3[3518559]: {"id": "dfe3fd2f6f804a60be30759fa1db4657", "inicio": "2026-10-30T04:05:14.955602+00:00", "fim": "2026-10-30T04:05:15.003795+00:00", "estado": "ok", "requests": 0, "coletadas": 0, "bytes_lidos": 0, "falhas": 0, "ignoradas_intervalo": 8, "propostas_novas": 0, "custo_api_monetario": 0, "descobertas_novas": 0}
+Oct 30 04:05:15 master systemd[1707]: Finished videos-auto-mineracao.service - videos-auto coleta limitada de referências e propostas visuais.
+Oct 31 04:02:14 master systemd[1707]: Starting videos-auto-mineracao.service - videos-auto coleta limitada de referências e propostas visuais...
+Oct 31 04:02:20 master python3[3758857]: {"id": "29d182faf18048b58c47bc26e2de96af", "inicio": "2026-10-31T04:02:14.963599+00:00", "fim": "2026-10-31T04:02:20.211642+00:00", "estado": "ok", "requests": 6, "coletadas": 8, "bytes_lidos": 81614433, "falhas": 0, "ignoradas_intervalo": 0, "propostas_novas": 0, "custo_api_monetario": 0, "descobertas_novas": 1}
+Oct 31 04:02:20 master systemd[1707]: Finished videos-auto-mineracao.service - videos-auto coleta limitada de referências e propostas visuais.
+Nov 01 04:05:14 master systemd[1707]: Starting videos-auto-mineracao.service - videos-auto coleta limitada de referências e propostas visuais...
+Nov 01 04:05:19 master python3[4027491]: {"id": "46d92bbd94d847d3bc0d9f41987e2c3d", "inicio": "2026-11-01T04:05:14.934733+00:00", "fim": "2026-11-01T04:05:19.935774+00:00", "estado": "ok", "requests": 6, "coletadas": 8, "bytes_lidos": 81614427, "falhas": 0, "ignoradas_intervalo": 0, "propostas_novas": 0, "custo_api_monetario": 0, "descobertas_novas": 0}
+Nov 01 04:05:19 master systemd[1707]: Finished videos-auto-mineracao.service - videos-auto coleta limitada de referências e propostas visuais.
+Nov 02 04:03:14 master systemd[1707]: Starting videos-auto-mineracao.service - videos-auto coleta limitada de referências e propostas visuais...
+Nov 02 04:03:19 master python3[3384]: {"id": "73cf0dffdfea40c0b0b2e128d8669fea", "inicio": "2026-11-02T04:03:14.925183+00:00", "fim": "2026-11-02T04:03:19.324331+00:00", "estado": "ok", "requests": 6, "coletadas": 8, "bytes_lidos": 81614431, "falhas": 0, "ignoradas_intervalo": 0, "propostas_novas": 0, "custo_api_monetario": 0, "descobertas_novas": 0}
+Nov 02 04:03:19 master systemd[1707]: Finished videos-auto-mineracao.service - videos-auto coleta limitada de referências e propostas visuais.
+Nov 03 04:05:14 master systemd[1707]: Starting videos-auto-mineracao.service - videos-auto coleta limitada de referências e propostas visuais...
+Nov 03 04:05:20 master python3[171203]: {"id": "917edbf4956b42d8bff515ff4e59a2aa", "inicio": "2026-11-03T04:05:14.926431+00:00", "fim": "2026-11-03T04:05:20.620101+00:00", "estado": "parcial", "requests": 7, "coletadas": 7, "bytes_lidos": 81294170, "falhas": 1, "ignoradas_intervalo": 0, "propostas_novas": 0, "custo_api_monetario": 0, "descobertas_novas": 0}
+Nov 03 04:05:20 master systemd[1707]: videos-auto-mineracao.service: Main process exited, code=exited, status=2/INVALIDARGUMENT
+Nov 03 04:05:20 master systemd[1707]: videos-auto-mineracao.service: Failed with result 'exit-code'.
+Nov 03 04:05:20 master systemd[1707]: Failed to start videos-auto-mineracao.service - videos-auto coleta limitada de referências e propostas visuais.
+Nov 03 16:34:28 master systemd[1707]: Starting videos-auto-mineracao.service - videos-auto coleta limitada de referências e propostas visuais...
+Nov 03 16:34:30 master python3[336099]: {"id": "73ca07f68f8445828ba0c4f32643722a", "inicio": "2026-11-03T16:34:28.341106+00:00", "fim": "2026-11-03T16:34:30.897177+00:00", "estado": "parcial", "requests": 2, "coletadas": 0, "bytes_lidos": 0, "falhas": 1, "ignoradas_intervalo": 7, "propostas_novas": 0, "custo_api_monetario": 0, "descobertas_novas": 0}
+Nov 03 16:34:30 master systemd[1707]: videos-auto-mineracao.service: Main process exited, code=exited, status=2/INVALIDARGUMENT
+Nov 03 16:34:30 master systemd[1707]: videos-auto-mineracao.service: Failed with result 'exit-code'.
+Nov 03 16:34:30 master systemd[1707]: Failed to start videos-auto-mineracao.service - videos-auto coleta limitada de referências e propostas visuais.
+Nov 03 16:38:58 master systemd[1707]: Starting videos-auto-mineracao.service - videos-auto coleta limitada de referências e propostas visuais...
+Nov 03 16:38:58 master python3[337203]: {"id": "9bad79ef6a644e53a86d81619c1b250f", "inicio": "2026-11-03T16:38:58.824547+00:00", "fim": "2026-11-03T16:38:58.842072+00:00", "estado": "ok", "requests": 0, "coletadas": 0, "bytes_lidos": 0, "falhas": 0, "ignoradas_intervalo": 8, "propostas_novas": 0, "custo_api_monetario": 0, "descobertas_novas": 0}
+Nov 03 16:38:58 master systemd[1707]: Finished videos-auto-mineracao.service - videos-auto coleta limitada de referências e propostas visuais.

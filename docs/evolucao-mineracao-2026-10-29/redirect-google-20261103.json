@@ -1,0 +1,8 @@
+{
+  "em": "2026-11-03T16:36:14.599674+00:00",
+  "origem": "https://ai.google.dev/gemini-api/docs/video-understanding",
+  "metodo": "GET limitado, interrompido no primeiro redirect sem seguir host não permitido",
+  "request_reservado_na_quota": true,
+  "status": 301,
+  "destino_sem_query": "https://aistudio.google.com/docs/video-understanding"
+}

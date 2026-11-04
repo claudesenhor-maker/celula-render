@@ -1,7 +1,12 @@
 name: validar-motores
 on:
   push:
-    branches: [main, deploy-motores-20261029]
+    branches: [main, deploy-motores-20261029, integracao-motores-0411]
+    paths:
+      - 'motor_web/**'
+      - 'qualidade_render.py'
+      - '.github/workflows/validar-motores.yml'
+  pull_request:
     paths:
       - 'motor_web/**'
       - 'qualidade_render.py'
@@ -35,6 +40,8 @@ jobs:
         run: node motor_web/tests/auditar_graficos.mjs motor_web /tmp/motores-validacao
       - name: Ciclo de revisão no navegador
         run: node motor_web/tests/revisao.browser.mjs
+      - name: Rótulo ancorado na curva com pivô
+        run: node motor_web/tests/rotulo_curva.browser.mjs
       - name: Exportar MP4 sem publicação
         run: |
           node --input-type=module - <<'JS'
