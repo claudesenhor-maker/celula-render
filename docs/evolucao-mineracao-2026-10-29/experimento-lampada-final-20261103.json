@@ -1,0 +1,87 @@
+{
+  "id": "mecanismo-lampada-final-20261103",
+  "oportunidade_id": "433b0f74296859ac5d2d588e",
+  "decisao": "manter-em-revisao",
+  "evidencias": [
+    "docs/evolucao-mineracao-2026-10-29/comparacao/antes-lampada.mp4",
+    "docs/evolucao-mineracao-2026-10-29/comparacao/depois-lampada.mp4",
+    "docs/evolucao-mineracao-2026-10-29/comparacao/depois-lampada-1.500.png",
+    "docs/evolucao-mineracao-2026-10-29/comparacao/depois-lampada-4.500.png",
+    "docs/evolucao-mineracao-2026-10-29/comparacao/specs.json",
+    "docs/evolucao-mineracao-2026-10-29/comparacao/medicoes.json"
+  ],
+  "sha256_artefatos": {
+    "comparacao/antes-lampada.mp4": "126e10fc660c5ce135991fff45c27f8632c4bf64098590cc7482bb06c586ec01",
+    "comparacao/depois-lampada.mp4": "59b71c60f1c4d8e550755f83f6b18fe58313757174f3c31a1fffce144c45cb26",
+    "comparacao/depois-lampada-1.500.png": "b980cd69283b90ea8459c59a124dc7597558d041f00edcfd7a5bdefe8810796c",
+    "comparacao/depois-lampada-4.500.png": "33500bd0d4f2295e8b4d5533ef3f852b5e0047b5ae8dec918cfdcbd9583cdd25",
+    "comparacao/specs.json": "60d75eb78dbfc9d09318a0b28ead576dc505fa621c557b871428e3cec1468ce0",
+    "comparacao/medicoes.json": "832185d68780923ecc8e3f653f675ecaf77785c72d706c7bb9997292a11b07c3"
+  },
+  "metricas": {
+    "render": [
+      {
+        "version": "antes",
+        "name": "lampada",
+        "width": 1080,
+        "height": 1920,
+        "fps": 12,
+        "frames": 72,
+        "preparation_ms": 431.2139389514923,
+        "frame_mean_ms": 3622.9503863602877,
+        "frame_p95_ms": 6290.2148950099945,
+        "js_heap_bytes": 4322712,
+        "metrics": {
+          "chamadas": 15,
+          "triangulos": 16898,
+          "geometrias": 9,
+          "texturas": 5
+        },
+        "deterministic": true,
+        "errors": []
+      },
+      {
+        "version": "depois",
+        "name": "lampada",
+        "sourceHashes": {
+          "comum3d.js": "8f7758145c447f3ee3220a74c34fd22cef02e8d2ee474d40d6184f9da3c39380",
+          "estilos/mecanismo.js": "c077aa2eadb4a81f3ef3f709b2aac0a42bee0c45769b75afcabf84325f23cf11"
+        },
+        "width": 1080,
+        "height": 1920,
+        "fps": 12,
+        "frames": 72,
+        "preparation_ms": 1853.9906690120697,
+        "frame_mean_ms": 9691.3698954665,
+        "frame_p95_ms": 14326.41874408722,
+        "js_heap_bytes": 3786336,
+        "metrics": {
+          "chamadas": 15,
+          "triangulos": 18514,
+          "geometrias": 9,
+          "texturas": 5
+        },
+        "deterministic": true,
+        "errors": []
+      }
+    ],
+    "modo_visual": "inspecao-de-quadros-pelo-agente",
+    "quadros_inspecionados_s": [
+      1.5,
+      4.5
+    ],
+    "servico_visao_externo": false,
+    "audio_avaliado": false
+  },
+  "limites": [
+    "Prévias 12fps sem áudio; não valida fps/narração da produção.",
+    "Carga do host variou; não alegar ganho/perda estatística de velocidade.",
+    "Heap JS exclui memória completa do Chrome/GPU."
+  ],
+  "promocao_automatica": false,
+  "observacoes": [
+    "Pescoço/ombro reconhecíveis e contorno mais suave que r0 rejeitado. Vidro e interior continuam esquemáticos.",
+    "A média de 9,69s/quadro excede o orçamento definido (+20% frente a 3,62s base); não aprovar promoção.",
+    "Timeout/Target closed durante tentativas anteriores; reexportação final completa, sem pageerror, repetição exata."
+  ]
+}

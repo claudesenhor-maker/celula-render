@@ -1,0 +1,88 @@
+{
+  "id": "mecanismo-serpentina-final-20261103",
+  "oportunidade_id": "934e9cd037a8669b70225df0",
+  "decisao": "candidato",
+  "evidencias": [
+    "docs/evolucao-mineracao-2026-10-29/comparacao/antes-serpentina.mp4",
+    "docs/evolucao-mineracao-2026-10-29/comparacao/depois-serpentina.mp4",
+    "docs/evolucao-mineracao-2026-10-29/comparacao/depois-serpentina-1.500.png",
+    "docs/evolucao-mineracao-2026-10-29/comparacao/depois-serpentina-4.500.png",
+    "docs/evolucao-mineracao-2026-10-29/comparacao/specs.json",
+    "docs/evolucao-mineracao-2026-10-29/comparacao/medicoes.json"
+  ],
+  "sha256_artefatos": {
+    "comparacao/antes-serpentina.mp4": "2fef9ca65c9f6bf81659fb6c099983a05b94e51ca72027d90d2f64942f1c7bef",
+    "comparacao/depois-serpentina.mp4": "e55dd8bc70dfaf6e2b65e5bce128184dd4afe4dbe18dcb592cf74f92f4382667",
+    "comparacao/depois-serpentina-1.500.png": "b75ae0973a4de0b105ddbed2efbf65b8bb52d5dc7c967e3fdf2337992a4ffc49",
+    "comparacao/depois-serpentina-4.500.png": "e4f023667363848837edd1abb5659492f45e2098bc22a9e74991c34fa66f3d46",
+    "comparacao/specs.json": "60d75eb78dbfc9d09318a0b28ead576dc505fa621c557b871428e3cec1468ce0",
+    "comparacao/medicoes.json": "832185d68780923ecc8e3f653f675ecaf77785c72d706c7bb9997292a11b07c3"
+  },
+  "metricas": {
+    "render": [
+      {
+        "version": "antes",
+        "name": "serpentina",
+        "width": 1080,
+        "height": 1920,
+        "fps": 12,
+        "frames": 72,
+        "preparation_ms": 914.0292390584946,
+        "frame_mean_ms": 4535.056260590752,
+        "frame_p95_ms": 7893.178562998772,
+        "js_heap_bytes": 3639308,
+        "metrics": {
+          "chamadas": 12,
+          "triangulos": 806,
+          "geometrias": 9,
+          "texturas": 5
+        },
+        "deterministic": true,
+        "errors": []
+      },
+      {
+        "version": "depois",
+        "name": "serpentina",
+        "sourceHashes": {
+          "comum3d.js": "8f7758145c447f3ee3220a74c34fd22cef02e8d2ee474d40d6184f9da3c39380",
+          "estilos/mecanismo.js": "c077aa2eadb4a81f3ef3f709b2aac0a42bee0c45769b75afcabf84325f23cf11"
+        },
+        "width": 1080,
+        "height": 1920,
+        "fps": 12,
+        "frames": 72,
+        "preparation_ms": 920.9227240085602,
+        "frame_mean_ms": 1856.356465170781,
+        "frame_p95_ms": 2615.7785918712616,
+        "js_heap_bytes": 3566460,
+        "metrics": {
+          "chamadas": 12,
+          "triangulos": 5526,
+          "geometrias": 9,
+          "texturas": 5
+        },
+        "deterministic": true,
+        "errors": []
+      }
+    ],
+    "modo_visual": "inspecao-de-quadros-pelo-agente",
+    "quadros_inspecionados_s": [
+      1.5,
+      4.5
+    ],
+    "servico_visao_externo": false,
+    "audio_avaliado": false
+  },
+  "limites": [
+    "Prévias 12fps sem áudio; não valida fps/narração da produção.",
+    "Carga do host variou; não alegar ganho/perda estatística de velocidade.",
+    "Heap JS exclui memória completa do Chrome/GPU."
+  ],
+  "promocao_automatica": false,
+  "observacoes": [
+    "Serpentina contínua de três voltas substitui o cilindro de fallback no mesmo spec.",
+    "O rótulo agora aponta para um ponto do cano, conferido no quadro e por teste de projeção com pivô (erro 0).",
+    "Fluxo interno permanece majoritariamente ocluído; não é explicação termodinâmica completa.",
+    "Candidato técnico para revisão, sem aprovação editorial nem promoção automática."
+  ]
+}

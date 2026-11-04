@@ -38,3 +38,11 @@ test('ponte HTTP recebe quadros e devolve JSON; erros não aprovam silenciosamen
  finally {server.closeAllConnections();await new Promise(r=>server.close(r));}
  await assert.rejects(()=>consultarRevisor('http://127.0.0.1:1',{}, {timeout:30}));
 });
+
+
+test('amostra os dois lados do corte e os beats explícitos sem inventar aprovação',()=>{
+ const s=fixture('mecanismo');s.cenas[0].marcos_visuais=[{local_s:1,evento:'contato'}];
+ const prepared=prepararSpec(s),times=instantesRevisao(prepared);
+ assert(times.includes(1));assert(times.includes(1-1/30));assert(times.includes(4-1/30));assert(times.includes(4));
+ s.cenas[0].marcos_visuais=[{local_s:9,evento:'contato'}];assert.throws(()=>prepararSpec(s),/marcos/);
+});

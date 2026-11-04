@@ -1,0 +1,20 @@
+[
+  {
+    "arquivo": "escala-rechecagem-1.png",
+    "sha256": "9cafd82096c028994e6f6edc730d1c91320e882d60708c361a0823c33b57ffec",
+    "delta_max_vs_primeiro": 0,
+    "pixels_alterados": 0
+  },
+  {
+    "arquivo": "escala-rechecagem-4.png",
+    "sha256": "7058bd25e315c1bfe9e8a444ab0bb26a59a5d0ac7b067b8d549bab7207469d1b",
+    "delta_max_vs_primeiro": 1,
+    "pixels_alterados": 1002
+  },
+  {
+    "arquivo": "escala-rechecagem-5.png",
+    "sha256": "9cafd82096c028994e6f6edc730d1c91320e882d60708c361a0823c33b57ffec",
+    "delta_max_vs_primeiro": 0,
+    "pixels_alterados": 0
+  }
+]

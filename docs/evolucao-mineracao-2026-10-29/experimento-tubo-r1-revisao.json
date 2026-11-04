@@ -1,0 +1,21 @@
+{
+  "id": "mecanismo-tubo-r1-revisao-20261029",
+  "oportunidade_id": "934e9cd037a8669b70225df0",
+  "decisao": "manter-em-revisao",
+  "corrige_evidencias_de": "mecanismo-tubo-r1-20261029",
+  "evidencias": [
+    "docs/evolucao-mineracao-2026-10-29/r1-rotulo-no-vazio.png",
+    "docs/evolucao-mineracao-2026-10-29/r1-serpentina-rotulo-no-vazio.mp4"
+  ],
+  "metricas": {
+    "modo": "inspecao-de-quadro-pelo-agente",
+    "t_s": 4.5,
+    "rotulo_na_origem_vazia": true,
+    "servico_visao_externo": false
+  },
+  "observacao": "Geometria é contínua, mas rótulo aponta para origem vazia. Corrigir ancoragem e reexportar. Os links da comparação principal são aliases da versão mais recente; este registro preserva os artefatos r1.",
+  "sha256_artefatos": {
+    "r1-rotulo-no-vazio.png": "ab2354752e8b4251beb91ec15bd7ce281ec40f545c569346af4ac592570e23b1",
+    "r1-serpentina-rotulo-no-vazio.mp4": "90fd57c078f5643cc1807eec3eded0c86a11c0b0b25ff2e353a4972e12bdb052"
+  }
+}

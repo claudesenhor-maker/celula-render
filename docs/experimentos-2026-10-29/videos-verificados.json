@@ -1,0 +1,194 @@
+[
+  {
+    "arquivo": "docs/experimentos-2026-10-29/antes/mecanismo.mp4",
+    "programs": [],
+    "streams": [
+      {
+        "codec_name": "h264",
+        "width": 540,
+        "height": 960,
+        "r_frame_rate": "12/1",
+        "nb_read_frames": "72"
+      }
+    ],
+    "format": {
+      "duration": "6.000000"
+    }
+  },
+  {
+    "arquivo": "docs/experimentos-2026-10-29/antes/pixel.mp4",
+    "programs": [],
+    "streams": [
+      {
+        "codec_name": "h264",
+        "width": 540,
+        "height": 960,
+        "r_frame_rate": "12/1",
+        "nb_read_frames": "72"
+      }
+    ],
+    "format": {
+      "duration": "6.000000"
+    }
+  },
+  {
+    "arquivo": "docs/experimentos-2026-10-29/antes/escala.mp4",
+    "programs": [],
+    "streams": [
+      {
+        "codec_name": "h264",
+        "width": 540,
+        "height": 960,
+        "r_frame_rate": "12/1",
+        "nb_read_frames": "72"
+      }
+    ],
+    "format": {
+      "duration": "6.000000"
+    }
+  },
+  {
+    "arquivo": "docs/experimentos-2026-10-29/depois/mecanismo.mp4",
+    "programs": [],
+    "streams": [
+      {
+        "codec_name": "h264",
+        "width": 540,
+        "height": 960,
+        "r_frame_rate": "12/1",
+        "nb_read_frames": "72"
+      }
+    ],
+    "format": {
+      "duration": "6.000000"
+    }
+  },
+  {
+    "arquivo": "docs/experimentos-2026-10-29/depois/pixel.mp4",
+    "programs": [],
+    "streams": [
+      {
+        "codec_name": "h264",
+        "width": 540,
+        "height": 960,
+        "r_frame_rate": "12/1",
+        "nb_read_frames": "72"
+      }
+    ],
+    "format": {
+      "duration": "6.000000"
+    }
+  },
+  {
+    "arquivo": "docs/experimentos-2026-10-29/depois/escala.mp4",
+    "programs": [],
+    "streams": [
+      {
+        "codec_name": "h264",
+        "width": 540,
+        "height": 960,
+        "r_frame_rate": "12/1",
+        "nb_read_frames": "72"
+      }
+    ],
+    "format": {
+      "duration": "6.000000"
+    }
+  },
+  {
+    "arquivo": "docs/experimentos-2026-10-29/antes/pixel.webm",
+    "programs": [],
+    "streams": [
+      {
+        "codec_name": "vp9",
+        "width": 540,
+        "height": 960,
+        "r_frame_rate": "12/1",
+        "nb_read_frames": "72"
+      }
+    ],
+    "format": {
+      "duration": "6.000000"
+    }
+  },
+  {
+    "arquivo": "docs/experimentos-2026-10-29/antes/escala.webm",
+    "programs": [],
+    "streams": [
+      {
+        "codec_name": "vp9",
+        "width": 540,
+        "height": 960,
+        "r_frame_rate": "12/1",
+        "nb_read_frames": "72"
+      }
+    ],
+    "format": {
+      "duration": "6.000000"
+    }
+  },
+  {
+    "arquivo": "docs/experimentos-2026-10-29/antes/mecanismo.webm",
+    "programs": [],
+    "streams": [
+      {
+        "codec_name": "vp9",
+        "width": 540,
+        "height": 960,
+        "r_frame_rate": "12/1",
+        "nb_read_frames": "72"
+      }
+    ],
+    "format": {
+      "duration": "6.000000"
+    }
+  },
+  {
+    "arquivo": "docs/experimentos-2026-10-29/depois/pixel.webm",
+    "programs": [],
+    "streams": [
+      {
+        "codec_name": "vp9",
+        "width": 540,
+        "height": 960,
+        "r_frame_rate": "12/1",
+        "nb_read_frames": "72"
+      }
+    ],
+    "format": {
+      "duration": "6.000000"
+    }
+  },
+  {
+    "arquivo": "docs/experimentos-2026-10-29/depois/escala.webm",
+    "programs": [],
+    "streams": [
+      {
+        "codec_name": "vp9",
+        "width": 540,
+        "height": 960,
+        "r_frame_rate": "12/1",
+        "nb_read_frames": "72"
+      }
+    ],
+    "format": {
+      "duration": "6.000000"
+    }
+  },
+  {
+    "arquivo": "docs/experimentos-2026-10-29/depois/mecanismo.webm",
+    "programs": [],
+    "streams": [
+      {
+        "codec_name": "vp9",
+        "width": 540,
+        "height": 960,
+        "r_frame_rate": "12/1",
+        "nb_read_frames": "72"
+      }
+    ],
+    "format": {
+      "duration": "6.000000"
+    }
+  }
+]

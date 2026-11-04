@@ -1,0 +1,6 @@
+__pycache__/
+*.pyc
+**/__pycache__/
+**/node_modules
+motor_web/node_modules
+mineracao/estado/

@@ -1,0 +1,50 @@
+[
+  {
+    "arquivo": "antes-lampada.webm",
+    "codec_name": "vp8",
+    "width": 540,
+    "height": 960,
+    "nb_read_frames": "72",
+    "sha256": "226ba7292d11382880e85a7e1c32899f1587b08623972c4e1c0e761704c4a802"
+  },
+  {
+    "arquivo": "antes-pixel.webm",
+    "codec_name": "vp8",
+    "width": 540,
+    "height": 960,
+    "nb_read_frames": "72",
+    "sha256": "792bbc7cb0d19999156f6cb6f28a810d062313a8ac2ea8c32e371465a694a9ee"
+  },
+  {
+    "arquivo": "antes-serpentina.webm",
+    "codec_name": "vp8",
+    "width": 540,
+    "height": 960,
+    "nb_read_frames": "72",
+    "sha256": "7c68e0551866ce73356a4f87b06762d9e10c3b672a8107e5575f885d25df8afa"
+  },
+  {
+    "arquivo": "depois-lampada.webm",
+    "codec_name": "vp8",
+    "width": 540,
+    "height": 960,
+    "nb_read_frames": "72",
+    "sha256": "e01aea508372030b5f075a204a7b0d720928eceb89b410972d4a53f5029a2de2"
+  },
+  {
+    "arquivo": "depois-pixel.webm",
+    "codec_name": "vp8",
+    "width": 540,
+    "height": 960,
+    "nb_read_frames": "72",
+    "sha256": "6c371f01b18c61d93a0ba06c493043d8069343f975fe2d48541d0a14b993a585"
+  },
+  {
+    "arquivo": "depois-serpentina.webm",
+    "codec_name": "vp8",
+    "width": 540,
+    "height": 960,
+    "nb_read_frames": "72",
+    "sha256": "427951e158ae8003e849950ce23bb63fc0cbaaf65948552f8916b5a4126c91d5"
+  }
+]

@@ -8,7 +8,8 @@
 //   cena: { texto (narracao), acao: "pergunta|fato|formula|esquema|numero|alternativas|carimbo",
 //           area: "natureza|humanas|matematica|linguagens", lousa: str curto (o que se escreve),
 //           icone: um de ICONES (fato), formula: str (formula),
-//           itens: [str] 2-4 + esquema: "cadeia|ciclo" (esquema),
+//           itens: [str] 2-4 + esquema: "cadeia|ciclo|escala" (esquema),
+//           valores: [number] positivos na mesma unidade (escala),
 //           numero: num + unidade: str (numero), alternativas: [5 str] + correta: 0-4,
 //           ano: 2009..2026 (carimbo), hud: str curto }
 //
@@ -55,7 +56,8 @@
       const alts = Array.isArray(cn.alternativas) ? cn.alternativas.slice(0, 5).map((a) => lim(a, 40)) : [];
       return { acao: cn.acao || 'fato', area, lousa: lim(cn.lousa || '', 90), icone: ICONES[cn.icone] ? cn.icone : null,
         formula: lim(cn.formula || '', 40), itens: (Array.isArray(cn.itens) ? cn.itens : []).slice(0, 4).map((x) => lim(x, 22)),
-        esquema: cn.esquema === 'ciclo' ? 'ciclo' : 'cadeia', numero: Number(cn.numero), unidade: lim(cn.unidade || '', 24),
+        esquema: ['ciclo','escala'].includes(cn.esquema) ? cn.esquema : 'cadeia',
+        valores: Array.isArray(cn.valores) ? cn.valores.slice(0,4).map(v => typeof v === 'number' && Number.isFinite(v) && v > 0 ? v : null) : [], numero: Number(cn.numero), unidade: lim(cn.unidade || '', 24),
         alternativas: alts, correta: U.clamp(Math.round(Number(cn.correta) || 0), 0, Math.max(0, alts.length - 1)),
         ano: Number.isFinite(Number(cn.ano)) ? Math.round(Number(cn.ano)) : null, hud: cn.hud };
     });
@@ -128,6 +130,33 @@
       c.font = '40px "Lilita One", sans-serif'; c.fillStyle = '#FFFFFF'; c.textAlign = 'center'; c.textBaseline = 'middle'; c.fillText('CAI NO ENEM', 0, 3); c.restore();
     }
 
+    // Comparação proporcional no mesmo eixo. Não inventa valores ausentes.
+    // cena: {acao:'esquema', esquema:'escala', itens:['A','B'], valores:[1,2], unidade:'cm'}
+    function escala(cn,k) {
+      const n=cn.itens.length, maior=Math.max(...cn.valores), x0=IX+22, largura=IW-100;
+      const y0=IY+210, passo=Math.min(170,(IH-270)/n), cores=[AZUL,VERDE,AMARELO,ROSA];
+      if(cn.lousa)escrever(quebra(cn.lousa,46,IW,2),IX+IW/2,IY+45,46,56,U.clamp(k/.16,0,1));
+      // Grade discreta: mesma origem, mesma unidade e máximo em todos os itens.
+      c.save();c.strokeStyle='#F4F1E633';c.lineWidth=2;
+      for(let j=0;j<=4;j++){const x=x0+largura*j/4;c.beginPath();c.moveTo(x,y0-15);c.lineTo(x,y0+(n-1)*passo+70);c.stroke();}
+      cn.itens.forEach((nome,j)=>{
+        const y=y0+j*passo, v=cn.valores[j], alvo=largura*(v/maior);
+        const q=U.saida(U.clamp((k-.12-j*.12)/.26,0,1));
+        giz(nome,x0,y-35,42,cores[j],'left');
+        c.fillStyle=cores[j]+'22';c.fillRect(x0,y,alvo,42);
+        c.fillStyle=cores[j];c.fillRect(x0,y,alvo*q,42);
+        c.strokeStyle=cores[j];c.lineWidth=3;c.strokeRect(x0,y,alvo,42);
+        // A medida é a meta, não uma contagem que mudaria a proporção física.
+        const tx=String(v.toLocaleString('pt-BR',{maximumSignificantDigits:6}))+(cn.unidade?' '+cn.unidade:'');
+        c.save();c.globalAlpha=U.clamp((k-.4-j*.12)/.16,0,1);giz(tx,Math.min(x0+alvo+12,IX+IW),y+63,32,cores[j],'right');c.restore();
+      });
+      const yEixo=y0+(n-1)*passo+110;
+      seta(x0,yEixo,x0+largura,yEixo,U.clamp(k/.35,0,1),GIZ);
+      giz('0',x0,yEixo+38,32,GIZ);
+      giz(maior.toLocaleString('pt-BR',{maximumSignificantDigits:6})+(cn.unidade?' '+cn.unidade:''),x0+largura,yEixo+38,32,GIZ);
+      c.restore();
+    }
+
     // ---------- as acoes ----------
     const DESENHA = {
       pergunta(cn, k, local) {
@@ -153,6 +182,9 @@
           escrever(quebra(cn.lousa, 70, IW, 3), IX + IW / 2, yF + px * 0.9 + 200, 70, 84, U.clamp((k - 0.68) / 0.3, 0, 1)); }
       },
       esquema(cn, k) {
+        if(cn.esquema === 'escala' && cn.itens.length >= 2 && cn.valores.length === cn.itens.length && cn.valores.every(v => v !== null)) {
+          escala(cn,k);return;
+        }
         const it = cn.itens.length >= 2 ? cn.itens : [cn.lousa || '?', '?'], n = it.length;
         const pos = cn.esquema === 'ciclo'
           ? it.map((_, j) => { const a = -Math.PI / 2 + (j / n) * U.TAU; return [IX + IW / 2 + Math.cos(a) * IW * 0.3, IY + IH / 2 + Math.sin(a) * IH * 0.33]; })

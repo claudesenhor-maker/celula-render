@@ -1,0 +1,15 @@
+{
+  "id": "mecanismo-perfil-r0-20261029",
+  "oportunidade_id": "433b0f74296859ac5d2d588e",
+  "decisao": "rejeitar",
+  "evidencias": [
+    "docs/evolucao-mineracao-2026-10-29/r0-bulbo-angular-rejeitado.png"
+  ],
+  "metricas": {
+    "modo": "inspecao-de-quadro-pelo-agente",
+    "t_s": 1.5,
+    "contorno_angular_observado": true,
+    "servico_visao_externo": false
+  },
+  "observacao": "Pescoço e ombro aparecem, mas a interpolação linear do perfil deixa a silhueta angular. Testes de geometria passavam. Repetir com interpolação monótona, mesmo spec."
+}

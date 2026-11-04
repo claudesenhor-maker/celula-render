@@ -1,0 +1,81 @@
+{
+  "id": "laboratorio-pixel-20261103-final",
+  "oportunidade_id": "188114d88ecf2e7e677f8ad3",
+  "decisao": "manter-em-revisao",
+  "evidencias": [
+    "/home/azureuser/videos-auto-comparacoes/docs/experimentos-2026-10-29/index.html",
+    "/home/azureuser/videos-auto-comparacoes/docs/experimentos-2026-10-29/resumo-validacao.json",
+    "/home/azureuser/videos-auto-comparacoes/docs/experimentos-2026-10-29/README.md",
+    "/home/azureuser/videos-auto-comparacoes/docs/experimentos-2026-10-29/galeria-verificada.json"
+  ],
+  "sha256_artefatos": {
+    "index.html": "885531ef30b573dff388ada306de5adae6f35d13907e7db3bb4e60be5be82a90",
+    "resumo-validacao.json": "49d09331bcaac7c5968e304a056e497662ea165d8c7b0be949e2193efaefc68e",
+    "README.md": "16014472a181cce06b0c1c7c43fb1cbf9de3a3ca47cf2136ba180b517d94e516",
+    "galeria-verificada.json": "def9bc5864ee832d6494596b34a9c47ded94860ac164c122e972298a233f5604"
+  },
+  "metricas": {
+    "antes": [
+      {
+        "nome": "pixel",
+        "fontes": [
+          true,
+          true,
+          true,
+          true,
+          true,
+          true
+        ],
+        "erros": [],
+        "quadro_repetido_identico": true,
+        "ms_amostras": [
+          10527.921123981476,
+          6342.488619923592,
+          2461.2518409490585,
+          2011.9433349370956
+        ],
+        "metricas": null,
+        "fps_previa": 12,
+        "escala_interna_3d_previa": 1,
+        "duracao_s": 6
+      }
+    ],
+    "depois": [
+      {
+        "nome": "pixel",
+        "fontes": [
+          true,
+          true,
+          true,
+          true,
+          true,
+          true
+        ],
+        "erros": [],
+        "quadro_repetido_identico": true,
+        "ms_amostras": [
+          9274.781847953796,
+          9518.224094986916,
+          2357.415946006775,
+          1970.6268070936203
+        ],
+        "metricas": null,
+        "fps_previa": 12,
+        "escala_interna_3d_previa": 1,
+        "duracao_s": 6
+      }
+    ],
+    "node": 21,
+    "python": 7
+  },
+  "proveniencia": "Artefatos reais do laboratório separado experimento-comparacoes-20261029; importação de resultados declarados e arquivos conferidos, sem alterar o checkout fonte.",
+  "limites": [
+    "Prévias 12fps sem áudio, 540×960; 3D interno 50%, PNGs integrais 1080×1920.",
+    "Sem visão externa, sem avaliação da narração e sem promoção.",
+    "Comparação ENEM/escala demonstra capacidade nova de diagrama, não realismo.",
+    "Integração com geometria/âncora desta branch ainda exige revisão e testes."
+  ],
+  "promocao_automatica": false,
+  "substitui_apenas_snapshot_de_artefatos_de": "laboratorio-pixel-20261103",
+  "commit_laboratorio": "9642d9e584bbace77d8308f9448dbb16bbffc53e"
+}

@@ -28,14 +28,14 @@ export async function revisarAntesDoRender(page,inicial,saida) {
  for(let rodada=0;rodada<2;rodada++) {
   const quadros=await amostrar(page,spec,saida+'.previas',rodada);
   const vazios=quadros.filter(q=>q.faixa<3);
-  const registro={rodada,modo:endpoint?'visao-configurada':'tecnico-local',quadros:quadros.map(({imagem,...resto})=>resto)};historico.push(registro);
+  const registro={rodada,modo:endpoint?'visao-configurada':'tecnico-local',avaliacao_semantica:endpoint?'aguardando-resposta':'nao-executada',cobertura:'amostras temporais limitadas; não avalia todos os quadros nem áudio',quadros:quadros.map(({imagem,...resto})=>resto)};historico.push(registro);
   const salvar=()=>fs.writeFileSync(saida+'.direcao.json',JSON.stringify({versao:1,historico},null,2));
   if(vazios.length){registro.erro='quadro sem contraste no assunto';salvar();throw Error('[diretor] quadro sem conteúdo visual: '+vazios.map(q=>q.t).join(','));}
   if(!endpoint){salvar();return spec;}
   let resposta;
   try {resposta=await consultarRevisor(endpoint,{spec:Object.fromEntries(['estilo','titulo','dur_s','w','h','cenas','modelo','animal','itens','ativo','data_referencia'].filter(k=>spec[k]!=null).map(k=>[k,spec[k]])),capacidades:{cameras:CAMERAS[spec.estilo]||[],plano:MOTORES_3D.includes(spec.estilo)?(spec.estilo==='lowpoly'?['zoom']:['zoom','exposicao']):[]},quadros:quadros.map(({arquivo,...q})=>q)},{token:process.env.VIDEO_REVISOR_TOKEN||''});}
   catch(e){registro.erro=e.message;salvar();throw e;}
-  registro.revisao=resposta;salvar();
+  registro.revisao=resposta;registro.avaliacao_semantica='resposta-recebida';salvar();
   // Valida mesmo a aprovação: não ignora campos ilegais em resposta aprovada.
   let novo;try {novo=aplicarCorrecoes(spec,resposta);}catch(e){registro.erro=e.message;salvar();throw e;}
   if(resposta.aprovado && resposta.correcoes.length===0)return spec;
