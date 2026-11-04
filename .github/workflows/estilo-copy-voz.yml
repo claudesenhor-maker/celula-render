@@ -1,4 +1,5 @@
 name: estilo-copy-voz
+run-name: Estilo Copy voz ${{ github.event.client_payload.texto_sha256 || github.run_id }}
 on:
   repository_dispatch:
     types: [estilo-copy-voz]
