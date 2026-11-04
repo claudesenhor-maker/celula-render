@@ -1,5 +1,7 @@
 name: estilo-copy-voz
 on:
+  repository_dispatch:
+    types: [estilo-copy-voz]
   workflow_dispatch:
     inputs:
       texto:
@@ -30,7 +32,7 @@ jobs:
           key: estilo-copy-chatterbox-py311-v1
       - name: Narração Chatterbox com voz sintética do banco do projeto
         env:
-          ESTILO_COPY_TEXTO: ${{ inputs.texto }}
+          ESTILO_COPY_TEXTO: ${{ inputs.texto || github.event.client_payload.texto }}
           OMP_NUM_THREADS: '2'
           MKL_NUM_THREADS: '2'
         run: python estilo_copy_voz.py
