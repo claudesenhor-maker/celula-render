@@ -1,0 +1,42 @@
+name: estilo-copy-voz
+on:
+  workflow_dispatch:
+    inputs:
+      texto:
+        description: 'Narração original de ficção (20 a 8000 caracteres)'
+        required: true
+        type: string
+permissions:
+  contents: read
+jobs:
+  narracao:
+    runs-on: ubuntu-latest
+    timeout-minutes: 55
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Dependências de áudio
+        run: |
+          sudo apt-get update -qq || true
+          sudo apt-get install -y -qq ffmpeg espeak-ng
+      - name: Cache dos modelos e ambiente isolado
+        uses: actions/cache@v4
+        with:
+          path: |
+            /tmp/voz_livre_venv
+            ~/.cache/huggingface
+          key: estilo-copy-chatterbox-py311-v1
+      - name: Narração Chatterbox com voz sintética do banco do projeto
+        env:
+          ESTILO_COPY_TEXTO: ${{ inputs.texto }}
+          OMP_NUM_THREADS: '2'
+          MKL_NUM_THREADS: '2'
+        run: python estilo_copy_voz.py
+      - uses: actions/upload-artifact@v4
+        with:
+          name: estilo-copy-voz
+          path: estilo-copy-voz/
+          retention-days: 7
+          if-no-files-found: error
