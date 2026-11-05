@@ -1,7 +1,7 @@
 """Narração privada Chatterbox, por plano, sem publicação nem callback de produção."""
 import hashlib,json,os,re,subprocess,sys
 from pathlib import Path
-REF='https://toonzueira.duckdns.org/supabase/storage/v1/object/public/toonzueira/vozes_ref/enem_1.mp3'
+REF='https://toonzueira.duckdns.org/supabase/storage/v1/object/public/toonzueira/vozes_ref/timeline_drop_1.mp3'
 
 def duracao(p):
  return float(subprocess.check_output(['ffprobe','-v','error','-show_entries','format=duration','-of','default=nw=1:nk=1',str(p)],text=True))
