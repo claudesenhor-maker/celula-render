@@ -146,7 +146,8 @@
       if (!itens.length) return { cx: 0, cy: 1, d: 6 };
       const it = itens[a], x0 = Math.max(itens[0].x - itens[0].larg, it.x - Math.max(it.alt * 1.2, it.larg * 0.65)), x1 = it.x + it.larg * 0.65;
       const hfov = 2 * Math.atan(Math.tan((cam.fov * Math.PI) / 360) * cam.aspect), vfov = (cam.fov * Math.PI) / 180;
-      const h = it.alt * 1.6, w = x1 - x0, d = Math.max((w / 2) / Math.tan(hfov / 2) * 1.1, (h / 2) / Math.tan(vfov / 2) * 1.15);
+      // v2 05/11: margens mais justas -- o item da vez ocupa o quadro (antes ~25% da altura)
+      const h = it.alt * 1.3, w = x1 - x0, d = Math.max((w / 2) / Math.tan(hfov / 2) * 0.98, (h / 2) / Math.tan(vfov / 2) * 1.05);
       return { cx: (x0 + x1) / 2, cy: it.alt * 0.5, d };
     }
     // interpola em LOG (a distancia muda por ordens de grandeza)
@@ -172,7 +173,12 @@
       // faixa embaixo; mirar abaixo do centro do objeto o SOBE no quadro (a
       // legenda mora em 70% da altura)
       const ang = Math.sin(t * 0.2) * 0.07;
-      cam.position.set(cx + Math.sin(ang) * d, cy * 0.55, Math.cos(ang) * d); cam.near = d / 5000; cam.far = d * 400; cam.updateProjectionMatrix();
+      // v2 05/11: item chato e largo (avião, pista, zona) visto do chão vira uma linha;
+      // a câmera sobe em ângulo proporcional a largura/altura e mostra a ÁREA.
+      const elevDe = (j) => { const it = itens[j]; if (!it) return 0; const r = it.larg / Math.max(1e-6, it.alt); return U.clamp((Math.log(r) - 1.2) / 2.4, 0, 0.75); };
+      const elev = U.lerp(elevDe(ant), elevDe(a), q);
+      if (elev > 0.01) { miraY = U.lerp(miraY, 0, U.clamp(elev / 0.4, 0, 1)); }
+      cam.position.set(cx + Math.sin(ang) * d * Math.cos(elev), cy * 0.55 + d * Math.sin(elev), Math.cos(ang) * d * Math.cos(elev)); cam.near = d / 5000; cam.far = d * 400; cam.updateProjectionMatrix();
       if (T3) {
         chao.position.set(cx, 0, 0); chao.scale.setScalar(d * 60);
         nevoa.near=d*6;nevoa.far=d*45;

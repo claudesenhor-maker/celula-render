@@ -262,6 +262,14 @@
         c.save(); c.translate(W / 2, H * 0.80 - 230); c.scale(pula, pula); c.fillText('BOUNCES: ' + Q_.batidas, 0, 0); c.restore();
         const abertas = Q_.vivas.filter((v) => !v).length; c.fillStyle = '#FFD23F'; c.fillText((MODO === 'poligono' ? 'WALLS: ' : 'RINGS: ') + (paredes.length - abertas) + ' / ' + paredes.length, W / 2, H * 0.80 - 150);
         if (abertas === paredes.length && paredes.length) { const tq = Math.max(...paredes.map((p) => p.quebra || 0)), s = U.mola(t - tq, 9);
+          // v2 05/11: a fuga vira festa -- ondas de choque e confete (antes: tela vazia com o texto)
+          { const dt = t - tq < 0 ? -1 : (t - tq) % 2.2, r = U.rng(77 + Math.floor(Math.max(0, t - tq) / 2.2)); c.save();
+            for (let j = 0; j < 3; j++) { const q = (dt - j * 0.25); if (q > 0 && q < 1.4) { c.globalAlpha = Math.max(0, 1 - q / 1.4); c.lineWidth = 18 - j * 4; c.strokeStyle = ['#00E5FF', '#FFD23F', '#FF4FD8'][j]; c.beginPath(); c.arc(W / 2, CY, 120 + q * 900, 0, U.TAU); c.stroke(); } }
+            c.globalAlpha = 1;
+            for (let j = 0; j < 140; j++) { const a0 = r() * U.TAU, v = 500 + r() * 1300, cor = ['#00E5FF', '#FFD23F', '#FF4FD8', '#7CFF6B', '#FFFFFF'][j % 5], rot = r() * 6;
+              const x = W / 2 + Math.cos(a0) * v * dt, y = CY + Math.sin(a0) * v * dt + 900 * dt * dt; if (y > H + 40 || dt < 0) continue;
+              c.save(); c.translate(x, y); c.rotate(rot + dt * 8); c.fillStyle = cor; c.fillRect(-10, -5, 20, 10); c.restore(); }
+            c.restore(); }
           c.translate(W / 2, CY); c.scale(s, s); c.font = '150px "Lilita One", sans-serif'; c.lineWidth = 16; c.strokeStyle = '#111'; c.strokeText('ESCAPED!', 0, 0); c.fillStyle = '#FFD23F'; c.fillText('ESCAPED!', 0, 0); }
       }
       c.restore();

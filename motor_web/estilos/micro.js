@@ -216,8 +216,8 @@
       pele.visible = !close; desenharPele(t, ef);
       // camera: o bloco visto de frente e um pouco de cima, girando devagar
       const giro = Math.sin(t * 0.22) * 0.32 + (acao === 'corte' ? (k - 0.5) * 0.5 : 0);
-      let dist = 13.5, alvoY = -1.2, alt = 2.4;
-      if (acao === 'entra' || acao === 'aplica') { const p = acao === 'entra' ? alvoDe(cn) : 0; alvoY = U.lerp(-0.9, Math.max(-1.9, p * 0.8 - 0.5), U.suave(k)); dist = 10.5; }
+      let dist = 11.2, alvoY = -1.2, alt = 2.4;   // v2 05/11: bloco maior na tela (era 13,5: 40% do quadro vazio)
+      if (acao === 'entra' || acao === 'aplica') { const p = acao === 'entra' ? alvoDe(cn) : 0; alvoY = U.lerp(-0.9, Math.max(-1.9, p * 0.8 - 0.5), U.suave(k)); dist = 9.0; }
       if (acao === 'efeito') {
         const e = cn.efeito; dist = 8.5;
         alvoY = e === 'colageno' || e === 'acalma' ? -2.0 : e === 'manchas' ? -1.05 : e === 'oleo' ? -0.9 : e === 'barreira' || e === 'esfolia' || e === 'protege' ? -0.25 : -0.7;
@@ -229,7 +229,7 @@
       cam.lookAt(0, alvoY - 0.35, 0);
       // molecula grande (acao molecula) no centro, girando
       grande.visible = close;
-      if (close) { cam.position.set(0, 0, distClose); cam.lookAt(0, 0, 0); grande.position.set(0, 0, 0); grande.scale.setScalar(U.mola(local, 8)); grande.rotation.set(t * 0.5, t * 0.8, 0.2); }
+      if (close) { cam.position.set(0, 0, distClose); cam.lookAt(0, 0, 0); grande.position.set(0, 0, 0); grande.scale.setScalar(1.3 * U.mola(local, 8)); grande.rotation.set(t * 0.5, t * 0.8, 0.2); }
       // as moleculas pequenas
       const p0 = profAntes(i);
       mols.forEach((m, n) => {

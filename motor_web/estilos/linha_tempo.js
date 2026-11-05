@@ -63,6 +63,43 @@
       for (let i = 0; i < 70; i++) { const x = r() * W, y = ((r() * H * 3 - t * 40 * (0.5 + r())) % H + H) % H; c.fillRect(x, y, 3, 3); }
     }
 
+    // HORIZONTE DA ÉPOCA (v2 05/11): a cidade ao fundo muda com o ano que corre --
+    // vila/castelo, casas com chaminé, fábricas, prédios, torres de vidro. O olho
+    // VÊ o tempo passar em vez de ler só o número.
+    const ERAS = [[-1e9, 'antigo'], [1500, 'vila'], [1800, 'chamine'], [1900, 'fabrica'], [1950, 'predio'], [1995, 'torre']];
+    function eraDe(a) { let e = ERAS[0][1]; for (const [d, n] of ERAS) if (a >= d) e = n; return e; }
+    const skylines = {};
+    function skyline(era) {
+      if (skylines[era]) return skylines[era];
+      return (skylines[era] = U.camada(W + 400, 700, (g) => {
+        const r = U.rng('sky' + era); g.fillStyle = '#000';
+        const base = 700;
+        for (let x = 0; x < W + 400;) {
+          let w, h;
+          if (era === 'antigo') { w = 160 + r() * 120; h = 80 + r() * 60; g.fillRect(x, base - h, w, h); if (r() > .6) { g.fillRect(x + w * .3, base - h - 160, 50, 160); g.beginPath(); g.moveTo(x + w * .3 - 10, base - h - 160); g.lineTo(x + w * .3 + 25, base - h - 220); g.lineTo(x + w * .3 + 60, base - h - 160); g.fill(); } }
+          else if (era === 'vila') { w = 120 + r() * 80; h = 110 + r() * 80; g.fillRect(x, base - h, w, h); g.beginPath(); g.moveTo(x - 10, base - h); g.lineTo(x + w / 2, base - h - 70); g.lineTo(x + w + 10, base - h); g.fill(); if (r() > .8) g.fillRect(x + w / 2 - 12, base - h - 180, 24, 120); }
+          else if (era === 'chamine') { w = 130 + r() * 90; h = 140 + r() * 90; g.fillRect(x, base - h, w, h); g.beginPath(); g.moveTo(x - 6, base - h); g.lineTo(x + w / 2, base - h - 50); g.lineTo(x + w + 6, base - h); g.fill(); g.fillRect(x + w * .7, base - h - 80, 22, 60); }
+          else if (era === 'fabrica') { w = 200 + r() * 120; h = 160 + r() * 80; g.fillRect(x, base - h, w, h); for (let k = 0; k < 4; k++) { g.beginPath(); g.moveTo(x + k * w / 4, base - h); g.lineTo(x + k * w / 4 + w / 4, base - h - 50); g.lineTo(x + k * w / 4 + w / 4, base - h); g.fill(); } if (r() > .4) g.fillRect(x + w * .8, base - h - 260, 30, 260); }
+          else if (era === 'predio') { w = 110 + r() * 90; h = 240 + r() * 200; g.fillRect(x, base - h, w, h); }
+          else { w = 90 + r() * 80; h = 320 + r() * 330; g.fillRect(x, base - h, w, h); if (r() > .6) { g.fillRect(x + w / 2 - 4, base - h - 90, 8, 90); } }
+          // janelas acesas
+          g.save(); g.fillStyle = 'rgba(255,214,120,.55)';
+          for (let yy = base - h + 24; yy < base - 20; yy += 34) for (let xx = x + 14; xx < x + w - 20; xx += 30) if (r() > .55) g.fillRect(xx, yy, 12, 16);
+          g.restore(); g.fillStyle = '#000';
+          x += w + 8 + r() * 30;
+        }
+      }));
+    }
+    function cidade(anoAgora, yCam, prog) {
+      const era = eraDe(anoAgora), img = skyline(era), ox = (yCam * 0.08) % 400;
+      // silhueta CLARA sobre o céu escuro (preto sobre escuro sumia), tingida pela época
+      const tinta = { antigo: '#6b4a2e', vila: '#6b4a2e', chamine: '#5a4636', fabrica: '#4a4652', predio: '#34466a', torre: '#2c4a7a' }[era];
+      if (!skylines['t' + era]) skylines['t' + era] = U.camada(W + 400, 700, (g) => { g.drawImage(img, 0, 0); g.globalCompositeOperation = 'source-atop'; g.fillStyle = tinta; g.fillRect(0, 0, W + 400, 700); g.globalCompositeOperation = 'source-over';
+        g.globalCompositeOperation = 'source-atop'; const r = U.rng('jan' + era); g.fillStyle = 'rgba(255,214,120,.8)'; for (let i = 0; i < 260; i++) g.fillRect(r() * (W + 400), 260 + r() * 420, 10, 14); g.globalCompositeOperation = 'source-over'; });
+      c.save(); c.globalAlpha = 0.9; c.drawImage(skylines['t' + era], -ox, H - 700 - 420); c.restore();
+      const g = c.createLinearGradient(0, H - 700, 0, H); g.addColorStop(0, 'rgba(0,0,0,0)'); g.addColorStop(1, 'rgba(0,0,0,.75)'); c.fillStyle = g; c.fillRect(0, H - 700, W, 700);
+    }
+    const ANOS = /^pt/i.test(spec.idioma || '') ? 'ANOS' : (/^es/i.test(spec.idioma || '') ? 'AÑOS' : 'YEARS');
     function quadro(t) {
       const { i, k, local } = U.cenaEm(spec, t), cn = cenas[i];
       // a camera desce do marco anterior ao atual no primeiro terco da cena
@@ -70,6 +107,7 @@
       const yCam = i ? U.lerp(Y[i - 1], Y[i], q) : 0, zoom = cn.acao === 'zoom' ? 1 + 0.12 * U.suave(k) : 1;
       const anoAgora = i ? U.lerp(cenas[i - 1].ano, cn.ano, cn.acao === 'salto' ? U.saida(q) : q) : cn.ano;
       fundo(t, cenas.length > 1 ? (anoAgora - cenas[0].ano) / Math.max(1, cenas[cenas.length - 1].ano - cenas[0].ano) : 0);
+      cidade(anoAgora, yCam);
       const Y0 = H * 0.45;   // onde o marco atual fica na tela
       c.save(); c.translate(W / 2, Y0); c.scale(zoom, zoom); c.translate(-W / 2, -yCam);   // o marco em yCam cai em Y0
       // a trilha e as marcas de ano entre os marcos
@@ -83,24 +121,30 @@
       // os marcos: os que ja passaram apagados, o atual aceso e entrando
       cenas.forEach((m, j) => {
         if (j > i) return;
-        const atual = j === i, ent = atual ? U.mola(local - 0.1, 10) : 1, y = Y[j];
+        const chega = i ? Math.min(1.1, (spec.cenas[i].fim - spec.cenas[i].ini) * 0.4) * 0.75 : 0;
+        const atual = j === i, ent = atual ? U.mola(local - 0.1 - chega, 10) : 1, y = Y[j];
         // o que ja passou apaga enquanto sobe (nao briga com o contador do ano)
         const yTela = (y - yCam) * zoom + Y0, alfa = atual ? 1 : U.clamp((yTela - 420) / 320, 0, 0.4);
         if (alfa <= 0.01) return;
         c.save(); c.globalAlpha = alfa;
         c.beginPath(); c.arc(X, y, atual ? 38 + 4 * Math.sin(t * 5) : 26, 0, U.TAU); c.fillStyle = m.cor; c.fill(); c.lineWidth = 8; c.strokeStyle = '#FFFFFF'; c.stroke();
         if (ent > 0) {
-          const bx = X + 80, bw = W - bx - 150, bh = 300;
+          const bx = X + 70, bw = W - bx - 120, bh = 380;
           c.translate(bx + (1 - Math.min(1, ent)) * 300, y - bh / 2);
           U.rr(c, 0, 0, bw, bh, 30); c.fillStyle = 'rgba(255,255,255,0.96)'; c.fill(); c.fillStyle = m.cor; U.rr(c, 0, 0, 22, bh, 11); c.fill();
-          c.save(); c.translate(105, bh / 2); c.scale(62, 62); c.fillStyle = m.cor; c.strokeStyle = m.cor; ICONES[m.icone](c); c.restore();
-          c.fillStyle = '#16202C'; c.textAlign = 'left'; c.textBaseline = 'top'; c.font = '86px "Lilita One", sans-serif'; { const lw = c.measureText(anoTxt(m.ano)).width; if (lw > bw - 220) c.font = Math.floor(86 * (bw - 220) / lw) + 'px "Lilita One", sans-serif'; } c.fillText(anoTxt(m.ano), 190, 34);
-          c.font = '46px "Lilita One", sans-serif';
-          const texto = U.textoAjustado(c, String(spec.cenas[j].evento || m.evento).toUpperCase(), bw - 220, 125, 26);
-          texto.linhas.forEach((l, n) => c.fillText(l, 190, 140 + n * texto.lh));
+          c.beginPath(); c.arc(140, bh / 2, 104, 0, U.TAU); c.fillStyle = m.cor; c.fill();
+          c.save(); c.translate(140, bh / 2 + (atual ? Math.sin(t * 3) * 4 : 0)); c.scale(70, 70); c.fillStyle = '#FFFFFF'; c.strokeStyle = '#FFFFFF'; ICONES[m.icone](c); c.restore();
+          c.fillStyle = '#16202C'; c.textAlign = 'left'; c.textBaseline = 'top'; c.font = '104px "Lilita One", sans-serif'; { const lw = c.measureText(anoTxt(m.ano)).width; if (lw > bw - 290) c.font = Math.floor(104 * (bw - 290) / lw) + 'px "Lilita One", sans-serif'; } c.fillText(anoTxt(m.ano), 270, 40);
+          c.font = '54px "Lilita One", sans-serif';
+          const texto = U.textoAjustado(c, String(spec.cenas[j].evento || m.evento).toUpperCase(), bw - 300, 190, 30);
+          texto.linhas.forEach((l, n) => c.fillText(l, 270, 168 + n * texto.lh));
         }
         c.restore();
       });
+      // "+83 ANOS": o intervalo entre o marco anterior e este, no meio da trilha
+      if (i > 0) { const gap = Math.round(Math.abs(cn.ano - cenas[i - 1].ano)), yG = (Y[i - 1] + Y[i]) / 2, s = U.clamp(U.mola(local - 0.05, 9), 0, 1.3) * (1 - U.clamp((local - 1.6) / .3, 0, 1));
+        if (gap > 0 && s > 0.01) { c.save(); c.translate(X + 40, yG); c.scale(s, s); c.font = '78px "Lilita One", sans-serif'; c.textAlign = 'left'; c.textBaseline = 'middle';
+          const tx = '+' + gap.toLocaleString('en-US') + ' ' + (gap === 1 ? ANOS.replace(/S$/, '').replace('AÑO', 'AÑO') : ANOS), w = c.measureText(tx).width + 70; U.rr(c, 0, -62, w, 124, 62); c.fillStyle = '#FF6B6B'; c.fill(); c.lineWidth = 8; c.strokeStyle = '#FFFFFF'; c.stroke(); c.fillStyle = '#FFFFFF'; c.fillText(tx, 35, 6); c.restore(); } }
       c.restore();
       // o contador do ano no topo (corre entre os marcos)
       { const txt = anoTxt(anoAgora), s = 1 + 0.06 * Math.sin(Math.min(1, q) * Math.PI);
@@ -108,7 +152,8 @@
         c.save(); c.translate(W / 2, yA); c.scale(s, s); c.font = '150px "Lilita One", sans-serif'; c.textAlign = 'center'; c.textBaseline = 'middle';
         { const lw = c.measureText(txt).width; if (lw > W * 0.9) c.font = Math.floor(150 * (W * 0.9) / lw) + 'px "Lilita One", sans-serif'; }   // 23/10: "450,000,000 BC" saia cortado
         c.lineWidth = 18; c.strokeStyle = '#000000'; c.strokeText(txt, 0, 0); c.fillStyle = '#FFD166'; c.fillText(txt, 0, 0); c.restore(); }
-      if (cn.hud && typeof cn.hud !== 'object' && local > 0.2) { const s = U.mola(local - 0.2, 10); c.save(); c.translate(W / 2, H * 0.6); c.scale(s, s);
+      const fimDesce = i ? Math.min(1.1, (spec.cenas[i].fim - spec.cenas[i].ini) * 0.4) : 0;
+      if (cn.hud && typeof cn.hud !== 'object' && local > fimDesce + 0.1) { const s = U.mola(local - fimDesce - 0.1, 10); c.save(); c.translate(W / 2, H * 0.62); c.scale(s, s);
         c.font = '100px "Lilita One", sans-serif'; c.textAlign = 'center'; c.textBaseline = 'middle'; const tx = U.hud(c, cn.hud, c.canvas.width * 0.84 - 70, 22), w = c.measureText(tx).width + 70;
         U.rr(c, -w / 2, -66, w, 132, 30); c.fillStyle = '#FFD166'; c.fill(); c.fillStyle = '#16202C'; c.fillText(tx, 0, 6); c.restore(); }
       U.cartaz(c, spec, t, { fonte: '84px "Lilita One", sans-serif', y: 150, fundo: '#FFD166', borda: '#16202C', cor: '#16202C', altura_linha: 100, dur: 3.0 });

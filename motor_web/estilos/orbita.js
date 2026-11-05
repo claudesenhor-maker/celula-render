@@ -57,10 +57,75 @@
       const g = new T.BufferGeometry(); g.setAttribute('position', new T.BufferAttribute(pos, 3)); g.setAttribute('color', new T.BufferAttribute(cor, 3));
       const ceu = new T.Points(g, new T.PointsMaterial({ size: 2.2, sizeAttenuation: false, vertexColors: true })); sc.add(ceu); }
     const amb = new T.AmbientLight('#ffffff', 0.08); sc.add(amb);
+    // CÉU v2: faixa da Via Láctea e nebulosas (o fundo preto liso deixava meia tela vazia)
+    let ceuV2 = null;
+    function montarCeu() {
+      if (ceuV2 || U3.perfil === 'rapido') return;
+      const Wt = 1024, Ht = 512, cv = document.createElement('canvas'); cv.width = Wt; cv.height = Ht; const g = cv.getContext('2d'), im = g.createImageData(Wt, Ht), d = im.data;
+      const n = ruido('ceu-' + (spec.semente || 'o')), m = ruido('ceu2-' + (spec.semente || 'o'));
+      for (let y = 0; y < Ht; y++) for (let x = 0; x < Wt; x++) {
+        const u = x / Wt * 6, v = y / Ht * 3, faixa = Math.exp(-Math.pow((y / Ht - 0.5 - 0.12 * Math.sin(x / Wt * U.TAU)) / 0.11, 2));
+        const nv = n(u * 1.4, v * 1.4, 5, 6 * 1.4), cor2 = m(u * .7, v * .7, 3, 6 * .7);
+        const k = Math.max(0, nv - .38) * 2.2 * (0.25 + faixa);
+        const r = 8 + k * (cor2 > .5 ? 120 : 60) + faixa * 18, gg = 9 + k * 50 + faixa * 16, b = 22 + k * (cor2 > .5 ? 90 : 150) + faixa * 26;
+        const o = (y * Wt + x) * 4; d[o] = r; d[o + 1] = gg; d[o + 2] = b; d[o + 3] = 255;
+      }
+      g.putImageData(im, 0, 0);
+      const tx = new T.CanvasTexture(cv); tx.encoding = T.sRGBEncoding;
+      ceuV2 = new T.Mesh(new T.SphereGeometry(5000, 48, 24), new T.MeshBasicMaterial({ map: tx, side: T.BackSide, depthWrite: false, fog: false }));
+      ceuV2.rotation.z = 0.5; sc.add(ceuV2); ceuV2.renderOrder = -1;
+    }
     const luzSol = new T.PointLight('#FFF4E0', 2.2, 0, 0); sc.add(luzSol);
     const luzDir = new T.DirectionalLight('#FFF4E0', 1.6); sc.add(luzDir); sc.add(luzDir.target);
 
     // ---- texturas desenhadas (equiretangulares 512x256), da semente do corpo
+    // RUÍDO FRACTAL (v2 05/11): planetas com relevo, faixas turbulentas e nuvens
+    // em redemoinho, em vez de manchas soltas sobre cor lisa. Determinístico (semente).
+    function ruido(semente) {
+      const r = U.rng(semente), P = new Uint8Array(512), G = new Float32Array(256);
+      for (let i = 0; i < 256; i++) { P[i] = i; G[i] = r(); }
+      for (let i = 255; i > 0; i--) { const j = Math.floor(r() * (i + 1)); const tmp = P[i]; P[i] = P[j]; P[j] = tmp; }
+      for (let i = 0; i < 256; i++) P[i + 256] = P[i];
+      // ruído de valor periódico em x (período `per` em células): a longitude fecha sem costura
+      const f = (x, y, per) => { const x0 = Math.floor(x), y0 = Math.floor(y), xf = x - x0, yf = y - y0, u = xf * xf * (3 - 2 * xf), v = yf * yf * (3 - 2 * yf);
+        const X0 = ((x0 % per) + per) % per & 255, X1 = (((x0 + 1) % per) + per) % per & 255, Y0 = y0 & 255, Y1 = (y0 + 1) & 255;
+        const a = G[P[P[X0] + Y0]], b = G[P[P[X1] + Y0]], c2 = G[P[P[X0] + Y1]], d = G[P[P[X1] + Y1]]; return a + (b - a) * u + (c2 - a) * v + (a - b - c2 + d) * u * v; };
+      return (x, y, oit, per) => { let s = 0, amp = 0.5, fr = 1, tot = 0; for (let o = 0; o < (oit || 5); o++) { s += amp * f(x * fr, y * fr, Math.max(1, Math.round(per * fr))); tot += amp; amp *= 0.5; fr *= 2; } return s / tot; };
+    }
+    function hex(c0) { const n = parseInt(c0.slice(1), 16); return [n >> 16 & 255, n >> 8 & 255, n & 255]; }
+    function mistura(a, b, q) { return [a[0] + (b[0] - a[0]) * q, a[1] + (b[1] - a[1]) * q, a[2] + (b[2] - a[2]) * q]; }
+    function texturaV2(k, base) {
+      const b = CORPOS[k]; if (U3.perfil === 'rapido' || b.tipo === 'nave') return null;
+      const Wt = 1024, Ht = 512, cv = document.createElement('canvas'); cv.width = Wt; cv.height = Ht; const g = cv.getContext('2d');
+      const im = g.createImageData(Wt, Ht), d = im.data, n = ruido('v2-' + k), n2 = ruido('v2b-' + k), per = 8;
+      const fx = (b.faixas || [b.cor]).map(hex), cor = hex(b.cor);
+      for (let y = 0; y < Ht; y++) { const lat = y / Ht; for (let x = 0; x < Wt; x++) {
+        const u = x / Wt * per, v = lat * per / 2; let px;
+        if (b.tipo === 'gas') { const turb = n(u * 1.5, v * 4, 4, per * 1.5) - .5, L = fx.length, banda = (((lat * (L * 2.2) + turb * 0.9) % L) + L) % L, i0 = Math.floor(banda), q = banda - i0;
+          px = mistura(fx[i0 % fx.length], fx[(i0 + 1) % fx.length], U.suave(q)); const det = n2(u * 6, v * 18, 3, per * 6); px = mistura(px, [255, 255, 255], (det - .5) * .25); }
+        else if (b.tipo === 'nuvem') { const w1 = n(u * 1.2, v * 1.2, 4, per * 1.2), w2 = n(u * 2 + w1 * 3, v * 2 + w1 * 2, 5, per * 2); px = mistura(mistura(cor, [255, 236, 190], w2), [150, 110, 60], Math.max(0, .45 - w2) * .8); }
+        else if (b.tipo === 'estrela') { const gr = n(u * 10, v * 10, 4, per * 10); px = mistura([255, 150, 30], [255, 240, 170], gr); }
+        else if (b.tipo === 'marte') { const h = n(u * 1.6, v * 1.6, 6, per * 1.6); px = mistura([120, 45, 25], [222, 130, 80], h); if (lat < .07 || lat > .94) px = mistura(px, [245, 240, 235], .85); }
+        else if (b.tipo === 'rocha') { const h = n(u * 2, v * 2, 6, per * 2); px = mistura(mistura(cor, [40, 38, 36], .55), mistura(cor, [255, 255, 255], .2), h); if (k === 'moon') { const mar = n2(u * .8, v * .8, 3, per * .8); if (mar < .42) px = mistura(px, [70, 70, 72], .55); } }
+        else { const o = (y * Wt + x) * 4; d[o + 3] = 0; continue; }
+        const o = (y * Wt + x) * 4; d[o] = px[0]; d[o + 1] = px[1]; d[o + 2] = px[2]; d[o + 3] = 255;
+      } }
+      g.putImageData(im, 0, 0);
+      if (b.tipo === 'terra' && base) { g.drawImage(base, 0, 0, Wt, Ht); }
+      if (b.tipo === 'rocha') { const r = U.rng('cr-' + k); for (let i = 0; i < 220; i++) { const x = r() * Wt, y = 20 + r() * (Ht - 40), rr = 2 + Math.pow(r(), 3) * 40;
+        g.fillStyle = 'rgba(0,0,0,0.22)'; g.beginPath(); g.arc(x, y, rr, 0, U.TAU); g.fill(); g.strokeStyle = 'rgba(255,255,255,0.22)'; g.lineWidth = Math.max(1, rr * .18); g.beginPath(); g.arc(x - rr * .1, y - rr * .1, rr, Math.PI * .9, Math.PI * 1.7); g.stroke(); } }
+      if (k === 'jupiter') { g.fillStyle = 'rgba(181,83,47,.85)'; g.beginPath(); g.ellipse(660, 330, 64, 34, 0, 0, U.TAU); g.fill(); g.strokeStyle = 'rgba(240,200,170,.6)'; g.lineWidth = 6; g.stroke(); }
+      if (k === 'neptune') { g.fillStyle = 'rgba(20,30,90,.6)'; g.beginPath(); g.ellipse(400, 300, 50, 26, 0, 0, U.TAU); g.fill(); }
+      const t = new T.CanvasTexture(cv); t.encoding = T.sRGBEncoding; t.anisotropy = 8; return t;
+    }
+    const ATMOS = { venus: '#FFDCA0', earth: '#7FB8FF', mars: '#FF9A6A', jupiter: '#FFD9A0', saturn: '#F3E1B0', uranus: '#9FE8FF', neptune: '#6FA0FF' };
+    const halo = {};
+    function atmosfera(k) {
+      if (halo[k]) return halo[k];
+      const cv = document.createElement('canvas'); cv.width = cv.height = 256; const g = cv.getContext('2d'), gr = g.createRadialGradient(128, 128, 96, 128, 128, 128);
+      const [r0, g0, b0] = hex(ATMOS[k]); gr.addColorStop(0, `rgba(${r0},${g0},${b0},0.0)`); gr.addColorStop(0.16, `rgba(${r0},${g0},${b0},0.32)`); gr.addColorStop(1, `rgba(${r0},${g0},${b0},0)`);
+      g.fillStyle = gr; g.fillRect(0, 0, 256, 256); return (halo[k] = new T.CanvasTexture(cv));
+    }
     function textura(k) {
       const b = CORPOS[k], cv = document.createElement('canvas'); cv.width = 512; cv.height = 256; const g = cv.getContext('2d'), r = U.rng('tex-' + k);
       g.fillStyle = b.cor; g.fillRect(0, 0, 512, 256);
@@ -100,6 +165,8 @@
           g.strokeStyle = 'rgba(255,255,255,0.18)'; g.lineWidth = 1.5; g.beginPath(); g.arc(x - 1, y - 1, rr, Math.PI, Math.PI * 1.6); g.stroke(); }
         if (k === 'pluto') mancha(300, 150, 60, 40, 'rgba(245,230,210,0.7)');
       }
+      // v2: base procedural por cima; a Terra mantém os continentes reais (desenhados por cima da v2)
+      if (U3.perfil !== 'rapido') { const v2 = texturaV2(k, b.tipo === 'terra' ? cv : null); if (v2) return v2; }
       const t = new T.CanvasTexture(cv); t.encoding = T.sRGBEncoding; t.anisotropy = 4; return t;
     }
     const brilho = (() => { const cv = document.createElement('canvas'); cv.width = cv.height = 256; const g = cv.getContext('2d'), gr = g.createRadialGradient(128, 128, 0, 128, 128, 128);
@@ -129,6 +196,7 @@
         }
       }
       eixo.add(corpo); eixo.rotation.z = -((b.incl || 0) * Math.PI) / 180;
+      if (ATMOS[k] && U3.perfil !== 'rapido') { const s = new T.Sprite(new T.SpriteMaterial({ map: atmosfera(k), blending: T.AdditiveBlending, depthWrite: false, transparent: true })); s.scale.set(2.7, 2.7, 1); grupo.add(s); }
       sc.add(grupo); grupo.visible = false;
       return (OBJ[k] = { k, b, grupo, eixo, corpo });
     }
@@ -196,7 +264,7 @@
       // `dia`: uma volta no eixo durante a cena, com o Sol parado a esquerda (o terminador fica)
       if (umDia) o.corpo.rotation.y = U.suave(k) * U.TAU * (o.b.rot < 0 ? -1 : 1); else giro(o, t, 14);
       luzSol.intensity = 0; luzDir.intensity = o.b.tipo === 'estrela' ? 0 : 2.2; luzDir.position.set(-6, 1.5, 3); luzDir.target.position.set(0, 0, 0); amb.intensity = 0.07;
-      const temAnel = !!o.b.aneis, d = (temAnel ? 2.4 : 1.12) / Math.tan((cam.fov * Math.PI) / 360) / Math.min(1, cam.aspect) * 1.32;
+      const temAnel = !!o.b.aneis, d = (temAnel ? 2.4 : 1.12) / Math.tan((cam.fov * Math.PI) / 360) / Math.min(1, cam.aspect) * 1.14;
       const a = Math.sin(t * 0.18) * 0.25 + 0.15 * U.saida(U.clamp(local / 2, 0, 1));
       cam.position.set(Math.sin(a) * d, d * (temAnel ? 0.18 : 0.08), Math.cos(a) * d); cam.near = 0.01; cam.far = 1e5; cam.updateProjectionMatrix();
       // mirar abaixo do centro SOBE o planeta: o meio da tela fica para o cartao e a legenda
@@ -288,6 +356,7 @@
     function quadro(t) {
       const { c: cn, i, k, local } = U.cenaEm(spec, t), acao = cn.acao || 'foco';
       esconder();
+      montarCeu(); if (ceuV2) ceuV2.position.copy(cam.position);
       let info = {};
       if (acao === 'sistema') info = palcoSistema(cn, t, local);
       else if (acao === 'compara') info = palcoCompara(cn, t);
@@ -335,8 +404,8 @@
       if (acao === 'sistema') {
         info.marcas.forEach(([kk, p, tam]) => { const q = proj(p.clone().add(new T.Vector3(0, tam * 1.6, 0))); if (q.atras) return;
           if (kk === info.alvo) etiqueta(CORPOS[kk].nome.toUpperCase(), null, q.x, q.y - 40, true, U.mola(local - 0.2, 10)); });
-        contador('TIME LAPSE', '+' + tempoD(Math.max(0, info.dias)), H * 0.87);
-        c.save(); c.font = '30px "Lilita One", sans-serif'; c.fillStyle = 'rgba(200,210,230,0.8)'; c.textAlign = 'center'; c.fillText('REFERENCE: ' + dataReferencia.slice(0,10) + ' · NOT TO SCALE', W * 0.43, H * 0.74, W * 0.77); c.restore();
+        contador('TIME LAPSE', '+' + tempoD(Math.max(0, info.dias)), H * 0.19);
+        c.save(); c.font = '30px "Lilita One", sans-serif'; c.fillStyle = 'rgba(200,210,230,0.8)'; c.textAlign = 'center'; c.fillText('REFERENCE: ' + dataReferencia.slice(0,10) + ' · NOT TO SCALE', W * 0.43, H * 0.225, W * 0.77); c.restore();
       } else if (acao === 'foco' || acao === 'dia') {
         const b = CORPOS[info.alvo];
         if (acao === 'dia' && b.dia) { contador('ONE DAY ON ' + b.nome.toUpperCase(), tempoH(b.dia * U.suave(k)), H * 0.6); }
@@ -358,7 +427,7 @@
         if (!q.atras) etiqueta(b.nome.toUpperCase(), null, q.x, Math.min(q.y - 30, H * 0.5), true, U.mola(local - 0.2, 10));
         const qp = proj(new T.Vector3(0, 1.3, 0)); if (!qp.atras) etiqueta(CORPOS[info.pai].nome.toUpperCase(), null, qp.x, qp.y - 34, false, U.mola(local - 0.1, 10));
         contador('ONE ORBIT AROUND ' + CORPOS[info.pai].nome.toUpperCase(), b.ano < 1 ? n0(b.ano * 1440 * U.suave(k), 0) + ' MIN' : tempoD(b.ano * U.suave(k)), H * 0.64);
-        if (info.escalaReal) { c.save(); c.font = '34px "Lilita One", sans-serif'; c.fillStyle = 'rgba(200,210,230,0.7)'; c.textAlign = 'center'; c.fillText('DISTANCE TO SCALE', W / 2, H * 0.965); c.restore(); }
+        if (info.escalaReal) { c.save(); c.font = '34px "Lilita One", sans-serif'; c.fillStyle = 'rgba(200,210,230,0.7)'; c.textAlign = 'center'; c.fillText('DISTANCE TO SCALE', W / 2, H * 0.68); c.restore(); }
       } else if (acao === 'viagem') {
         const v = VEICULOS[cn.veiculo] || VEICULOS.luz, horas = info.km / v[1];
         contador(CORPOS[info.A].nome.toUpperCase() + ' → ' + CORPOS[info.B].nome.toUpperCase(), dist(info.km * info.q), H * 0.6);

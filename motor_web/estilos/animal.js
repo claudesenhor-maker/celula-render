@@ -229,15 +229,16 @@ function animalV2Revelacao(s) {
       if(v2 && (!Number.isFinite(marcoV2) || t<marcoV2))return;
       const ent = U.mola(v2 ? t-marcoV2 : local - 0.1, 10); if (ent <= 0) return;
       const q = v2 ? animalV2Progresso(t,valorV2) : U.suave(U.clamp((local - 0.25) / 1.1, 0, 1));
-      const x0 = 70, w = W - 140, y0 = H * 0.42, h = 360;
+      const x0 = 70, w = W - 140, y0 = H * 0.42, h = v2 ? 360 : 400;
       c.save(); c.translate(W / 2, y0 + h / 2); c.scale(ent, ent); c.translate(-W / 2, -(y0 + h / 2));
       U.rr(c, x0, y0, w, h, 34); c.fillStyle = 'rgba(24,20,14,0.86)'; c.fill(); c.lineWidth = 6; c.strokeStyle = '#F6C445'; c.stroke();
-      c.textBaseline = 'middle'; c.textAlign = 'left'; c.font = (v2 ? '40px' : '50px')+' "Lilita One", sans-serif'; c.fillStyle = '#F6C445'; c.fillText(st.nome, x0 + 40, y0 + (v2 ? 36 : 58));
+      c.textBaseline = 'middle'; c.textAlign = 'left'; { let fr = v2 ? 40 : 44; c.font = fr + 'px "Lilita One", sans-serif'; while (c.measureText(st.nome).width > w - 80 && fr > 24) c.font = (--fr) + 'px "Lilita One", sans-serif'; } c.fillStyle = '#F6C445'; c.fillText(st.nome, x0 + 40, y0 + (v2 ? 36 : 48));
       c.textAlign = 'right'; c.font = '96px "Lilita One", sans-serif'; c.fillStyle = '#FFFFFF'; const numeroV2=(v2 && (valorV2===null || t<valorV2) ? '—' : fmt(st.valor*q))+(st.unidade?' '+st.unidade.toUpperCase():'');
-      if(v2) {let fonte=68;c.font=fonte+'px "Lilita One", sans-serif';while(c.measureText(numeroV2).width>w-80&&fonte>26)c.font=(--fonte)+'px "Lilita One", sans-serif';}
-      c.fillText(numeroV2, x0+w-40,y0+(v2 ? 106 : 64));
+      // v2 05/11: rótulo e número em linhas próprias (antes "TIME WITHOUT WA" colidia com "1,460 DAYS")
+      {let fonte=v2?68:92;c.font=fonte+'px "Lilita One", sans-serif';while(c.measureText(numeroV2).width>w-80&&fonte>26)c.font=(--fonte)+'px "Lilita One", sans-serif';}
+      c.fillText(numeroV2, x0+w-40,y0+(v2 ? 106 : 124));
       if (st.humano != null && st.valor > 0) {
-        const mx = Math.max(st.valor, st.humano, 1e-9), bw = w - 260, by = y0 + 150;
+        const mx = Math.max(st.valor, st.humano, 1e-9), bw = w - 260, by = y0 + (v2 ? 150 : 196);
         const nomeA = v2 && t<revelacaoV2 ? '???' : String((spec.animal || {}).nome || 'ANIMAL').toUpperCase().slice(0, 9);
         [[nomeA, st.valor, '#F6C445'], ['HUMAN', st.humano, '#9AA7B8']].forEach(([n, v, cor], j) => {
           const yy = by + j * 82;

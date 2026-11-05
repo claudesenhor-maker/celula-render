@@ -28,37 +28,63 @@
       return (camadas[chave] = { pts, r2: Array.from({ length: 60 }, () => r()) });
     }
 
-    // ---------- a figura em sombra ----------
+    // ---------- a figura em sombra (v2 05/11) ----------
+    // Anatomia de verdade em vez de tubos: membros afinam (coxa > canela), ombros
+    // arredondados, pescoço, mãos e sapatos; cabelo/roupa dizem quem é (cartola
+    // só no "velho"). A silhueta continua escondendo rosto e detalhe.
+    function capsula(a, b, r1, r2) {
+      const ang = Math.atan2(b[1] - a[1], b[0] - a[0]), n = ang + Math.PI / 2;
+      c.beginPath();
+      c.moveTo(a[0] + Math.cos(n) * r1, a[1] + Math.sin(n) * r1); c.lineTo(b[0] + Math.cos(n) * r2, b[1] + Math.sin(n) * r2);
+      c.arc(b[0], b[1], r2, n, n + Math.PI, true); c.lineTo(a[0] - Math.cos(n) * r1, a[1] - Math.sin(n) * r1);
+      c.arc(a[0], a[1], r1, n + Math.PI, n + 2 * Math.PI, true); c.closePath(); c.fill();
+    }
     function figura(x, y, esc, tipo, pose, t) {
       c.save(); c.translate(x, y); c.scale(esc * (pose.dir || 1), esc); c.fillStyle = '#050407'; c.strokeStyle = '#050407'; c.lineCap = 'round'; c.lineJoin = 'round';
-      const p = pose, alt = tipo === 'crianca' ? 0.7 : 1;
+      const p = pose, alt = tipo === 'crianca' ? 0.68 : (tipo === 'mulher' ? 0.95 : 1);
       c.scale(alt, alt);
-      const quadril = [0, -230 + (p.bob || 0)], ombro = [p.incl || 0, -420 + (p.bob || 0)];
-      function membro(a, ang1, ang2, l1, l2, larg) {
+      const quadril = [0, -230 + (p.bob || 0)], ombro = [p.incl || 0, -430 + (p.bob || 0)];
+      function membro(a, ang1, ang2, l1, l2, r0, r1, r2) {
         const j = [a[0] + Math.sin(ang1) * l1, a[1] + Math.cos(ang1) * l1], e = [j[0] + Math.sin(ang1 + ang2) * l2, j[1] + Math.cos(ang1 + ang2) * l2];
-        c.lineWidth = larg; c.beginPath(); c.moveTo(a[0], a[1]); c.lineTo(j[0], j[1]); c.lineTo(e[0], e[1]); c.stroke(); return e;
+        capsula(a, j, r0, r1); capsula(j, e, r1, r2); return e;
       }
-      // pernas
-      const pe1 = membro(quadril, p.coxa1 || 0.05, p.canela1 || 0, 115, 115, 34), pe2 = membro(quadril, p.coxa2 || -0.05, p.canela2 || 0, 115, 115, 34);
-      [pe1, pe2].forEach((pe) => { c.beginPath(); c.ellipse(pe[0] + 14, pe[1] + 4, 30, 12, 0, 0, U.TAU); c.fill(); });
-      // tronco (casaco que balanca atras)
-      c.beginPath(); c.moveTo(quadril[0] - 44, quadril[1] + 20); c.lineTo(ombro[0] - 52, ombro[1]); c.lineTo(ombro[0] + 52, ombro[1]); c.lineTo(quadril[0] + 44, quadril[1] + 20);
       const vento = Math.sin(t * 3) * 14 + (p.vento || 0);
-      c.quadraticCurveTo(quadril[0] - 10, quadril[1] + 70, quadril[0] - 60 - vento, quadril[1] + 60); c.closePath(); c.fill();
-      if (tipo === 'mulher') { c.beginPath(); c.moveTo(quadril[0] - 50, quadril[1] - 30); c.lineTo(quadril[0] + 50, quadril[1] - 30); c.lineTo(quadril[0] + 90, quadril[1] + 110); c.lineTo(quadril[0] - 90 - vento, quadril[1] + 110); c.closePath(); c.fill(); }
-      // bracos
-      const m1 = membro([ombro[0] - 40, ombro[1] + 10], p.braco1 || 0.15, p.ante1 || 0, 105, 100, 28);
-      const m2 = membro([ombro[0] + 40, ombro[1] + 10], p.braco2 || -0.15, p.ante2 || 0, 105, 100, 28);
-      if (p.lanterna) { const g = c.createRadialGradient(m2[0], m2[1], 4, m2[0], m2[1], 520); g.addColorStop(0, 'rgba(255,214,140,.55)'); g.addColorStop(1, 'rgba(255,214,140,0)');
-        c.save(); c.fillStyle = g; c.beginPath(); c.moveTo(m2[0], m2[1]); c.arc(m2[0], m2[1], 520, -0.35, 0.35); c.closePath(); c.fill(); c.restore(); c.fillRect(m2[0] - 14, m2[1] - 10, 28, 36); }
+      // pernas (a de trás um pouco mais fina dá profundidade)
+      const pe1 = membro([quadril[0] - 16, quadril[1]], p.coxa1 || 0.05, p.canela1 || 0, 118, 114, 25, 17, 12);
+      const pe2 = membro([quadril[0] + 16, quadril[1]], p.coxa2 || -0.05, p.canela2 || 0, 118, 114, 23, 16, 11);
+      [pe1, pe2].forEach((pe) => { c.beginPath(); c.moveTo(pe[0] - 14, pe[1] - 8); c.quadraticCurveTo(pe[0] + 40, pe[1] - 14, pe[0] + 44, pe[1] + 6); c.lineTo(pe[0] - 16, pe[1] + 8); c.closePath(); c.fill(); });
+      // tronco: ombros arredondados, cintura, quadril
+      c.beginPath();
+      c.moveTo(quadril[0] - 40, quadril[1] + 12);
+      c.quadraticCurveTo(ombro[0] - 52, (ombro[1] + quadril[1]) / 2, ombro[0] - 58, ombro[1] + 22);
+      c.quadraticCurveTo(ombro[0] - 56, ombro[1] - 6, ombro[0] - 24, ombro[1] - 10);
+      c.lineTo(ombro[0] + 24, ombro[1] - 10);
+      c.quadraticCurveTo(ombro[0] + 56, ombro[1] - 6, ombro[0] + 58, ombro[1] + 22);
+      c.quadraticCurveTo(ombro[0] + 50, (ombro[1] + quadril[1]) / 2, quadril[0] + 40, quadril[1] + 12);
+      c.closePath(); c.fill();
+      if (tipo === 'homem' || tipo === 'velho') { // casaco longo que o vento abre
+        c.beginPath(); c.moveTo(quadril[0] - 42, quadril[1] - 10); c.lineTo(quadril[0] + 42, quadril[1] - 10);
+        c.quadraticCurveTo(quadril[0] + 50, quadril[1] + 60, quadril[0] + 34, quadril[1] + 120);
+        c.lineTo(quadril[0] - 40 - vento * 1.2, quadril[1] + 118); c.closePath(); c.fill();
+      }
+      if (tipo === 'mulher') { c.beginPath(); c.moveTo(quadril[0] - 44, quadril[1] - 20); c.lineTo(quadril[0] + 44, quadril[1] - 20); c.quadraticCurveTo(quadril[0] + 80, quadril[1] + 70, quadril[0] + 92, quadril[1] + 150); c.lineTo(quadril[0] - 92 - vento, quadril[1] + 150); c.quadraticCurveTo(quadril[0] - 76, quadril[1] + 70, quadril[0] - 44, quadril[1] - 20); c.fill(); }
+      // braços afinando até a mão
+      const m1 = membro([ombro[0] - 46, ombro[1] + 14], p.braco1 || 0.15, p.ante1 || 0, 108, 100, 20, 14, 10);
+      const m2 = membro([ombro[0] + 46, ombro[1] + 14], p.braco2 || -0.15, p.ante2 || 0, 108, 100, 20, 14, 10);
+      [m1, m2].forEach((m) => { c.beginPath(); c.ellipse(m[0], m[1] + 8, 13, 18, 0, 0, U.TAU); c.fill(); });
+      if (p.lanterna) { const g = c.createRadialGradient(m2[0], m2[1], 4, m2[0], m2[1], 560); g.addColorStop(0, 'rgba(255,214,140,.6)'); g.addColorStop(1, 'rgba(255,214,140,0)');
+        c.save(); c.fillStyle = g; c.beginPath(); c.moveTo(m2[0], m2[1]); c.arc(m2[0], m2[1], 560, -0.32, 0.32); c.closePath(); c.fill(); c.restore(); c.fillRect(m2[0] - 12, m2[1] - 8, 24, 44); }
       if (p.carta) { c.save(); c.translate((m1[0] + m2[0]) / 2, (m1[1] + m2[1]) / 2 - 20); c.rotate(-0.1); c.fillRect(-55, -70, 110, 140); c.restore(); }
       if (p.pa) { c.lineWidth = 10; c.beginPath(); c.moveTo(m2[0], m2[1]); c.lineTo(m2[0] + 70, m2[1] + 170); c.stroke(); c.beginPath(); c.ellipse(m2[0] + 80, m2[1] + 190, 26, 40, -0.4, 0, U.TAU); c.fill(); }
       if (tipo === 'velho') { c.lineWidth = 10; c.beginPath(); c.moveTo(m1[0], m1[1]); c.lineTo(m1[0] - 10, 0); c.stroke(); }
-      // cabeca e chapeu/cabelo
-      const cab = [ombro[0] + (p.cabeca || 0) * 30, ombro[1] - 68];
-      c.beginPath(); c.arc(cab[0], cab[1], 50, 0, U.TAU); c.fill(); c.lineWidth = 34; c.beginPath(); c.moveTo(cab[0], cab[1] + 40); c.lineTo(ombro[0], ombro[1]); c.stroke();
-      if (tipo === 'homem' || tipo === 'velho') { c.beginPath(); c.ellipse(cab[0], cab[1] - 34, 92, 16, 0, 0, U.TAU); c.fill(); c.fillRect(cab[0] - 52, cab[1] - 100, 104, 70); }
-      if (tipo === 'mulher') { c.beginPath(); c.moveTo(cab[0] - 50, cab[1] - 10); c.quadraticCurveTo(cab[0] - 70 - vento, cab[1] + 80, cab[0] - 40 - vento * 1.5, cab[1] + 140); c.lineTo(cab[0] + 20, cab[1] + 40); c.closePath(); c.fill(); }
+      // pescoço e cabeça (perfil levemente virado: nariz e queixo)
+      const cab = [ombro[0] + (p.cabeca || 0) * 30, ombro[1] - 74];
+      capsula([ombro[0], ombro[1] - 4], [cab[0], cab[1] + 30], 17, 15);
+      c.beginPath(); c.ellipse(cab[0], cab[1], 44, 52, 0, 0, U.TAU); c.fill();
+      c.beginPath(); c.moveTo(cab[0] + 38, cab[1] - 8); c.lineTo(cab[0] + 54, cab[1] + 10); c.lineTo(cab[0] + 38, cab[1] + 18); c.fill();
+      if (tipo === 'velho') { c.beginPath(); c.ellipse(cab[0], cab[1] - 30, 84, 13, -0.05, 0, U.TAU); c.fill(); c.beginPath(); c.moveTo(cab[0] - 46, cab[1] - 32); c.quadraticCurveTo(cab[0] - 44, cab[1] - 96, cab[0], cab[1] - 92); c.quadraticCurveTo(cab[0] + 44, cab[1] - 96, cab[0] + 46, cab[1] - 32); c.fill(); }
+      else if (tipo === 'mulher') { c.beginPath(); c.moveTo(cab[0] - 46, cab[1] - 16); c.quadraticCurveTo(cab[0] - 66 - vento, cab[1] + 80, cab[0] - 44 - vento * 1.5, cab[1] + 150); c.lineTo(cab[0] + 6, cab[1] + 44); c.quadraticCurveTo(cab[0] + 50, cab[1] - 40, cab[0] + 10, cab[1] - 58); c.quadraticCurveTo(cab[0] - 40, cab[1] - 58, cab[0] - 46, cab[1] - 16); c.fill(); }
+      else { c.beginPath(); c.ellipse(cab[0] - 6, cab[1] - 26, 48, 30, -0.2, Math.PI, U.TAU); c.fill(); }
       c.restore();
     }
     function poseDe(acao, t, k) {
@@ -121,23 +147,67 @@
       if (nome === 'estrelas_cadentes') { const k = (t * 0.5) % 1; c.strokeStyle = 'rgba(255,255,255,' + (1 - k) + ')'; c.lineWidth = 4; c.beginPath(); c.moveTo(200 + k * 700, 200 + k * 300); c.lineTo(80 + k * 700, 140 + k * 300); c.stroke(); }
     }
 
+    // raios de luz atrás das figuras (sol/lua/neblina): dão profundidade de cinema
+    function raios(hora, t, desl) {
+      if (!DISCO[hora]) return;
+      const dx = W * 0.62 - desl * 0.1, dy = CHAO - 520;
+      c.save(); c.globalCompositeOperation = 'lighter';
+      for (let i = 0; i < 7; i++) {
+        const a = Math.PI / 2 + (i - 3) * 0.22 + Math.sin(t * 0.25 + i) * 0.03, L = 1500;
+        const g = c.createLinearGradient(dx, dy, dx + Math.cos(a) * L, dy + Math.sin(a) * L);
+        g.addColorStop(0, DISCO[hora] + '22'); g.addColorStop(1, 'rgba(0,0,0,0)'); c.fillStyle = g;
+        c.beginPath(); c.moveTo(dx, dy); c.lineTo(dx + Math.cos(a - 0.05) * L, dy + Math.sin(a - 0.05) * L); c.lineTo(dx + Math.cos(a + 0.05) * L, dy + Math.sin(a + 0.05) * L); c.closePath(); c.fill();
+      }
+      c.restore();
+    }
+    function mar(hora, cor, t, desl) {
+      const y0 = CHAO - 300;
+      const g = c.createLinearGradient(0, y0, 0, H); g.addColorStop(0, cor[2]); g.addColorStop(0.15, cor[1]); g.addColorStop(1, '#03040a');
+      c.fillStyle = g; c.fillRect(-100, y0, W + 200, H);
+      // trilha de luz do disco na água
+      if (DISCO[hora]) { const dx = W * 0.62 - desl * 0.1; c.save(); c.globalCompositeOperation = 'lighter';
+        for (let j = 0; j < 46; j++) { const yy = y0 + 8 + j * j * 0.55, w = 40 + j * 7 + Math.sin(t * 2 + j) * 20; c.fillStyle = DISCO[hora] + (j < 20 ? '55' : '22'); c.fillRect(dx - w / 2 + Math.sin(t * 1.6 + j * 1.3) * 18, yy, w, 3); }
+        c.restore(); }
+      c.strokeStyle = 'rgba(0,0,0,.35)'; c.lineWidth = 3;
+      for (let j = 0; j < 14; j++) { const yy = y0 + 20 + j * j * 3; c.beginPath(); for (let x = -40; x < W + 40; x += 40) c.lineTo(x, yy + Math.sin(x * 0.02 + t * 1.5 + j) * (2 + j)); c.stroke(); }
+    }
+    function conves(t, desl) {
+      // convés do barco em primeiro plano: amurada, cabos e o balanço do mar
+      const rol = Math.sin(t * 1.1) * 0.018;
+      c.save(); c.translate(W / 2, CHAO + 40); c.rotate(rol); c.translate(-W / 2, -(CHAO + 40));
+      c.fillStyle = '#050407'; c.fillRect(-200, CHAO + 30, W + 400, H);
+      c.fillRect(-200, CHAO - 120, W + 400, 16);
+      for (let x = -160; x < W + 200; x += 130) c.fillRect(x - desl * 0.9, CHAO - 120, 14, 150);
+      c.lineWidth = 6; c.strokeStyle = '#050407'; c.beginPath(); c.moveTo(-100, CHAO - 60); c.lineTo(W + 100, CHAO - 70); c.stroke();
+      c.lineWidth = 8; c.beginPath(); c.moveTo(W * 0.9 - desl, CHAO + 30); c.lineTo(W * 0.96 - desl, -100); c.stroke();
+      c.lineWidth = 3; c.beginPath(); c.moveTo(W * 0.96 - desl, -60); c.lineTo(W * 0.5, CHAO - 120); c.stroke();
+      c.restore();
+    }
+    let padraoGrao = null;
+    const grao = U.camada(256, 256, (g) => { const r = U.rng(99), im = g.createImageData(256, 256); for (let i = 0; i < im.data.length; i += 4) { const v = r() * 255; im.data[i] = im.data[i + 1] = im.data[i + 2] = v; im.data[i + 3] = 18; } g.putImageData(im, 0, 0); });
     // ---------- o quadro ----------
     function cena(cn, t, k, local) {
       const hora = cn.hora || (cn.objeto === 'raio' ? 'tempestade' : 'entardecer'), cor = CEUS[hora] || CEUS.entardecer;
       // camera: empurra devagar sempre; `zoom_out` abre, `paralaxe` desliza
-      const z = cn.camera === 'zoom_out' ? U.lerp(1.18, 1, U.suave(k)) : U.lerp(1, 1.12, U.suave(k));
+      const z = cn.camera === 'zoom_out' ? U.lerp(1.25, 1, U.suave(k)) : U.lerp(1.04, 1.22, U.suave(k));
       const desl = (cn.camera === 'paralaxe' ? 160 : 60) * U.suave(k);
-      c.save(); c.translate(W / 2, H * 0.6); c.scale(z, z); c.translate(-W / 2, -H * 0.6);
+      c.save(); c.translate(W * 0.42, H * 0.5); c.scale(z, z); c.translate(-W * 0.42, -H * 0.5);
       const g = c.createLinearGradient(0, 0, 0, CHAO); cor.forEach((col, i) => g.addColorStop(i / (cor.length - 1), col)); c.fillStyle = g; c.fillRect(-100, -100, W + 200, H + 200);
       if (hora === 'noite' || cn.cenario === 'ceu_estrelado') { const r = U.rng(3); for (let i = 0; i < 160; i++) { const a = 0.4 + 0.6 * Math.abs(Math.sin(t * (0.5 + r()) + i)); c.fillStyle = 'rgba(255,255,255,' + (a * r()).toFixed(2) + ')'; c.fillRect(r() * W, r() * CHAO * 0.8, 3, 3); } }
       if (DISCO[hora]) { const dx = W * 0.62 - desl * 0.1, dy = CHAO - 520; const gl = c.createRadialGradient(dx, dy, 60, dx, dy, 520); gl.addColorStop(0, DISCO[hora]); gl.addColorStop(0.25, DISCO[hora] + '88'); gl.addColorStop(1, 'rgba(0,0,0,0)'); c.fillStyle = gl; c.fillRect(0, 0, W, H); c.beginPath(); c.arc(dx, dy, 170, 0, U.TAU); c.fillStyle = DISCO[hora]; c.fill(); }
       const cen = cn.cenario || 'montanha';
-      horizonte(cen, 1, CHAO - 260, 420, 'rgba(10,8,16,.45)', t, desl * 0.25);
-      horizonte(cen, 2, CHAO - 120, 300, 'rgba(8,6,12,.7)', t, desl * 0.5);
-      if (cen === 'mar') { navio(W * 0.35 - desl * 0.6, CHAO - 60, t); }
-      marco(cen, W * 0.5 - desl * 0.7, CHAO - 40, t);
-      horizonte(cen === 'cidade' ? 'cidade' : 'colina', 3, CHAO + 30, 90, '#050407', t, desl);
-      c.fillStyle = '#050407'; c.fillRect(-100, CHAO + 20, W + 200, H);
+      raios(hora, t, desl);
+      if (cen === 'mar') {
+        mar(hora, cor, t, desl);
+        navio(W * 0.78 - desl * 0.4, CHAO - 250, t);
+        conves(t, desl);
+      } else {
+        horizonte(cen, 1, CHAO - 260, 420, 'rgba(10,8,16,.45)', t, desl * 0.25);
+        horizonte(cen, 2, CHAO - 120, 300, 'rgba(8,6,12,.7)', t, desl * 0.5);
+        marco(cen, W * 0.5 - desl * 0.7, CHAO - 40, t);
+        horizonte(cen === 'cidade' ? 'cidade' : 'colina', 3, CHAO + 30, 90, '#050407', t, desl);
+        c.fillStyle = '#050407'; c.fillRect(-100, CHAO + 20, W + 200, H);
+      }
       if (cn.objeto && cn.objeto !== 'raio' && cn.objeto !== 'navio') clima(cn.objeto, t, cor);
       if (hora === 'tempestade' || cn.objeto === 'chuva') clima('chuva', t, cor);
       // gente
@@ -146,7 +216,7 @@
       else at.slice(0, 2).forEach((tipo, i) => {
         const acao = i === 0 ? cn.acao : (cn.acao === 'anda' || cn.acao === 'corre' ? cn.acao : 'parado');
         const x0 = i === 0 ? W * 0.36 : W * 0.68, mov = acao === 'anda' ? 180 * k : (acao === 'corre' ? 520 * k : 0);
-        figura(x0 + mov - desl, CHAO + 30, 1.25, tipo, poseDe(acao, t + i * 0.37, k), t);
+        figura(x0 + mov - desl, CHAO + 30, 1.3, tipo, poseDe(acao, t + i * 0.37, k), t);
       });
       c.restore();
       if (cn.objeto === 'raio' || hora === 'tempestade') { const q = (t * 0.7) % 1; if (q < 0.06) { c.fillStyle = 'rgba(235,240,255,' + (0.7 * (1 - q / 0.06)) + ')'; c.fillRect(0, 0, W, H); } }
@@ -160,6 +230,7 @@
       if (i > 0 && t - cn.ini < 0.18 || i < spec.cenas.length - 1 && cn.fim - t < 0.18) { c.fillStyle = 'rgba(0,0,0,' + (dip*0.4).toFixed(3) + ')'; c.fillRect(0, 0, W, H); }
       // vinheta de cinema
       c.drawImage(vinheta,0,0);
+      { const ox = Math.floor(t * 30 * 37) % 256, oy = Math.floor(t * 30 * 53) % 256; if (!padraoGrao && c.createPattern) padraoGrao = c.createPattern(grao, 'repeat'); if (padraoGrao) { c.save(); c.translate(-ox, -oy); c.fillStyle = padraoGrao; c.fillRect(0, 0, W + 256, H + 256); c.restore(); } }
       U.cartaz(c, spec, t, { fonte: '700 76px Cinzel, serif', y: 170, cor: '#F3E7D0', contorno: 14, cor_contorno: 'rgba(0,0,0,.85)', altura_linha: 96, dur: 3.2 });
       U.legenda(c, spec, t, { fonte: '600 92px Oswald, sans-serif', y: H * 0.70, cor: '#FFFFFF', cor_ativa: '#FFC94A', contorno: 16, caixa: true, por_vez: 3 });
     }

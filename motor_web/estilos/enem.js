@@ -48,8 +48,8 @@
   function criar(tela, spec, U) {
     const c = tela.getContext('2d'), W = spec.w, H = spec.h;
     const FONTE = '"Patrick Hand", "Lilita One", sans-serif';
-    const BX = 70, BY = 330, BW = W - 140 - 60, BH = 1010;   // a lousa; 60 px a mais livres na direita (botoes do app)
-    const IX = BX + 60, IW = BW - 120, IY = BY + 120, IH = BH - 220;   // area util dentro da lousa
+    const BX = 70, BY = 300, BW = W - 140 - 60, BH = 900;   // a lousa; 60 px a mais livres na direita (botoes do app)
+    const IX = BX + 50, IW = BW - 100, IY = BY + 110, IH = BH - 170;   // area util dentro da lousa
     const lim = (s, n) => String(s == null ? '' : s).slice(0, n);
     const cenas = spec.cenas.map((cn, i) => {
       const area = AREAS[cn.area] ? cn.area : (i ? null : 'natureza');
@@ -77,8 +77,21 @@
         if (frac <= 0) return;
         c.font = `${px}px ${FONTE}`; const w = c.measureText(l).width, y = y0 + n * lh;
         c.save(); c.beginPath(); c.rect(cx - w / 2 - 10, y - lh, (w + 20) * frac, lh * 2); c.clip(); giz(l, cx, y, px, cor); c.restore();
-        if (frac < 1) { c.save(); c.fillStyle = '#FFFFFF'; c.beginPath(); c.arc(cx - w / 2 + w * frac, y + px * 0.25, 7, 0, U.TAU); c.fill(); c.restore(); }
+        if (frac < 1) { c.save(); c.fillStyle = '#FFFFFF'; c.beginPath(); c.arc(cx - w / 2 + w * frac, y + px * 0.25, 7, 0, U.TAU); c.fill(); c.restore();
+          const m = c.getTransform ? c.getTransform() : null; ponta = m ? { x: m.a * (cx - w / 2 + w * frac) + m.e, y: m.d * (y + px * 0.25) + m.f } : { x: cx - w / 2 + w * frac, y: y + px * 0.25 }; }
       });
+    }
+    let ponta = null;
+    // MÃO COM GIZ (v2 05/11): quem escreve aparece; a lousa deixa de ser um slide.
+    function mao(x, y, t) {
+      c.save(); c.translate(x + 6, y + 4); c.rotate(-0.5 + 0.06 * Math.sin(t * 40));
+      c.fillStyle = '#F4F1E6'; c.fillRect(-6, -10, 46, 16);
+      U.rr(c, 30, -40, 120, 74, 34); c.fillStyle = '#E9B48A'; c.fill(); c.lineWidth = 4; c.strokeStyle = '#8A5A3C'; c.stroke();
+      c.fillStyle = '#E9B48A'; U.rr(c, 20, -34, 60, 24, 12); c.fill(); c.stroke(); U.rr(c, 20, -8, 60, 24, 12); c.fill(); c.stroke();
+      c.fillStyle = '#2D4F8A'; c.fillRect(140, -46, 260, 90); c.restore();
+      const r = U.rng(Math.floor(t * 30)); c.save(); c.fillStyle = '#FFFFFF';
+      for (let i = 0; i < 6; i++) { c.globalAlpha = 0.25 + r() * 0.4; c.beginPath(); c.arc(x - 10 + r() * 30, y + 10 + r() * 40, 2 + r() * 3, 0, U.TAU); c.fill(); }
+      c.restore();
     }
     function quebra(txt, px, max, n) { c.font = `${px}px ${FONTE}`; return U.linhas(c, txt, max).slice(0, n || 4); }
     function rabisco(x0, x1, y, k, cor) {   // sublinhado a giz que corre
@@ -125,7 +138,7 @@
       c.restore();
     }
     function marca() {   // o selo do canal no pe da moldura
-      c.save(); c.translate(BX + BW - 150, BY + BH + 4); c.rotate(-0.04);
+      c.save(); c.translate(BX + BW - 130, BY - 16); c.rotate(0.03);
       U.rr(c, -120, -34, 240, 68, 12); c.fillStyle = '#C8102E'; c.fill(); c.lineWidth = 4; c.strokeStyle = '#FFE066'; c.stroke();
       c.font = '40px "Lilita One", sans-serif'; c.fillStyle = '#FFFFFF'; c.textAlign = 'center'; c.textBaseline = 'middle'; c.fillText('CAI NO ENEM', 0, 3); c.restore();
     }
@@ -166,7 +179,7 @@
       },
       fato(cn, k) {
         let y = IY + 40;
-        if (cn.icone) { const s = U.saida(k / 0.3); c.save(); c.translate(IX + IW / 2, IY + 170); c.scale(150 * s, 150 * s); c.strokeStyle = VERDE; c.fillStyle = VERDE; c.lineWidth = 0.06; c.lineCap = 'round'; c.lineJoin = 'round'; ICONES[cn.icone](c); c.restore(); y = IY + 400; }
+        if (cn.icone) { const s = U.saida(k / 0.3); c.save(); c.translate(IX + IW / 2, IY + 190); c.scale(175 * s, 175 * s); c.strokeStyle = VERDE; c.fillStyle = VERDE; c.lineWidth = 0.06; c.lineCap = 'round'; c.lineJoin = 'round'; ICONES[cn.icone](c); c.restore(); y = IY + 440; }
         const ls = quebra(cn.lousa, 84, IW, cn.icone ? 4 : 5), lh = 98;
         if (!cn.icone) y = IY + IH / 2 - ((ls.length - 1) * lh) / 2;
         escrever(ls, IX + IW / 2, y, 84, lh, U.clamp((k - 0.15) / 0.55, 0, 1));
@@ -238,7 +251,10 @@
     };
 
     function quadro(t) {
-      const { i, k, local } = U.cenaEm(spec, t), cn = cenas[i];
+      const { i, k: k0, local } = U.cenaEm(spec, t), cn = cenas[i];
+      const k = U.clamp(k0 * 1.6, 0, 1); ponta = null;
+      const z = 1 + 0.035 * U.suave(k0);
+      c.save(); c.translate(W / 2, BY + BH / 2); c.scale(z, z); c.translate(-W / 2, -(BY + BH / 2));
       fundo(t);
       c.save(); c.beginPath(); c.rect(BX, BY, BW, BH); c.clip();
       // o apagador: nos primeiros 0,35 s a cena anterior some atras de uma faixa
@@ -251,6 +267,8 @@
       } else (DESENHA[cn.acao] || DESENHA.fato)(cn, k, local);
       c.restore();
       etiquetaArea(cn, i && cenas[i - 1].area === cn.area ? 9 : local);
+      c.restore();
+      if (ponta) mao(ponta.x, ponta.y, t);
       marca();
       if (cn.hud && typeof cn.hud !== 'object' && local > 0.4) { const s = U.mola(local - 0.4, 10); c.save(); c.translate(W / 2 - 30, BY + BH - 70); c.scale(s, s);
         c.font = '64px "Lilita One", sans-serif'; c.textAlign = 'center'; c.textBaseline = 'middle'; const tx = U.hud(c, cn.hud, BW - 200, 22), w = c.measureText(tx).width + 60;
