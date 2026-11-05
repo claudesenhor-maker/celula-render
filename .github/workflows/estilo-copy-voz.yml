@@ -34,6 +34,7 @@ jobs:
       - name: Narração Chatterbox com voz sintética do banco do projeto
         env:
           ESTILO_COPY_TEXTO: ${{ inputs.texto || github.event.client_payload.texto }}
+          ESTILO_COPY_FALAS_JSON: ${{ toJSON(github.event.client_payload.falas) }}
           OMP_NUM_THREADS: '2'
           MKL_NUM_THREADS: '2'
         run: python estilo_copy_voz.py
