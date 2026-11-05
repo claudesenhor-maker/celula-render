@@ -198,7 +198,9 @@ function animalV2Revelacao(s) {
         const blend = i===0 ? U.clamp(local/2.5,0,1) : .18;
         const todo = new T.Vector3(); caixaB.getCenter(todo);
         if(!comp)center.lerp(todo,blend*.55);
-        const dv = dist*(1+blend*1.8);
+        // Ao sair de uma parte minúscula, ampliar também o volume enquadrado.
+        const extentZoom = comp ? extent : extent*(1-blend*.55)+Math.max(tamB.x,tamB.y,tamB.z)*blend*.55;
+        const dv = dist*(extentZoom/extent);
         cam.position.set(center.x+Math.sin(ang)*dv,center.y+dv*.18,center.z+Math.cos(ang)*dv);
         cam.near=Math.max(.000001,dv/500);cam.far=Math.max(300,dv*60);cam.updateProjectionMatrix();
         // A peça fica acima da ficha, em ~28% da altura; mirar no centro a escondia atrás do cartão.
