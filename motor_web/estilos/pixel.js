@@ -141,16 +141,17 @@
       // a caixa ja' mostra quem fala: "MOM: MOM: ..." era o roteiro repetindo
       if (quem && texto.toUpperCase().startsWith(String(quem).toUpperCase() + ':')) texto = texto.slice(String(quem).length + 1).trim();
       // Páginas calculadas com o texto completo: uma linha não salta ao digitar.
-      c.font = F(32);
+      // 05/11: 32 px era ilegivel no celular (3% da largura); 42 px com 3-4 linhas cabe na caixa de 360 px.
+      c.font = F(42);
       const completas = U.linhas(c, texto, DLG.w - 100), porPagina = quem ? 3 : 4;
       const paginas=[];for(let i=0;i<completas.length;i+=porPagina)paginas.push(completas.slice(i,i+porPagina));
       const cps=32, tempos=paginas.map(ls=>ls.join(' ').length/cps+0.8);
       let pagina=0, inicio=0;while(pagina<tempos.length-1 && local>=inicio+tempos[pagina])inicio+=tempos[pagina++];
       const n=Math.floor(Math.max(0,local-inicio)*cps), vis=paginas[pagina] || [], textoPagina=vis.join(' ');
       caixa(DLG.x, DLG.y, DLG.w, DLG.h);
-      c.font = F(32); c.fillStyle = PAL.branco; c.textAlign = 'left'; c.textBaseline = 'top';
-      if (quem) { c.fillStyle = PAL.amarelo; c.fillText(String(quem).toUpperCase(), DLG.x + 50, DLG.y + 45); }
-      let escrito=0;c.fillStyle = PAL.branco; vis.forEach((l,i)=>{const trecho=l.slice(0,Math.max(0,n-escrito));escrito+=l.length+1;c.fillText(trecho,DLG.x+50,DLG.y+(quem?110:60)+i*55);});
+      c.font = F(42); c.fillStyle = PAL.branco; c.textAlign = 'left'; c.textBaseline = 'top';
+      if (quem) { c.fillStyle = PAL.amarelo; c.fillText(String(quem).toUpperCase(), DLG.x + 50, DLG.y + 40); }
+      let escrito=0;c.fillStyle = PAL.branco; vis.forEach((l,i)=>{const trecho=l.slice(0,Math.max(0,n-escrito));escrito+=l.length+1;c.fillText(trecho,DLG.x+50,DLG.y+(quem?105:50)+i*66);});
       const sx = DLG.x + DLG.w - 70, sy = DLG.y + DLG.h - 60;
       if (n >= textoPagina.length && Math.floor(local * 3) % 2) { c.beginPath(); c.moveTo(sx - 20, sy); c.lineTo(sx + 20, sy); c.lineTo(sx, sy + 26); c.closePath(); c.fill(); }
     }
