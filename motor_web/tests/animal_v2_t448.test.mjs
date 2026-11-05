@@ -33,7 +33,10 @@ test('T448: desenho real no Chrome, gate, barras, título, peça e bounds', {tim
       await preparar({...spec,cell_id:'outro'});const controle=frame(.9);
       const inverso=structuredClone(spec);inverso.palavras=[{palavra:'hundred',ini:.4,fim:.7},{palavra:'ten',ini:3.4,fim:3.8}];
       await preparar(inverso);const humanoPrimeiro=frame(1.4);
-      return {antes,depois,gancho,revela,ang0,ang1,d1,d2,controle,barras,focoY,humanoPrimeiro};
+      const decimal=structuredClone(spec);decimal.stats[0].humano=19.5;
+        decimal.palavras=[{palavra:'nineteen',ini:.4,fim:.7},{palavra:'point',ini:.7,fim:.8},{palavra:'five',ini:.8,fim:1}];
+        await preparar(decimal);const humanoDecimal=frame(1.7);
+        return {antes,depois,gancho,revela,ang0,ang1,d1,d2,controle,barras,focoY,humanoPrimeiro,humanoDecimal};
     });
     assert.deepEqual(errors,[]);
     assert(!result.antes.some(x=>x.s==='FORCE'));
@@ -53,5 +56,6 @@ test('T448: desenho real no Chrome, gate, barras, título, peça e bounds', {tim
     assert(result.humanoPrimeiro.some(x=>x.s==='FORCE'),'comparativo pode começar pela medida humana');
     assert(result.humanoPrimeiro.some(x=>x.s==='100 N'));
     assert(!result.humanoPrimeiro.some(x=>x.s==='10 N'),'animal só aparece ao ser narrado');
+      assert(result.humanoDecimal.some(x=>x.s==='19.5 N'),'valor decimal falado não pode virar 20');
   }finally{await browser.close();}
 });
