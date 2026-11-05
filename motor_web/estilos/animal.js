@@ -20,6 +20,7 @@ function animalV2Normal(s) { return String(s || '').toLowerCase().replace(/[^a-z
 function animalV2Numero(s) {
   const t=animalV2Normal(s).replace(/[.,!?;:]$/,'');
   if (/^-?\d+(?:\.\d+)?%?$/.test(t)) return Number(t.replace('%',''));
+  if(t==='hundred')return 100;
   const ns=['zero','one','two','three','four','five','six','seven','eight','nine','ten','eleven','twelve','thirteen','fourteen','fifteen','sixteen','seventeen','eighteen','nineteen'];
   if(ns.includes(t)) return ns.indexOf(t);
   const tens={twenty:20,thirty:30,forty:40,fifty:50,sixty:60,seventy:70,eighty:80,ninety:90};
@@ -32,7 +33,11 @@ function animalV2Instante(spec, cena, stat, campo='valor') {
   const alvo=Number(stat[campo]); if(!Number.isFinite(alvo))return null;
   for(let i=0;i<ws.length;i++) {
     let n=animalV2Numero(ws[i].palavra); if(n===null)continue;
-    const prox=animalV2Normal(ws[i+1]?.palavra), unidade=String(stat.unidade||'').toLowerCase();
+    let j=i+1;const seguinte=animalV2Numero(ws[j]?.palavra);
+    if(n>=20 && n<100 && n%10===0 && seguinte>0 && seguinte<10){n+=seguinte;j++;}
+    if(animalV2Normal(ws[j]?.palavra)==='point' && animalV2Numero(ws[j+1]?.palavra)!==null){n+=animalV2Numero(ws[j+1]?.palavra)/10;j+=2;}
+    if(ws.slice(j,j+3).map(w=>animalV2Normal(w.palavra)).join(' ')==='and a half'){n+=.5;j+=3;}
+    const prox=animalV2Normal(ws[j]?.palavra), unidade=String(stat.unidade||'').toLowerCase();
     if(prox==='hundred')n*=100; if(prox==='thousand')n*=1000; if(prox==='million')n*=1e6;
     if(/year/.test(prox)&&/day/.test(unidade))n*=365;
     if(/week/.test(prox)&&/day/.test(unidade))n*=7;
@@ -254,10 +259,10 @@ function animalV2Revelacao(s) {
       const { cn, i, k, local, acao } = quadroDo3D(t);
       if (i > 0 && local < 0.1) { c.fillStyle = 'rgba(255,255,255,' + (0.3 * (1 - local / 0.1)).toFixed(2) + ')'; c.fillRect(0, 0, W, H); }
       if (acao === 'ataca' && k > 0.35 && k < 0.5) { c.fillStyle = 'rgba(255,60,40,0.18)'; c.fillRect(0, 0, W, H); }
-      if (acao === 'stat' || (v2 && i<2 && acao==='compara')) {
+      if (acao === 'stat' || (v2 && i<2)) {
         const st = v2 && i<2 ? statDe(spec.cenas[0],0) : statDe(cn,i);
         // O comparativo do gancho permanece na mesma escala entre as duas falas.
-        const cenaDado = v2 && i<2 ? spec.cenas[0] : cn;
+        const cenaDado = v2 && i<2 ? {ini:spec.cenas[0].ini,fim:spec.cenas[Math.min(1,spec.cenas.length-1)].fim} : cn;
         cartao(st, v2 && i<2 ? t : local, t, cenaDado);
       }
       if (acao === 'corre') { if(v2)cartao(statDe(cn,i),local,t,cn);else velocimetro(statDe(cn, i), local); }
