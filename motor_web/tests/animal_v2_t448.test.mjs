@@ -27,10 +27,11 @@ test('T448: desenho real no Chrome, gate, barras, título, peça e bounds', {tim
       const antes=frame(.2),depois=frame(.9),gancho=frame(4),revela=frame(10.5);
       frame(4.3);const barras=structuredClone(rects.filter(r=>r.h===52));
       frame(6.01);let jaw;sc.traverse(m=>{if(m.userData?.nome==='jaw')jaw=m;});const ang0=jaw.rotation.z;frame(7.3);const ang1=jaw.rotation.z;
-      frame(.2);const d1=cam.position.length();
+      frame(.2);const d1=cam.position.length();let body;sc.traverse(m=>{if(m.userData?.nome==='body')body=m;});
+      const projected=new THREE.Vector3();new THREE.Box3().setFromObject(body).getCenter(projected);projected.project(cam);const focoY=projected.y;
       await preparar({...spec,animal:{...spec.animal,tamanho_m:.01}});frame(.2);const d2=cam.position.length();
       await preparar({...spec,cell_id:'outro'});const controle=frame(.9);
-      return {antes,depois,gancho,revela,ang0,ang1,d1,d2,controle,barras};
+      return {antes,depois,gancho,revela,ang0,ang1,d1,d2,controle,barras,focoY};
     });
     assert.deepEqual(errors,[]);
     assert(!result.antes.some(x=>x.s==='FORCE'));
@@ -44,5 +45,8 @@ test('T448: desenho real no Chrome, gate, barras, título, peça e bounds', {tim
     assert(result.controle.some(x=>x.s==='TEST ANIM'));
     assert(result.depois.filter(x=>x.s==='FORCE').every(x=>x.y>=800));
     assert.deepEqual(result.barras.map(r=>Math.round(r.w)),[680,68,680,680]);
+    assert(result.focoY>.25,'peça precisa aparecer acima do cartão');
+    const titulo=result.depois.find(x=>x.s==='FORCE'),valor=result.depois.find(x=>/ N$/.test(x.s));
+    assert(valor.y-titulo.y>=50,'nome da medida e número não podem disputar a mesma linha');
   }finally{await browser.close();}
 });

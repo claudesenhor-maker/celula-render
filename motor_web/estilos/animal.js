@@ -199,7 +199,9 @@ function animalV2Revelacao(s) {
         center.lerp(todo,blend*.55);
         const dv = dist*(1+blend*1.8);
         cam.position.set(center.x+Math.sin(ang)*dv,center.y+dv*.18,center.z+Math.cos(ang)*dv);
-        cam.near=Math.max(.000001,dv/500);cam.far=Math.max(300,dv*60);cam.updateProjectionMatrix();cam.lookAt(center);
+        cam.near=Math.max(.000001,dv/500);cam.far=Math.max(300,dv*60);cam.updateProjectionMatrix();
+        // A peça fica acima da ficha, em ~28% da altura; mirar no centro a escondia atrás do cartão.
+        cam.lookAt(center.x,center.y-dv*.14,center.z);
       }
       U3.render(R, sc, cam, spec, t); c.drawImage(gl, 0, 0, W, H);
       return { cn, i, k, local, acao };
@@ -217,8 +219,10 @@ function animalV2Revelacao(s) {
       const x0 = 70, w = W - 140, y0 = H * 0.42, h = 360;
       c.save(); c.translate(W / 2, y0 + h / 2); c.scale(ent, ent); c.translate(-W / 2, -(y0 + h / 2));
       U.rr(c, x0, y0, w, h, 34); c.fillStyle = 'rgba(24,20,14,0.86)'; c.fill(); c.lineWidth = 6; c.strokeStyle = '#F6C445'; c.stroke();
-      c.textBaseline = 'middle'; c.textAlign = 'left'; c.font = '50px "Lilita One", sans-serif'; c.fillStyle = '#F6C445'; c.fillText(st.nome, x0 + 40, y0 + 58);
-      c.textAlign = 'right'; c.font = '96px "Lilita One", sans-serif'; c.fillStyle = '#FFFFFF'; c.fillText(fmt(st.valor * q) + (st.unidade ? ' ' + st.unidade.toUpperCase() : ''), x0 + w - 40, y0 + 64);
+      c.textBaseline = 'middle'; c.textAlign = 'left'; c.font = (v2 ? '40px' : '50px')+' "Lilita One", sans-serif'; c.fillStyle = '#F6C445'; c.fillText(st.nome, x0 + 40, y0 + (v2 ? 36 : 58));
+      c.textAlign = 'right'; c.font = '96px "Lilita One", sans-serif'; c.fillStyle = '#FFFFFF'; const numeroV2=fmt(st.valor*q)+(st.unidade?' '+st.unidade.toUpperCase():'');
+      if(v2) {let fonte=68;c.font=fonte+'px "Lilita One", sans-serif';while(c.measureText(numeroV2).width>w-80&&fonte>26)c.font=(--fonte)+'px "Lilita One", sans-serif';}
+      c.fillText(numeroV2, x0+w-40,y0+(v2 ? 106 : 64));
       if (st.humano != null && st.valor > 0) {
         const mx = Math.max(st.valor, st.humano, 1e-9), bw = w - 260, by = y0 + 150;
         const nomeA = v2 && t<revelacaoV2 ? '???' : String((spec.animal || {}).nome || 'ANIMAL').toUpperCase().slice(0, 9);
@@ -229,7 +233,7 @@ function animalV2Revelacao(s) {
           U.rr(c, x0 + 220, yy, Math.max(v2 ? 0 : 14, bw * (v / mx) * qBarra), 52, 14); c.fillStyle = cor; c.fill();
         });
         const vezes = st.humano > 0 ? st.valor / st.humano : 0;
-        if (vezes >= 1.5 && q > 0.9) { const s = U.mola(local - 1.35, 12); c.save(); c.translate(x0 + w - 120, y0 + h - 4); c.rotate(-0.08); c.scale(s, s);
+        if (!v2 && vezes >= 1.5 && q > 0.9) { const s = U.mola(local - 1.35, 12); c.save(); c.translate(x0 + w - 120, y0 + h - 4); c.rotate(-0.08); c.scale(s, s);
           c.font = '78px "Lilita One", sans-serif'; c.textAlign = 'center'; const tx = 'x' + fmt(vezes), tw = c.measureText(tx).width + 50;
           U.rr(c, -tw / 2, -52, tw, 104, 24); c.fillStyle = '#E4572E'; c.fill(); c.fillStyle = '#FFFFFF'; c.fillText(tx, 0, 6); c.restore(); }
       }
