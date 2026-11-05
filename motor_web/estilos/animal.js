@@ -187,16 +187,17 @@ function animalV2Revelacao(s) {
       cam.position.set(cx + Math.sin(ang) * dd, cy + dd * 0.22 + shake, Math.cos(ang) * dd); cam.near = dd / 500; cam.far = dd * 60; cam.updateProjectionMatrix();
       // mirar ABAIXO do animal o sobe na tela: o meio fica livre para o cartao e a legenda mora em 70%
       cam.lookAt(cx, cy * (acao === 'stat' || corre ? 0.05 : 0.4), 0);
-      if(v2 && !comp) {
+      if(v2) {
         // Enquadrar pela caixa REAL da parte/animal; sem crop fixo e sem mínimo de 1 m.
         bicho.updateMatrixWorld(true);
         const box = new T.Box3().setFromObject(focoV2), size = new T.Vector3(), center = new T.Vector3();
+        if(comp)box.setFromObject(bicho).expandByObject(pessoa);
         box.getSize(size); box.getCenter(center);
         const extent = Math.max(size.x,size.y,size.z,.0001);
         const dist = Math.max(extent/Math.tan(hfov/2),extent/Math.tan(cam.fov*Math.PI/360))*1.3;
         const blend = i===0 ? U.clamp(local/2.5,0,1) : .18;
         const todo = new T.Vector3(); caixaB.getCenter(todo);
-        center.lerp(todo,blend*.55);
+        if(!comp)center.lerp(todo,blend*.55);
         const dv = dist*(1+blend*1.8);
         cam.position.set(center.x+Math.sin(ang)*dv,center.y+dv*.18,center.z+Math.cos(ang)*dv);
         cam.near=Math.max(.000001,dv/500);cam.far=Math.max(300,dv*60);cam.updateProjectionMatrix();
@@ -271,7 +272,7 @@ function animalV2Revelacao(s) {
       }
       if (acao === 'corre') { if(v2)cartao(statDe(cn,i),local,t,cn);else velocimetro(statDe(cn, i), local); }
       if(!v2) etiquetaAltura(acao, local);
-      if ((!v2 || t>=3) && cn.hud && typeof cn.hud !== 'object' && acao !== 'stat' && local > 0.3) { const s = U.mola(local - 0.3, 10); c.save(); c.translate(W / 2, 330); c.scale(s, s);
+      if ((!v2 || (t>=3 && i>=2)) && cn.hud && typeof cn.hud !== 'object' && acao !== 'stat' && local > 0.3) { const s = U.mola(local - 0.3, 10); c.save(); c.translate(W / 2, 330); c.scale(s, s);
         c.font = '120px "Lilita One", sans-serif'; c.textAlign = 'center'; c.textBaseline = 'middle'; const txt = U.hud(c, cn.hud, c.canvas.width * 0.84 - 70, 22), w = c.measureText(txt).width + 70;
         U.rr(c, -w / 2, -78, w, 156, 34); c.fillStyle = '#1B1B1B'; c.fill(); c.fillStyle = '#F6C445'; c.fillText(txt, 0, 6); c.restore(); }
       U.cartaz(c, spec, t, { fonte: '84px "Lilita One", sans-serif', y: 150, fundo: '#F6C445', borda: '#1B1B1B', cor: '#1B1B1B', altura_linha: 100, dur: 3.0 });
