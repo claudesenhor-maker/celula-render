@@ -23,6 +23,7 @@ function animalV2Titulo(s,t,revelacao) {
   const semNome=i>=0?titulo.slice(0,i)+titulo.slice(i+nome.length):titulo.includes(':')?titulo.slice(titulo.indexOf(':')+1):titulo;
   return semNome.replace(/^[\s:—-]+|[\s:—-]+$/g,'')||'???';
 }
+function animalV2Fmt(v) { return Number(v).toLocaleString('en-US', {maximumSignificantDigits: 6}); }
 function animalV2Normal(s) { return String(s || '').toLowerCase().replace(/[^a-z0-9.%-]+/g,' ').trim(); }
 function animalV2Numero(s) {
   const t=animalV2Normal(s).replace(/[.,!?;:]$/,'');
@@ -217,7 +218,7 @@ function animalV2Revelacao(s) {
       return { cn, i, k, local, acao };
     }
 
-    const fmt = (v) => (Math.abs(v) >= 1e6 ? (v / 1e6).toLocaleString('en-US', { maximumFractionDigits: 1 }) + 'M' : Math.abs(v) >= 1e4 ? Math.round(v).toLocaleString('en-US')
+    const fmt = (v) => v2 ? animalV2Fmt(v) : (Math.abs(v) >= 1e6 ? (v / 1e6).toLocaleString('en-US', { maximumFractionDigits: 1 }) + 'M' : Math.abs(v) >= 1e4 ? Math.round(v).toLocaleString('en-US')
       : v.toLocaleString('en-US', { maximumFractionDigits: Math.abs(v) < 10 ? 1 : 0 }));
     // CARTAO DO NUMERO: conta ate o valor e compara com o humano em barras
     function cartao(st, local, t, cn) {
