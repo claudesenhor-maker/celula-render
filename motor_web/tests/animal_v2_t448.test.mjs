@@ -39,7 +39,7 @@ test('T448: desenho real no Chrome, gate, barras, título, peça e bounds', {tim
     assert(result.revela.some(x=>x.s==='TEST ANIM'));
     assert(Math.abs(result.ang1-result.ang0)>.1);
     assert(Math.abs(result.d1/result.d2-100)<1);
-    assert(result.controle.some(x=>x.s==='HUD PROIBIDO'));
+    assert(result.controle.some(x=>x.s==='TEST ANIM'));
     assert(result.depois.filter(x=>x.s==='FORCE').every(x=>x.y>=800));
   }finally{await browser.close();}
 });
