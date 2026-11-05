@@ -213,15 +213,17 @@ function animalV2Revelacao(s) {
     // CARTAO DO NUMERO: conta ate o valor e compara com o humano em barras
     function cartao(st, local, t, cn) {
       if (!st) return;
-      const marcoV2 = v2 ? animalV2Instante(spec,cn,st) : null;
-      if(v2 && (marcoV2===null || t<marcoV2))return;
+      const valorV2 = v2 ? animalV2Instante(spec,cn,st) : null;
+      const humanoV2 = v2 ? animalV2PrimeiraMarca(st,'humano',t) : null;
+      const marcoV2 = v2 ? Math.min(...[valorV2,humanoV2].filter(x=>x!==null)) : null;
+      if(v2 && (!Number.isFinite(marcoV2) || t<marcoV2))return;
       const ent = U.mola(v2 ? t-marcoV2 : local - 0.1, 10); if (ent <= 0) return;
-      const q = v2 ? animalV2Progresso(t,marcoV2) : U.suave(U.clamp((local - 0.25) / 1.1, 0, 1));
+      const q = v2 ? animalV2Progresso(t,valorV2) : U.suave(U.clamp((local - 0.25) / 1.1, 0, 1));
       const x0 = 70, w = W - 140, y0 = H * 0.42, h = 360;
       c.save(); c.translate(W / 2, y0 + h / 2); c.scale(ent, ent); c.translate(-W / 2, -(y0 + h / 2));
       U.rr(c, x0, y0, w, h, 34); c.fillStyle = 'rgba(24,20,14,0.86)'; c.fill(); c.lineWidth = 6; c.strokeStyle = '#F6C445'; c.stroke();
       c.textBaseline = 'middle'; c.textAlign = 'left'; c.font = (v2 ? '40px' : '50px')+' "Lilita One", sans-serif'; c.fillStyle = '#F6C445'; c.fillText(st.nome, x0 + 40, y0 + (v2 ? 36 : 58));
-      c.textAlign = 'right'; c.font = '96px "Lilita One", sans-serif'; c.fillStyle = '#FFFFFF'; const numeroV2=fmt(st.valor*q)+(st.unidade?' '+st.unidade.toUpperCase():'');
+      c.textAlign = 'right'; c.font = '96px "Lilita One", sans-serif'; c.fillStyle = '#FFFFFF'; const numeroV2=(v2 && (valorV2===null || t<valorV2) ? '—' : fmt(st.valor*q))+(st.unidade?' '+st.unidade.toUpperCase():'');
       if(v2) {let fonte=68;c.font=fonte+'px "Lilita One", sans-serif';while(c.measureText(numeroV2).width>w-80&&fonte>26)c.font=(--fonte)+'px "Lilita One", sans-serif';}
       c.fillText(numeroV2, x0+w-40,y0+(v2 ? 106 : 64));
       if (st.humano != null && st.valor > 0) {
@@ -232,6 +234,7 @@ function animalV2Revelacao(s) {
           const qBarra = v2 ? animalV2Progresso(t,animalV2PrimeiraMarca(st,j===0?'valor':'humano',t)) : q; c.textAlign = 'left'; c.font = '40px "Lilita One", sans-serif'; c.fillStyle = cor; c.fillText(n, x0 + 40, yy + 26);
           U.rr(c, x0 + 220, yy, bw, 52, 14); c.fillStyle = 'rgba(255,255,255,0.12)'; c.fill();
           U.rr(c, x0 + 220, yy, Math.max(v2 ? 0 : 14, bw * (v / mx) * qBarra), 52, 14); c.fillStyle = cor; c.fill();
+          if(v2 && qBarra>0) {c.textAlign='right';c.font='32px "Lilita One", sans-serif';c.fillStyle='#FFFFFF';c.fillText(fmt(v*qBarra)+(st.unidade?' '+st.unidade.toUpperCase():''),x0+w-40,yy+26);}
         });
         const vezes = st.humano > 0 ? st.valor / st.humano : 0;
         if (!v2 && vezes >= 1.5 && q > 0.9) { const s = U.mola(local - 1.35, 12); c.save(); c.translate(x0 + w - 120, y0 + h - 4); c.rotate(-0.08); c.scale(s, s);

@@ -31,7 +31,9 @@ test('T448: desenho real no Chrome, gate, barras, título, peça e bounds', {tim
       const projected=new THREE.Vector3();new THREE.Box3().setFromObject(body).getCenter(projected);projected.project(cam);const focoY=projected.y;
       await preparar({...spec,animal:{...spec.animal,tamanho_m:.01}});frame(.2);const d2=cam.position.length();
       await preparar({...spec,cell_id:'outro'});const controle=frame(.9);
-      return {antes,depois,gancho,revela,ang0,ang1,d1,d2,controle,barras,focoY};
+      const inverso=structuredClone(spec);inverso.palavras=[{palavra:'hundred',ini:.4,fim:.7},{palavra:'ten',ini:3.4,fim:3.8}];
+      await preparar(inverso);const humanoPrimeiro=frame(1.4);
+      return {antes,depois,gancho,revela,ang0,ang1,d1,d2,controle,barras,focoY,humanoPrimeiro};
     });
     assert.deepEqual(errors,[]);
     assert(!result.antes.some(x=>x.s==='FORCE'));
@@ -48,5 +50,8 @@ test('T448: desenho real no Chrome, gate, barras, título, peça e bounds', {tim
     assert(result.focoY>.25,'peça precisa aparecer acima do cartão');
     const titulo=result.depois.find(x=>x.s==='FORCE'),valor=result.depois.find(x=>/ N$/.test(x.s));
     assert(valor.y-titulo.y>=50,'nome da medida e número não podem disputar a mesma linha');
+    assert(result.humanoPrimeiro.some(x=>x.s==='FORCE'),'comparativo pode começar pela medida humana');
+    assert(result.humanoPrimeiro.some(x=>x.s==='100 N'));
+    assert(!result.humanoPrimeiro.some(x=>x.s==='10 N'),'animal só aparece ao ser narrado');
   }finally{await browser.close();}
 });
