@@ -133,6 +133,22 @@
     const fluxo = new T.Points(fluxoGeo, fluxoMat); fluxo.frustumCulled = false; fluxo.renderOrder = 5; raiz.add(fluxo);
 
     const alvos = (cn) => (Array.isArray(cn.alvo) ? cn.alvo : cn.alvo ? [cn.alvo] : []).map((n) => pecas[String(n).toLowerCase()]).filter(Boolean);
+    // T454: piloto exclusivo; controles e demais motores mantêm o render anterior.
+    const piloto454 = spec.cell_id === 'd582b3d9-b0f7-5eee-84f5-19f407fccba7' && spec.mecanismo_v2 !== false;
+    const ref454 = piloto454 ? new T.Scene() : null, refPecas454 = [];
+    if (piloto454) {
+      ref454.background = new T.Color('#10243F');
+      ref454.add(new T.HemisphereLight('#ffffff', '#607080', 2));
+      const g = new T.Group(); g.scale.copy(raiz.scale); g.position.copy(raiz.position);
+      lista.forEach(m => {
+        const p = m.clone(); p.userData = m.userData; p.material = m.material.clone();
+        p.position.set(...m.userData.pos); p.rotation.set(...m.userData.giro);
+        p.material.clippingPlanes = null; p.material.opacity = 1; p.material.transparent = false;
+        p.material.color.copy(m.userData.cor); p.material.emissive.setRGB(0,0,0);
+        g.add(p); refPecas454.push(p);
+      });
+      ref454.add(g);
+    }
     const cenas = spec.cenas;
     const curvasFluxo = cenas.map(cn => cn.fluxo && Array.isArray(cn.fluxo.caminho) && cn.fluxo.caminho.length >= 2
       ? new T.CatmullRomCurve3(cn.fluxo.caminho.slice(0, 40).map(p => new T.Vector3(...vet(p, -20, 20, [0, 0, 0])))) : null);
@@ -205,7 +221,10 @@
         const b = new T.Box3(); al.forEach(m => b.union(new T.Box3().setFromObject(m)));
         const wp = b.getCenter(new T.Vector3()), sz = b.getSize(new T.Vector3());
         const q = U.suave(k * 2), detalhe = Math.max(sz.x / Math.tan(hfov/2),sz.y / Math.tan(vfov/2))*0.9 + sz.z;
-        foco.lerp(wp, q); dist = U.lerp(D, U.clamp(detalhe,D*.42,D*.9), q); y = foco.y + dist * .18;
+        // T454: esfera dos bounds reais protege peças pequenas em qualquer ângulo.
+        const dist454 = Math.max(.015, sz.length()/2) / Math.sin(Math.min(hfov,vfov)/2) * 1.25;
+        foco.lerp(wp, q); dist = U.lerp(D, piloto454 ? dist454 : U.clamp(detalhe,D*.42,D*.9), q); y = foco.y + dist * .18;
+        if (piloto454) cam.near = Math.max(.001, dist454 / 200); cam.updateProjectionMatrix();
       }
       if (camN === 'frente') { ang = 0.15 * Math.sin(t * 0.3); y = foco.y + D * 0.12; }
       if (camN === 'cima') { y = foco.y + D * 0.85; dist = D * 0.55; }
@@ -251,15 +270,39 @@
       U.rr(c, -w / 2, -85, w, 170, 36); c.fillStyle = '#FFFFFF'; c.fill(); c.fillStyle = '#10243F'; c.fillText(txt, 0, 6); c.restore();
     }
 
+    function referencia454(cn) {
+      if (!piloto454 || cn.camera !== 'perto') return;
+      const x = Math.round(W * .055), y = Math.round(H * .43), w = Math.round(W * .30), h = Math.round(H * .22);
+      const al = alvos(cn).map(m => m.userData.nome);
+      refPecas454.forEach(m => {
+        m.material.color.copy(m.userData.cor);
+        m.material.emissive.copy(al.includes(m.userData.nome) ? new T.Color('#FFD23F') : new T.Color('#000000'));
+      });
+      const rc = new T.PerspectiveCamera(34, w / (h - 52), .001, 300);
+      const ang = .6, d = E0.r / Math.sin(Math.min(rc.fov*Math.PI/180, 2*Math.atan(Math.tan(rc.fov*Math.PI/360)*rc.aspect))/2)*1.15;
+      rc.position.set(E0.c.x+Math.sin(ang)*d,E0.c.y+d*.2,E0.c.z+Math.cos(ang)*d);rc.lookAt(E0.c);
+      R.setViewport(0,0,w,h-52);R.setScissor(0,0,w,h-52);R.setScissorTest(true);
+      R.render(ref454,rc);
+      c.save();c.fillStyle='#10243F';c.fillRect(x-4,y-4,w+8,h+8);
+      c.drawImage(gl,0,gl.height-(h-52),w,h-52,x,y+52,w,h-52);
+      c.font='26px "Lilita One", sans-serif';c.textAlign='center';c.textBaseline='middle';c.fillStyle='#FFFFFF';
+      c.fillText('OBJETO COMPLETO',x+w/2,y+26);c.strokeStyle='#FFD23F';c.lineWidth=3;c.strokeRect(x,y,w,h);c.restore();
+      R.setScissorTest(false);R.setViewport(0,0,gl.width,gl.height);
+    }
+
     function quadro(t) {
       const { cn, i, k, local } = pose(t);
       U3.render(R, sc, cam, spec, t); c.imageSmoothingQuality = 'high'; c.drawImage(gl, 0, 0, W, H);
       if (i > 0 && local < 0.12) { c.fillStyle = 'rgba(255,255,255,' + (0.35 * (1 - local / 0.12)).toFixed(2) + ')'; c.fillRect(0, 0, W, H); }
-      rotulos(cn, k, local); numero(cn, local);
+      if (!piloto454 || t >= 3.0) { rotulos(cn, k, local); numero(cn, local); }
+      referencia454(cn);
       U.cartaz(c, spec, t, { fonte: '84px "Lilita One", sans-serif', y: 170, fundo: '#FFFFFF', borda: '#10243F', cor: '#10243F', altura_linha: 100, dur: 3.0 });
+      c.save();
+      if (piloto454 && t < 3.0) { c.beginPath(); c.rect(0,H*.68,W,H*.32); c.clip(); }
       U.legenda(c, spec, t, { fonte: '100px "Lilita One", sans-serif', y: H * 0.70, cor: '#FFFFFF', cor_ativa: '#FFD23F', contorno: 18, caixa: true, por_vez: 3 });
+      c.restore();
     }
-    return { quadro, dispose: () => U3.liberar(R, sc) };
+    return { quadro, dispose: () => { if (ref454) ref454.traverse(o => { if (o.material) o.material.dispose(); }); U3.liberar(R, sc); } };
   }
   MOTORES.mecanismo = { criar };
 })();
