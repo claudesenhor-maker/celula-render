@@ -16,6 +16,13 @@
 // T448: funções puras; marcas do áudio são a única fonte de tempo dos números.
 const ANIMAL_V2_CANAL = '112117b4-380c-5d32-829f-7b94fc999eb5';
 function animalV2Ativo(s) { return s.cell_id === ANIMAL_V2_CANAL && s.animal_v2 !== false; }
+function animalV2Titulo(s,t,revelacao) {
+  const titulo=String(s.titulo||'');if(t>=revelacao)return titulo;
+  const nome=String(s.animal?.nome||'');
+  const i=nome?titulo.toLowerCase().indexOf(nome.toLowerCase()):-1;
+  const semNome=i>=0?titulo.slice(0,i)+titulo.slice(i+nome.length):titulo.includes(':')?titulo.slice(titulo.indexOf(':')+1):titulo;
+  return semNome.replace(/^[\s:—-]+|[\s:—-]+$/g,'')||'???';
+}
 function animalV2Normal(s) { return String(s || '').toLowerCase().replace(/[^a-z0-9.%-]+/g,' ').trim(); }
 function animalV2Numero(s) {
   const t=animalV2Normal(s).replace(/[.,!?;:]$/,'');
@@ -280,7 +287,7 @@ function animalV2Revelacao(s) {
       if ((!v2 || (t>=3 && i>=2)) && cn.hud && typeof cn.hud !== 'object' && acao !== 'stat' && local > 0.3) { const s = U.mola(local - 0.3, 10); c.save(); c.translate(W / 2, 330); c.scale(s, s);
         c.font = '120px "Lilita One", sans-serif'; c.textAlign = 'center'; c.textBaseline = 'middle'; const txt = U.hud(c, cn.hud, c.canvas.width * 0.84 - 70, 22), w = c.measureText(txt).width + 70;
         U.rr(c, -w / 2, -78, w, 156, 34); c.fillStyle = '#1B1B1B'; c.fill(); c.fillStyle = '#F6C445'; c.fillText(txt, 0, 6); c.restore(); }
-      U.cartaz(c, spec, t, { fonte: '84px "Lilita One", sans-serif', y: 150, fundo: '#F6C445', borda: '#1B1B1B', cor: '#1B1B1B', altura_linha: 100, dur: 3.0 });
+      U.cartaz(c, v2 ? {...spec,titulo:animalV2Titulo(spec,t,revelacaoV2)} : spec, t, { fonte: '84px "Lilita One", sans-serif', y: 150, fundo: '#F6C445', borda: '#1B1B1B', cor: '#1B1B1B', altura_linha: 100, dur: 3.0 });
       U.legenda(c, spec, t, { fonte: '100px "Lilita One", sans-serif', y: H * 0.70, cor: '#FFFFFF', cor_ativa: '#F6C445', contorno: 18, caixa: true, por_vez: 3 });
     }
     return { quadro, dispose: () => U3.liberar(R, sc) };
