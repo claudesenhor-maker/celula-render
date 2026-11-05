@@ -797,6 +797,10 @@ def motor_web(spec, fila_id, t0):
         # reprovado como "duracao fora da faixa"). 1,5 s de folga; o teto de
         # 180 s do Shorts continua dentro de `conferir`.
         qa = sonda_runner(out, "/tmp/qa_t260", float(lim["dur_min"]), float(lim["dur_max"]) + 1.5)
+        # T460: corrigir somente áudio baixo após AAC; repetir a sonda completa.
+        from qa_t260.reparar_audio import reparar_se_baixo
+        qa = reparar_se_baixo(out, qa, lambda arquivo: sonda_runner(
+            arquivo, "/tmp/qa_t260", float(lim["dur_min"]), float(lim["dur_max"]) + 1.5))
         qa["fila_id"] = fila_id
         qa["run_id"] = os.environ.get("GITHUB_RUN_ID")
         qa["quadros_urls"] = [subir(q, f"ensaios_t260/{fila_id}/quadro{k}.jpg", "image/jpeg")
