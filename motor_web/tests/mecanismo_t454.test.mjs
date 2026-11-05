@@ -15,21 +15,22 @@ test('T454 Chrome: close usa bounds, contexto sempre visível, cartaz livre, con
  const r=await page.evaluate(async()=>{
   const calls=[],old=CanvasRenderingContext2D.prototype.fillText;
   CanvasRenderingContext2D.prototype.fillText=function(s,...a){if(this.canvas.id==='tela')calls.push(String(s));return old.call(this,s,...a);};
-  let cam;const oldRender=U3.render;U3.render=(r,s,c,...a)=>{cam=c;return oldRender(r,s,c,...a);};
+  let cam,sc;const oldRender=U3.render;U3.render=(r,s,c,...a)=>{cam=c;sc=s;return oldRender(r,s,c,...a);};
   const spec={motor:'web',estilo:'mecanismo',cell_id:'d582b3d9-b0f7-5eee-84f5-19f407fccba7',w:1080,h:1920,fps:30,dur_s:7,narrado:true,titulo:'LA TRABA DE TU BOLÍGRAFO',modelo:{partes:[{nome:'casca',forma:'cilindro',pos:[0,1,0],tam:[.8,2,.8],cor:'#dd3344',casca:true},{nome:'mola',forma:'mola',pos:[0,1,0],tam:[.04,.04,.04],cor:'#eedd33'}]},cenas:[{ini:0,fim:7,texto:'Mira la goma',acao:'destaque',camera:'perto',alvo:['mola'],hud:'HUD PRUEBA',rotulos:[{parte:'mola',texto:'ROTULO PRUEBA'}]}],palavras:[{palavra:'Mira',ini:0,fim:7}]};
   const frame=t=>{calls.length=0;MOTOR.quadro(t);return [...calls];};
   await preparar(spec);const early=frame(1.5),late=frame(4),small=cam.position.distanceTo(new THREE.Vector3(0,2.1,0));
   const refEvery=[];for(let f=0;f<210;f+=30)refEvery.push(frame(f/30).includes('OBJETO COMPLETO'));
-  const posSmall=cam.position.clone();
+  const posSmall=cam.position.clone();let shell;sc.traverse(m=>{if(m.userData?.nome==='casca')shell=m;});const contextoOculto=!shell.visible;
   const big=structuredClone(spec);big.modelo.partes[1].tam=[.4,.4,.4];await preparar(big);frame(4);const posBig=cam.position.clone();
   await preparar({...spec,cell_id:'controle'});const control=frame(1.5),controlLate=frame(4);
-  return {early,late,refEvery,ratio:posBig.distanceTo(new THREE.Vector3(0,2.1,0))/small,camMove:posBig.distanceTo(posSmall),control,controlLate};
+  return {contextoOculto,early,late,refEvery,ratio:posBig.distanceTo(new THREE.Vector3(0,2.1,0))/small,camMove:posBig.distanceTo(posSmall),control,controlLate};
  });
  assert.deepEqual(errors,[]);
+ assert(r.contextoOculto,'carcaça não pode ocultar a peça selecionada no close');
  assert(!r.early.includes('HUD PRUEBA'));
  assert(!r.early.includes('ROTULO PRUEBA'));
  assert(r.early.includes('OBJETO COMPLETO'));
- assert(r.early.includes('Mira'),'legenda inferior continua acessível no gancho');
+ assert(r.early.some(s=>s.toUpperCase()==='MIRA'),'legenda inferior continua acessível no gancho');
  assert(r.refEvery.every(Boolean),'cada close deve manter referência, inclusive transição');
  assert(r.late.includes('HUD PRUEBA'));
  assert(r.late.includes('ROTULO PRUEBA'));

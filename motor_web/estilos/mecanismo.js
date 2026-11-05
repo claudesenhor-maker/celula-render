@@ -176,6 +176,8 @@
       const ex = explodeEm(i, k), co = corteEm(i, k);
       lista.forEach((m) => {
         const u = m.userData;
+        // T454: no close a peça não fica escondida; contexto permanece na janela montada.
+        m.visible = !piloto454 || cn.camera !== 'perto' || !al.length || al.includes(m);
         m.position.set(u.pos[0] + u.explode[0] * ex, u.pos[1] + u.explode[1] * ex, u.pos[2] + u.explode[2] * ex);
         m.rotation.set(...u.giro);
         const base = m.material.userData.opacidadeBase || 1;
