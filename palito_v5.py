@@ -671,7 +671,14 @@ def sintetizar(texto, cfg, destino, modo):
         # marcas de palavra que o lipsync usa), e faltar voice_id no meio
         # da producao faz cair para o Edge com aviso em vez de derrubar o
         # job inteiro.
-        motor = (cfg.get("motor") or os.environ.get("MOTOR_TTS") or "edge").lower()
+        motor = (cfg.get("motor") or os.environ.get("MOTOR_TTS") or "chatterbox").lower()
+        # SEM EDGE (05/11, ordem do dono: "abandonar completamente as vozes do edge"). Perfil antigo com
+        # motor "edge" vira chatterbox com a referencia do banco de vozes (banco_vozes). A cadeia agora e':
+        # clone (ref) -> clone (outra ref de ref_opcoes) -> a MESMA voz direto no ElevenLabs -> erro.
+        # VOZ_PERMITIR_EDGE=1 devolve o Edge/Azure como ultimo degrau (emergencia, sem mexer no codigo).
+        sem_edge = os.environ.get("VOZ_PERMITIR_EDGE") != "1"
+        if motor == "edge" and sem_edge:
+            motor = "chatterbox"
         marcas = None
         # A VOZ LIVRE (22/10, ordem do dono: "nosso maior ponto fraco e' a voz
         # de IA"). `voz_livre.py`: chatterbox (MIT, clona a voz de uma
@@ -693,6 +700,38 @@ def sintetizar(texto, cfg, destino, modo):
             except Exception as e:                             # noqa: BLE001
                 print(f"[voz] {livre} falhou ({type(e).__name__}: {e}); seguindo a cadeia")
             marcas = None
+            # segunda referencia do mesmo perfil (outra gravacao da mesma voz)
+            outras = [u for u in (cfg.get("ref_opcoes") or []) if u and u != cfg.get("ref_url")]
+            if outras:
+                try:
+                    from voz_livre import sintetizar_livre
+                    marcas = sintetizar_livre(texto, dict(cfg, ref_url=outras[0]), destino, motor=livre)
+                    dur = _duracao_wav(destino)
+                    if dur > 0.05:
+                        USOU_MOTOR[f"pedido_{motor}"] = USOU_MOTOR.get(f"pedido_{motor}", 0) + 1
+                        USOU_MOTOR[f"usou_{livre}_ref2"] = USOU_MOTOR.get(f"usou_{livre}_ref2", 0) + 1
+                        return marcas, dur
+                except Exception as e:                         # noqa: BLE001
+                    print(f"[voz] {livre} com a 2a referencia falhou ({type(e).__name__}: {e})")
+                marcas = None
+            # a voz do banco veio do ElevenLabs: a reserva e' a MESMA voz la' (timbre igual ao clone)
+            if sem_edge and (cfg.get("eleven_voice_id_reserva") or cfg.get("eleven_voice_id")) and os.environ.get("PRODUCAO") == "1":
+                for i, ch in enumerate(_chaves_eleven(), 1):
+                    try:
+                        mp3 = destino + ".mp3"
+                        marcas = _eleven(texto, cfg, mp3, ch, voz=cfg.get("eleven_voice_id_reserva") or cfg.get("eleven_voice_id"))
+                        subprocess.run(["ffmpeg", "-y", "-v", "error", "-i", mp3, "-ar", str(SR), "-ac", "1", destino], check=True)
+                        dur = _duracao_wav(destino)
+                        if dur > 0.05:
+                            print(f"[voz] {livre} falhou; a mesma voz veio do ElevenLabs (conta {i})")
+                            USOU_MOTOR[f"pedido_{motor}"] = USOU_MOTOR.get(f"pedido_{motor}", 0) + 1
+                            USOU_MOTOR["usou_eleven_reserva"] = USOU_MOTOR.get("usou_eleven_reserva", 0) + 1
+                            return marcas, dur
+                    except Exception as e:                     # noqa: BLE001
+                        print(f"[voz] reserva ElevenLabs conta {i} falhou ({e})")
+                    marcas = None
+            if sem_edge:
+                raise RuntimeError(f"sem voz para {texto[:40]!r}: clone e reserva falharam (Edge desligado)")
         if motor in ("eleven", "elevenlabs"):
             tem_voz = cfg.get("eleven_voice_id") or os.environ.get("ELEVEN_VOICE_ID")
             chaves = _chaves_eleven()
@@ -798,7 +837,7 @@ def sintetizar(texto, cfg, destino, modo):
                 print(f"[voz] reserva livre falhou ({type(e).__name__}: {e}); seguindo para o Azure/Edge")
                 marcas = None
 
-        if marcas is None and motor != "edge" and os.environ.get("AZURE_SPEECH_KEY"):
+        if marcas is None and motor != "edge" and not sem_edge and os.environ.get("AZURE_SPEECH_KEY"):
             if os.environ.get("PRODUCAO") != "1":
                 print("[voz] render de TESTE: o Azure tambem fica de fora")
             else:
@@ -809,6 +848,8 @@ def sintetizar(texto, cfg, destino, modo):
                 except Exception as e:                         # noqa: BLE001
                     print(f"[voz] Azure falhou ({e}); caindo para o Edge")
 
+        if marcas is None and sem_edge:
+            raise RuntimeError(f"sem voz para {texto[:40]!r}: ElevenLabs e clone falharam (Edge desligado em 05/11)")
         if marcas is None:
             usou = "edge"
             marcas, _ = asyncio.run(_edge(texto, cfg, mp3))

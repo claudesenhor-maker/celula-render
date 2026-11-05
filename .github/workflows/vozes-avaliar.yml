@@ -1,0 +1,37 @@
+name: vozes-avaliar
+# Banco de vozes (05/11): clona uma frase de teste com cada referencia e mede timbre (Resemblyzer) e fala (Whisper).
+# Disparo: workflow_dispatch (ids vazios = todas com status 'gerada'; todas=true reavalia o banco inteiro).
+on:
+  workflow_dispatch:
+    inputs:
+      ids: {description: "banco_ids separados por virgula (vazio = pendentes)", required: false, default: ""}
+      todas: {description: "reavaliar todas", required: false, default: "false"}
+permissions:
+  contents: read
+jobs:
+  avaliar:
+    runs-on: ubuntu-latest
+    timeout-minutes: 150
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [0, 1, 2, 3]
+    env:
+      SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+      SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
+      SUPABASE_BUCKET: toonzueira
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: ffmpeg
+        run: sudo apt-get update -qq || true; sudo apt-get install -y -qq ffmpeg espeak-ng
+      - name: Ambiente do voz_livre (o mesmo do render)
+        run: |
+          python -c "import voz_livre; voz_livre._garantir_venv()"
+          /tmp/voz_livre_venv/bin/python -m pip install --quiet resemblyzer webrtcvad-wheels --extra-index-url https://download.pytorch.org/whl/cpu
+      - name: Avaliar
+        run: |
+          T=""; if [ "${{ inputs.todas }}" = "true" ]; then T="--todas"; fi
+          /tmp/voz_livre_venv/bin/python vozes_avaliar.py --ids "${{ inputs.ids }}" --shard ${{ matrix.shard }}/4 $T
