@@ -12,6 +12,44 @@
 // CONTRATO (comum.js): `quadro(t)` sem estado entre quadros.
 (function () {
   'use strict';
+// T448 ANIMAL V2
+// T448: funções puras; marcas do áudio são a única fonte de tempo dos números.
+const ANIMAL_V2_CANAL = '112117b4-380c-5d32-829f-7b94fc999eb5';
+function animalV2Ativo(s) { return s.cell_id === ANIMAL_V2_CANAL && s.animal_v2 !== false; }
+function animalV2Normal(s) { return String(s || '').toLowerCase().replace(/[^a-z0-9.%-]+/g,' ').trim(); }
+function animalV2Numero(s) {
+  const t=animalV2Normal(s).replace(/[.,!?;:]$/,'');
+  if (/^-?\d+(?:\.\d+)?%?$/.test(t)) return Number(t.replace('%',''));
+  const ns=['zero','one','two','three','four','five','six','seven','eight','nine','ten','eleven','twelve','thirteen','fourteen','fifteen','sixteen','seventeen','eighteen','nineteen'];
+  if(ns.includes(t)) return ns.indexOf(t);
+  const tens={twenty:20,thirty:30,forty:40,fifty:50,sixty:60,seventy:70,eighty:80,ninety:90};
+  const ps=t.split(/[- ]/); if(tens[ps[0]]) return tens[ps[0]]+(ns.indexOf(ps[1])>0?ns.indexOf(ps[1]):0);
+  return null;
+}
+function animalV2Instante(spec, cena, stat, campo='valor') {
+  if(!stat || !Array.isArray(spec.palavras)) return null;
+  const ws=spec.palavras.filter(w=>Number.isFinite(w.ini)&&w.ini>=cena.ini-.001&&w.ini<cena.fim);
+  const alvo=Number(stat[campo]); if(!Number.isFinite(alvo))return null;
+  for(let i=0;i<ws.length;i++) {
+    let n=animalV2Numero(ws[i].palavra); if(n===null)continue;
+    const prox=animalV2Normal(ws[i+1]?.palavra), unidade=String(stat.unidade||'').toLowerCase();
+    if(prox==='hundred')n*=100; if(prox==='thousand')n*=1000; if(prox==='million')n*=1e6;
+    if(/year/.test(prox)&&/day/.test(unidade))n*=365;
+    if(/week/.test(prox)&&/day/.test(unidade))n*=7;
+    if(Math.abs(n-alvo)<=Math.max(.00001,Math.abs(alvo)*.005))return ws[i].ini;
+  }
+  return null;
+}
+function animalV2Progresso(t, inicio) { if(inicio===null||t<inicio)return 0; const q=Math.min(1,Math.max(0,(t-inicio)/.8)); return q*q*(3-2*q); }
+function animalV2Barras(a,b,qa,qb) { const mx=Math.max(Math.abs(a),Math.abs(b),1e-9);return [Math.max(0,a)/mx*qa,Math.max(0,b)/mx*qb]; }
+function animalV2Revelacao(s) {
+  const nome=animalV2Normal(s.animal?.nome).split(' ').filter(Boolean);
+  if(!nome.length)return Infinity;
+  const ws=s.palavras||[];
+  for(let i=0;i<ws.length;i++)if(nome.every((p,j)=>animalV2Normal(ws[i+j]?.palavra)===p))return ws[i].ini;
+  return Infinity;
+}
+
   function criar(tela, spec, U) {
     const T = window.THREE, c = tela.getContext('2d'), W = spec.w, H = spec.h;
     const gl = document.createElement('canvas'); gl.width = W; gl.height = H;
@@ -58,6 +96,7 @@
     const an = spec.animal || {}, tamReal = num(an.tamanho_m, 0.01, 40, 2);
     const bicho = new T.Group(), corpo = new T.Group(); bicho.add(corpo); sc.add(bicho);
     const moveis = [];
+    const v2 = animalV2Ativo(spec), revelacaoV2 = animalV2Revelacao(spec);
     (Array.isArray(an.partes) ? an.partes.slice(0, 30) : []).forEach((p, i) => {
       const m = new T.Mesh((F[p.forma] || F.caixa)(), M(corOk(p.cor, '#9A7B55'), p.material || 'pele'));
       const pos = vet(p.pos, -10, 10, [0, 0.5, 0]), tam = vet(p.tam, 0.01, 10, [1, 1, 1]), giro = vet(p.giro, -360, 360, [0, 0, 0]).map((a) => (a * Math.PI) / 180);
@@ -68,7 +107,7 @@
       const pv = new T.Vector3(...vet(p.pivo, -2, 2, tipo === 'perna' ? [0, 0.5, 0] : [0,0,0]));
       if (pv.lengthSq()) { m.geometry=m.geometry.clone();m.geometry.translate(-pv.x,-pv.y,-pv.z);
         pv.multiply(m.scale).applyEuler(m.rotation);m.position.add(pv); }
-      m.userData = { giro, tipo, fase: Number.isFinite(p.fase) ? p.fase : (pos[0] >= 0 ? 0 : Math.PI) + (pos[2] >= 0 ? 0 : Math.PI) }; corpo.add(m); if (tipo) moveis.push(m);
+      m.userData = { nome, escalaBase:tam.slice(), giro, tipo, fase: Number.isFinite(p.fase) ? p.fase : (pos[0] >= 0 ? 0 : Math.PI) + (pos[2] >= 0 ? 0 : Math.PI) }; corpo.add(m); if (tipo) moveis.push(m);
     });
     if (!corpo.children.length) { const m = new T.Mesh(F.capsula(), M('#9A7B55')); m.rotation.z = Math.PI / 2; m.scale.set(1, 2, 1); m.position.y = 0.6; corpo.add(m); }
     { const b = new T.Box3().setFromObject(corpo), s = new T.Vector3(); b.getSize(s); const comp = Math.max(1e-3, s.x, s.z, s.y * 0.6);
@@ -94,10 +133,23 @@
     const statDe = (cn, i) => { if (typeof cn.stat === 'number') return stats[U.clamp(Math.round(cn.stat), 0, stats.length - 1)];
       const k = stats.findIndex((s) => s.nome === String(cn.stat || '').toUpperCase()); return stats[k >= 0 ? k : Math.min(i, stats.length - 1)]; };
 
+    function animalV2PrimeiraMarca(st,campo,t) {
+      for(const cena of spec.cenas) {
+        if(cena.ini>t)break;
+        const marco=animalV2Instante(spec,cena,st,campo);
+        if(marco!==null)return marco;
+      }
+      return null;
+    }
     const hfov = 2 * Math.atan(Math.tan((cam.fov * Math.PI) / 360) * cam.aspect);
     function quadroDo3D(t) {
       const { c: cn, i, k, local } = U.cenaEm(spec, t), acao = cn.acao || 'mostra';
       const comp = acao === 'compara', corre = acao === 'corre', ataca = acao === 'ataca';
+      // Uma peça funcional em todo ciclo, inclusive em cenas mostra/stat.
+      const textoV2 = animalV2Normal(cn.texto);
+      const chaveV2 = /eye|pupil|vision|light/.test(textoV2) ? /eye|pupil|olho/ : /jaw|bite|bone|crush/.test(textoV2) ? /jaw|boca|mandibula/ : /lung|air|breath|energy|muscle/.test(textoV2) ? /belly|body|muscle|lung|corpo/ : /jaw|mouth|head|body|corpo/;
+      const focoV2 = corpo.children.find(m=>chaveV2.test(m.userData.nome||'')) || corpo.children[0];
+      if(v2) corpo.children.forEach(m=>{if(m.userData.escalaBase)m.scale.set(...m.userData.escalaBase);});
       // pernas, cauda, asas e boca
       moveis.forEach((m) => { const u = m.userData; m.rotation.set(...u.giro);
         const vel = corre ? 11 : 2.2, amp = corre ? 0.55 : 0.08;
@@ -105,6 +157,11 @@
         if (u.tipo === 'cauda') m.rotation.y += Math.sin(t * 3 + u.fase) * 0.35;
         if (u.tipo === 'asa') m.rotation.x += Math.sin(t * (corre ? 14 : 4) + u.fase) * 0.5;
         if (u.tipo === 'boca') m.rotation.z += ataca ? -Math.max(0, Math.sin(Math.min(1, k * 1.6) * Math.PI)) * 0.6 : 0; });
+      if(v2 && focoV2) {
+        const pulso = Math.sin(Math.PI * U.clamp(local / Math.max(.3,(cn.fim-cn.ini-.22)),0,1));
+        if(/jaw|boca|mandibula/.test(focoV2.userData.nome||'')) focoV2.rotation.z -= pulso*.48;
+        else { focoV2.scale.y *= 1+.20*pulso; focoV2.scale.z *= 1+.12*pulso; }
+      }
       // respira; no `corre` quica; no `ataca` da o bote
       corpo.scale.y = corpo.scale.x * (1 + 0.015 * Math.sin(t * 2.4));
       let x = 0, y = 0;
@@ -125,6 +182,20 @@
       cam.position.set(cx + Math.sin(ang) * dd, cy + dd * 0.22 + shake, Math.cos(ang) * dd); cam.near = dd / 500; cam.far = dd * 60; cam.updateProjectionMatrix();
       // mirar ABAIXO do animal o sobe na tela: o meio fica livre para o cartao e a legenda mora em 70%
       cam.lookAt(cx, cy * (acao === 'stat' || corre ? 0.05 : 0.4), 0);
+      if(v2 && !comp) {
+        // Enquadrar pela caixa REAL da parte/animal; sem crop fixo e sem mínimo de 1 m.
+        bicho.updateMatrixWorld(true);
+        const box = new T.Box3().setFromObject(focoV2), size = new T.Vector3(), center = new T.Vector3();
+        box.getSize(size); box.getCenter(center);
+        const extent = Math.max(size.x,size.y,size.z,.0001);
+        const dist = Math.max(extent/Math.tan(hfov/2),extent/Math.tan(cam.fov*Math.PI/360))*1.3;
+        const blend = i===0 ? U.clamp(local/2.5,0,1) : .18;
+        const todo = new T.Vector3(); caixaB.getCenter(todo);
+        center.lerp(todo,blend*.55);
+        const dv = dist*(1+blend*1.8);
+        cam.position.set(center.x+Math.sin(ang)*dv,center.y+dv*.18,center.z+Math.cos(ang)*dv);
+        cam.near=Math.max(.000001,dv/500);cam.far=Math.max(300,dv*60);cam.updateProjectionMatrix();cam.lookAt(center);
+      }
       U3.render(R, sc, cam, spec, t); c.drawImage(gl, 0, 0, W, H);
       return { cn, i, k, local, acao };
     }
@@ -132,10 +203,12 @@
     const fmt = (v) => (Math.abs(v) >= 1e6 ? (v / 1e6).toLocaleString('en-US', { maximumFractionDigits: 1 }) + 'M' : Math.abs(v) >= 1e4 ? Math.round(v).toLocaleString('en-US')
       : v.toLocaleString('en-US', { maximumFractionDigits: Math.abs(v) < 10 ? 1 : 0 }));
     // CARTAO DO NUMERO: conta ate o valor e compara com o humano em barras
-    function cartao(st, local) {
+    function cartao(st, local, t, cn) {
       if (!st) return;
-      const ent = U.mola(local - 0.1, 10); if (ent <= 0) return;
-      const q = U.suave(U.clamp((local - 0.25) / 1.1, 0, 1));
+      const marcoV2 = v2 ? animalV2Instante(spec,cn,st) : null;
+      if(v2 && (marcoV2===null || t<marcoV2))return;
+      const ent = U.mola(v2 ? t-marcoV2 : local - 0.1, 10); if (ent <= 0) return;
+      const q = v2 ? animalV2Progresso(t,marcoV2) : U.suave(U.clamp((local - 0.25) / 1.1, 0, 1));
       const x0 = 70, w = W - 140, y0 = H * 0.42, h = 360;
       c.save(); c.translate(W / 2, y0 + h / 2); c.scale(ent, ent); c.translate(-W / 2, -(y0 + h / 2));
       U.rr(c, x0, y0, w, h, 34); c.fillStyle = 'rgba(24,20,14,0.86)'; c.fill(); c.lineWidth = 6; c.strokeStyle = '#F6C445'; c.stroke();
@@ -143,11 +216,12 @@
       c.textAlign = 'right'; c.font = '96px "Lilita One", sans-serif'; c.fillStyle = '#FFFFFF'; c.fillText(fmt(st.valor * q) + (st.unidade ? ' ' + st.unidade.toUpperCase() : ''), x0 + w - 40, y0 + 64);
       if (st.humano != null && st.valor > 0) {
         const mx = Math.max(st.valor, st.humano, 1e-9), bw = w - 260, by = y0 + 150;
-        const nomeA = String((spec.animal || {}).nome || 'ANIMAL').toUpperCase().slice(0, 9);
+        const nomeA = v2 && t<revelacaoV2 ? '???' : String((spec.animal || {}).nome || 'ANIMAL').toUpperCase().slice(0, 9);
         [[nomeA, st.valor, '#F6C445'], ['HUMAN', st.humano, '#9AA7B8']].forEach(([n, v, cor], j) => {
-          const yy = by + j * 82; c.textAlign = 'left'; c.font = '40px "Lilita One", sans-serif'; c.fillStyle = cor; c.fillText(n, x0 + 40, yy + 26);
+          const yy = by + j * 82;
+          const qBarra = v2 ? animalV2Progresso(t,animalV2PrimeiraMarca(st,j===0?'valor':'humano',t)) : q; c.textAlign = 'left'; c.font = '40px "Lilita One", sans-serif'; c.fillStyle = cor; c.fillText(n, x0 + 40, yy + 26);
           U.rr(c, x0 + 220, yy, bw, 52, 14); c.fillStyle = 'rgba(255,255,255,0.12)'; c.fill();
-          U.rr(c, x0 + 220, yy, Math.max(14, bw * (v / mx) * q), 52, 14); c.fillStyle = cor; c.fill();
+          U.rr(c, x0 + 220, yy, Math.max(v2 ? 0 : 14, bw * (v / mx) * qBarra), 52, 14); c.fillStyle = cor; c.fill();
         });
         const vezes = st.humano > 0 ? st.valor / st.humano : 0;
         if (vezes >= 1.5 && q > 0.9) { const s = U.mola(local - 1.35, 12); c.save(); c.translate(x0 + w - 120, y0 + h - 4); c.rotate(-0.08); c.scale(s, s);
@@ -180,10 +254,15 @@
       const { cn, i, k, local, acao } = quadroDo3D(t);
       if (i > 0 && local < 0.1) { c.fillStyle = 'rgba(255,255,255,' + (0.3 * (1 - local / 0.1)).toFixed(2) + ')'; c.fillRect(0, 0, W, H); }
       if (acao === 'ataca' && k > 0.35 && k < 0.5) { c.fillStyle = 'rgba(255,60,40,0.18)'; c.fillRect(0, 0, W, H); }
-      if (acao === 'stat') cartao(statDe(cn, i), local);
-      if (acao === 'corre') velocimetro(statDe(cn, i), local);
-      etiquetaAltura(acao, local);
-      if (cn.hud && typeof cn.hud !== 'object' && acao !== 'stat' && local > 0.3) { const s = U.mola(local - 0.3, 10); c.save(); c.translate(W / 2, 330); c.scale(s, s);
+      if (acao === 'stat' || (v2 && i<2 && acao==='compara')) {
+        const st = v2 && i<2 ? statDe(spec.cenas[0],0) : statDe(cn,i);
+        // O comparativo do gancho permanece na mesma escala entre as duas falas.
+        const cenaDado = v2 && i<2 ? spec.cenas[0] : cn;
+        cartao(st, v2 && i<2 ? t : local, t, cenaDado);
+      }
+      if (acao === 'corre') { if(v2)cartao(statDe(cn,i),local,t,cn);else velocimetro(statDe(cn, i), local); }
+      if(!v2) etiquetaAltura(acao, local);
+      if ((!v2 || t>=3) && cn.hud && typeof cn.hud !== 'object' && acao !== 'stat' && local > 0.3) { const s = U.mola(local - 0.3, 10); c.save(); c.translate(W / 2, 330); c.scale(s, s);
         c.font = '120px "Lilita One", sans-serif'; c.textAlign = 'center'; c.textBaseline = 'middle'; const txt = U.hud(c, cn.hud, c.canvas.width * 0.84 - 70, 22), w = c.measureText(txt).width + 70;
         U.rr(c, -w / 2, -78, w, 156, 34); c.fillStyle = '#1B1B1B'; c.fill(); c.fillStyle = '#F6C445'; c.fillText(txt, 0, 6); c.restore(); }
       U.cartaz(c, spec, t, { fonte: '84px "Lilita One", sans-serif', y: 150, fundo: '#F6C445', borda: '#1B1B1B', cor: '#1B1B1B', altura_linha: 100, dur: 3.0 });
