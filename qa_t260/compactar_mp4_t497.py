@@ -39,3 +39,13 @@ def compactar_se_grande(arquivo, qa, sonda, limite=100 * 1024 * 1024):
         return novo
     finally:
         candidato.unlink(missing_ok=True)
+
+
+def adequar_ao_storage(arquivo, sonda, limite=100 * 1024 * 1024):
+    """Todos os motores web: MP4 grande exige sonda antes/depois; pequeno intacto."""
+    if Path(arquivo).stat().st_size <= limite:
+        return None
+    qa = sonda(arquivo)
+    if not qa.get('aprovado'):
+        raise RuntimeError('T497: sonda completa reprovou MP4 antes da compactação: ' + str(qa.get('erros')))
+    return compactar_se_grande(arquivo, qa, sonda, limite)

@@ -801,10 +801,6 @@ def motor_web(spec, fila_id, t0):
         from qa_t260.reparar_audio import reparar_se_baixo
         qa = reparar_se_baixo(out, qa, lambda arquivo: sonda_runner(
             arquivo, "/tmp/qa_t260", float(lim["dur_min"]), float(lim["dur_max"]) + 1.5))
-        # T497: respeitar 100 MiB do Storage; áudio copiado e sonda repetida.
-        from qa_t260.compactar_mp4_t497 import compactar_se_grande
-        qa = compactar_se_grande(out, qa, lambda arquivo: sonda_runner(
-            arquivo, "/tmp/qa_t497", float(lim["dur_min"]), float(lim["dur_max"]) + 1.5))
         qa["fila_id"] = fila_id
         qa["run_id"] = os.environ.get("GITHUB_RUN_ID")
         qa["quadros_urls"] = [subir(q, f"ensaios_t260/{fila_id}/quadro{k}.jpg", "image/jpeg")
@@ -814,6 +810,12 @@ def motor_web(spec, fila_id, t0):
         subir(recibo, f"ensaios_t260/{fila_id}/sonda.json", "application/json")
         if not qa["aprovado"]:
             raise RuntimeError("T260 MP4 reprovado: " + " | ".join(qa["erros"]))
+    # T497: aplicar também aos motores web sem qa_t260, somente acima de 100 MiB.
+    from qa_t260.compactar_mp4_t497 import adequar_ao_storage
+    from qa_t260.conferir_mp4 import sonda_runner
+    limites_storage = spec.get("qa_t260") or {"dur_min": 1, "dur_max": 180}
+    adequar_ao_storage(out, lambda arquivo: sonda_runner(
+        arquivo, "/tmp/qa_t497", float(limites_storage["dur_min"]), float(limites_storage["dur_max"]) + 1.5))
     url = subir(out, f"videos/{fila_id}.mp4")
     print(f"[ok] {url}  {dur}s  render={time.time() - t0:.0f}s  motor=web/{spec.get('estilo')}")
     gravar_timeline_web(fila_id, sp)
