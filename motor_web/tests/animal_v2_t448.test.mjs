@@ -49,13 +49,13 @@ test('T448: desenho real no Chrome, gate, barras, título, peça e bounds', {tim
     assert(Math.abs(result.d1/result.d2-100)<1);
     assert(result.controle.some(x=>x.s==='TEST ANIM'));
     assert(result.depois.filter(x=>x.s==='FORCE').every(x=>x.y>=800));
-    assert.deepEqual(result.barras.map(r=>Math.round(r.w)),[680,68,680,680]);
+    assert.deepEqual(result.barras.map(r=>Math.round(r.w)),[539,54,539,539]);
     assert(result.focoY>.25,'peça precisa aparecer acima do cartão');
     const titulo=result.depois.find(x=>x.s==='FORCE'),valor=result.depois.find(x=>/ N$/.test(x.s));
     assert(valor.y-titulo.y>=50,'nome da medida e número não podem disputar a mesma linha');
     assert(result.humanoPrimeiro.some(x=>x.s==='FORCE'),'comparativo pode começar pela medida humana');
-    assert(result.humanoPrimeiro.some(x=>x.s==='100 N'));
-    assert(!result.humanoPrimeiro.some(x=>x.s==='10 N'),'animal só aparece ao ser narrado');
-      assert(result.humanoDecimal.some(x=>x.s==='19.5 N'),'valor decimal falado não pode virar 20');
+    assert(result.humanoPrimeiro.some(x=>x.s==='100'));
+    assert(!result.humanoPrimeiro.some(x=>x.s==='10'),'animal só aparece ao ser narrado');
+      assert(result.humanoDecimal.some(x=>x.s==='19.5'),'valor decimal falado não pode virar 20');
   }finally{await browser.close();}
 });

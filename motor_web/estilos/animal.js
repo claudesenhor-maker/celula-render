@@ -69,7 +69,7 @@ function animalV2Revelacao(s) {
     const R = new T.WebGLRenderer({ canvas: gl, antialias: true, preserveDrawingBuffer: true }); R.setSize(W, H, false);
     const cam = new T.PerspectiveCamera(36, W / H, 0.01, 5000);
     const sc = new T.Scene();
-    U3.estudio(R, sc, T, { reflexo: false, sombra: false, exposicao: 1.1 });
+    U3.estudio(R, sc, T, { reflexo: false, sombra: false, exposicao: 1.03 });
     const habitat = String((spec.animal || {}).habitat || 'savana');
     const HAB = { savana: ['#C9A46A','#F0C890','#5E7A3A'], floresta: ['#6F8254','#92B1A5','#305C48'], gelo: ['#E2EBF1','#CFDFEB','#BBCAD8'], deserto: ['#D6AE78','#E2C7A5','#B89870'] }[habitat] || ['#C9A46A','#F0C890','#5E7A3A'];
     const num = (v, a, b, p) => { const x = Number(v); return Number.isFinite(x) ? U.clamp(x, a, b) : p; };
@@ -79,13 +79,32 @@ function animalV2Revelacao(s) {
     const M = (cor, tipo='pele') => { const k=cor+tipo; if(!materiais.has(k)) materiais.set(k,U3.material(T,cor,tipo));return materiais.get(k); };
     const F = U3.formas(T);
     // Curvas suaves no protagonista; não gastar tesselação de macro nos olhos/fundo.
-    const esferaAnimal=new T.SphereGeometry(.5,24,16),cilindroAnimal=new T.CylinderGeometry(.5,.5,1,20);
+    const esferaAnimal=new T.SphereGeometry(.5,32,24),cilindroAnimal=new T.LatheGeometry(Array.from({length:25},(_,i)=>{const y=i/24-.5;return new T.Vector2(.48*Math.pow(Math.max(.001,Math.sin(Math.PI*i/24)),.22),y);}),32);
     F.esfera=()=>esferaAnimal;F.cilindro=()=>cilindroAnimal;
 
+    // T464: acabamento procedural, sem assets pagos nem alteração do spec.
+    const aquatico = /fish|shark|lungfish|peixe|tubar/i.test(spec.animal?.nome||'');
+    const ave = /bird|eagle|owl|parrot|penguin|ave|pássaro/i.test(spec.animal?.nome||'');
+    const pele = document.createElement('canvas');pele.width=pele.height=256;
+    {const g=pele.getContext('2d'),r=U.rng('pele464');g.fillStyle='#c5c3b7';g.fillRect(0,0,256,256);
+     for(let i=0;i<1200;i++){const x=r()*256,y=r()*256;g.strokeStyle='rgba(40,35,30,'+(.06+r()*.15)+')';g.lineWidth=.5+r();g.beginPath();g.moveTo(x,y);g.quadraticCurveTo(x+4,y-2,x+7,y+1);g.stroke();}}
+    const peleTex=new T.CanvasTexture(pele);peleTex.wrapS=peleTex.wrapT=T.RepeatWrapping;peleTex.encoding=T.sRGBEncoding;
+    const organica = (p) => {
+      const n=String(p.nome||'').toLowerCase();
+      if(/ear|orelha|wing|asa|fin|nadadeira/.test(n)) {
+        const sh=new T.Shape();sh.moveTo(-.45,.38);sh.bezierCurveTo(-.2,.58,.2,.58,.43,.35);
+        sh.bezierCurveTo(.65,.08,.42,-.35,.12,-.5);sh.bezierCurveTo(-.12,-.56,-.48,-.27,-.5,.05);sh.bezierCurveTo(-.54,.22,-.5,.3,-.45,.38);
+        const g=new T.ExtrudeGeometry(sh,{depth:.65,bevelEnabled:true,bevelThickness:.17,bevelSize:.06,bevelSegments:3,steps:1,curveSegments:12});g.translate(0,0,-.325);g.computeVertexNormals();return g;
+      }
+      if(/body|belly|corpo|breast|head|jaw|boca|foot|pad/.test(n))return esferaAnimal;
+      if(p.forma==='cilindro')return cilindroAnimal;
+      if(p.forma==='capsula')return esferaAnimal;
+      return (F[p.forma]||F.esfera)();
+    };
     // ---- savana ao entardecer: ceu quente, chao de terra com faixas de capim
     { const cv = document.createElement('canvas'); cv.width = 4; cv.height = 256; const g = cv.getContext('2d'); const gr = g.createLinearGradient(0, 0, 0, 256);
       gr.addColorStop(0, '#2B5C8A'); gr.addColorStop(0.55, '#E8A86A'); gr.addColorStop(0.8, '#F6D29A'); gr.addColorStop(1, '#F6D29A'); g.fillStyle = gr; g.fillRect(0, 0, 4, 256); sc.background = new T.CanvasTexture(cv); sc.background.encoding = T.sRGBEncoding; }
-    sc.fog = new T.Fog(HAB[1], 40, 260);
+    sc.fog = new T.Fog(HAB[1], 65, 260);
     sc.add(new T.HemisphereLight('#FFF4E0', '#6B5A3A', 0.7));
     const sol = new T.DirectionalLight('#FFE2B8', 0.95); sol.position.set(-6, 9, 7); sc.add(sol);
     const texChao = (() => { const cv = document.createElement('canvas'); cv.width = cv.height = 256; const g = cv.getContext('2d'); g.fillStyle = HAB[0]; g.fillRect(0, 0, 256, 256);
@@ -107,13 +126,20 @@ function animalV2Revelacao(s) {
 
     // ---- o animal (normalizado: o COMPRIMENTO vira `tamanho_m` metros)
     const an = spec.animal || {}, tamReal = num(an.tamanho_m, 0.01, 40, 2);
-    const bicho = new T.Group(), corpo = new T.Group(); bicho.add(corpo); sc.add(bicho);
+    const bicho = new T.Group(), corpo = new T.Group(); bicho.userData.animal464=true; bicho.add(corpo); sc.add(bicho);
     const moveis = [];
     const v2 = animalV2Ativo(spec), revelacaoV2 = animalV2Revelacao(spec);
     (Array.isArray(an.partes) ? an.partes.slice(0, 30) : []).forEach((p, i) => {
-      const m = new T.Mesh((F[p.forma] || F.caixa)(), M(corOk(p.cor, '#9A7B55'), p.material || 'pele'));
+      const m = new T.Mesh(organica(p), M(corOk(p.cor, '#9A7B55'), p.material || 'pele'));
       const pos = vet(p.pos, -10, 10, [0, 0.5, 0]), tam = vet(p.tam, 0.01, 10, [1, 1, 1]), giro = vet(p.giro, -360, 360, [0, 0, 0]).map((a) => (a * Math.PI) / 180);
+      // Specs descrevem torso com comprimento no maior eixo, mesmo quando
+      // a primitiva veio girada como cilindro. A anatomia mantém esse comprimento.
+      if(/^(body|corpo|belly)$/.test(String(p.nome)) && Math.abs(giro[2])>1.3 && Math.abs(giro[2])<1.8){const a=Math.max(tam[0],tam[1]),b=Math.min(tam[0],tam[1]);tam[0]=a;tam[1]=b;giro[2]=0;}
       m.position.set(...pos); m.scale.set(...tam); m.rotation.set(...giro);
+      if(!/eye|olho|tusk|dente/.test(String(p.nome))){m.material.map=peleTex;m.material.roughness=.88;}
+      if(/eye|olho/.test(String(p.nome))){const brilho=new T.Mesh(esferaAnimal,new T.MeshBasicMaterial({color:'#ffffff'}));brilho.scale.set(.23,.23,.23);brilho.position.set(.14,.18,.43);m.add(brilho);}
+      if(ave && /wing/.test(String(p.nome))){for(let j=0;j<7;j++){const pena=new T.Mesh(esferaAnimal,M(j>3?'#353a3d':corOk(p.cor,'#9c978e')));pena.position.set(-.36+j*.105,-.2-j*.035,0);pena.scale.set(.2,.8,.9);pena.rotation.z=-.25;m.add(pena);}}
+
       const nome = String(p.nome || '').toLowerCase();
       const tipo = /leg|perna|pata|paw|foot|pe\b/.test(nome) ? 'perna' : /tail|cauda|rabo/.test(nome) ? 'cauda' : /wing|asa|fin|nadadeira/.test(nome) ? 'asa' : /jaw|mandibula|boca|mouth/.test(nome) ? 'boca' : null;
       // Pivôs nas juntas: pata no topo, asa/mandíbula no encaixe explícito.
@@ -122,6 +148,45 @@ function animalV2Revelacao(s) {
         pv.multiply(m.scale).applyEuler(m.rotation);m.position.add(pv); }
       m.userData = { nome, escalaBase:tam.slice(), giro, tipo, fase: Number.isFinite(p.fase) ? p.fase : (pos[0] >= 0 ? 0 : Math.PI) + (pos[2] >= 0 ? 0 : Math.PI) }; corpo.add(m); if (tipo) moveis.push(m);
     });
+    // Peixes: uma superfície contínua da cauda ao focinho. Os cilindros do
+    // contrato definem medidas e cor, não uma pilha de troncos desconectados.
+    if(aquatico){
+      const tronco=corpo.children.filter(m=>/^(body|body_rear|belly|head|snout|tail)$/.test(m.userData.nome||''));
+      if(tronco.length>=3){
+        const body=tronco.find(m=>m.userData.nome==='body')||tronco[0],bb=new T.Box3();tronco.forEach(m=>bb.expandByObject(m));
+        const x0=bb.min.x,x1=bb.max.x,len=x1-x0;
+        const radius=Math.max(.015,Math.min(body.scale.y,body.scale.z)*.52);
+        const profile=[[0,.05],[.08,.25],[.23,.55],[.42,.82],[.62,1],[.78,1.08],[.9,.94],[.97,.55],[1,.03]];
+        const curve=new T.CatmullRomCurve3(profile.map(([u,v])=>new T.Vector3(v*radius,x0+u*len,0)));
+        const points=curve.getPoints(60).map(v=>new T.Vector2(Math.max(radius*.02,v.x),v.y));
+        const geo=new T.LatheGeometry(points,40);geo.rotateZ(-Math.PI/2);
+        const m=new T.Mesh(geo,body.material);m.position.y=body.position.y;m.userData={nome:'body',giro:[0,0,0],escalaBase:[1,1,1]};corpo.add(m);
+        tronco.forEach(m=>{corpo.remove(m);const i=moveis.indexOf(m);if(i>=0)moveis.splice(i,1);});
+        // Brilho longitudinal e escamas pequenas vêm da textura procedural.
+        m.material.roughness=.6;
+      }
+    }
+    // Juntas compartilhadas: coxa, canela e pé seguem a mesma perna.
+    const juntas=new Map();
+    for(const m of corpo.children.slice())if(m.userData.tipo==='perna'){
+      const n=m.userData.nome,side=/left|esquer/.test(n)?'left':/right|direit/.test(n)?'right':String(m.position.z>=0);
+      const key=(/front|frente/.test(n)?'front':/back|rear|tras/.test(n)?'back':'leg')+side;
+      if(!juntas.has(key))juntas.set(key,[]);juntas.get(key).push(m);
+    }
+    for(const ms of juntas.values()){
+      const box=new T.Box3();ms.forEach(m=>box.expandByObject(m));const center=box.getCenter(new T.Vector3()),g=new T.Group();
+      g.position.set(center.x,box.max.y,center.z);g.userData={nome:'joint',giro:[0,0,0],tipo:'perna',fase:ms[0].userData.fase};
+      corpo.add(g);for(const m of ms){corpo.remove(m);m.position.sub(g.position);g.add(m);moveis.splice(moveis.indexOf(m),1);}moveis.push(g);
+    }
+    // Tromba contínua: respeita a curva dada pelas partes, sem juntas abertas.
+    const tromba=corpo.children.filter(m=>/trunk_(upper|mid|tip)/.test(m.userData.nome||'')).sort((a,b)=>b.position.y-a.position.y);
+    if(tromba.length>=3){const pts=[tromba[0].position.clone().add(new T.Vector3(0,tromba[0].scale.y*.5,0)),...tromba.map(m=>m.position.clone()),tromba.at(-1).position.clone().add(new T.Vector3(0,-tromba.at(-1).scale.y*.45,0))];
+      const g=new T.TubeGeometry(new T.CatmullRomCurve3(pts),40,.5,16,false),ps=g.attributes.position;
+      // Afinar ao longo da curva, do encaixe até a ponta.
+      for(let i=0;i<=40;i++){const k=i/40,center=new T.CatmullRomCurve3(pts).getPointAt(k),radius=.45*(1-k)+.16*k;
+       for(let j=0;j<=16;j++){const id=i*17+j,v=new T.Vector3().fromBufferAttribute(ps,id);v.sub(center).multiplyScalar(radius).add(center);ps.setXYZ(id,v.x,v.y,v.z);}}
+      g.computeVertexNormals();const m=new T.Mesh(g,tromba[0].material);m.userData={nome:'trunk',giro:[0,0,0],tipo:'tromba',fase:0};corpo.add(m);moveis.push(m);
+      tromba.forEach(m=>corpo.remove(m));}
     if (!corpo.children.length) { const m = new T.Mesh(F.capsula(), M('#9A7B55')); m.rotation.z = Math.PI / 2; m.scale.set(1, 2, 1); m.position.y = 0.6; corpo.add(m); }
     { const b = new T.Box3().setFromObject(corpo), s = new T.Vector3(); b.getSize(s); const comp = Math.max(1e-3, s.x, s.z, s.y * 0.6);
       const k = tamReal / comp; corpo.scale.setScalar(k); corpo.position.y = -b.min.y * k; }
@@ -131,16 +196,35 @@ function animalV2Revelacao(s) {
     const sombra=new T.Mesh(new T.PlaneGeometry(1,1),new T.MeshBasicMaterial({map:new T.CanvasTexture(sombraCv),transparent:true,depthWrite:false}));
     sombra.rotation.x=-Math.PI/2;sombra.position.y=.008;sombra.scale.set(tamB.x*1.25,tamB.z*1.7,1);sc.add(sombra);
 
+    // Habitat em camadas: relva e pedras à escala do sujeito, em vez de areia vazia.
+    {const r=U.rng(String(spec.semente||'')+'habitat464'),scale=Math.max(tamReal,.15);
+     const geo=new T.ConeGeometry(1,1,4),mat=new T.MeshLambertMaterial({color:habitat==='gelo'?'#d7e6ed':aquatico?'#447c6b':'#6c7742'});
+     const grass=new T.InstancedMesh(geo,mat,170),o=new T.Object3D();
+     for(let i=0;i<170;i++){const x=(r()-.5)*scale*8,z=(r()-.5)*scale*5;
+      const h=scale*(.025+r()*.065);o.position.set(x,h/2,z);o.scale.set(h*.2,h,h*.2);o.rotation.set(0,r()*6.28,(r()-.5)*.25);o.updateMatrix();grass.setMatrixAt(i,o.matrix);}sc.add(grass);
+     const rocks=new T.InstancedMesh(new T.IcosahedronGeometry(1,1),new T.MeshLambertMaterial({color:'#817e69'}),18);
+     for(let i=0;i<18;i++){const a=r()*6.28,d=scale*(1+r()*3),h=scale*(.025+r()*.06);o.position.set(Math.sin(a)*d,h*.3,Math.cos(a)*d);o.rotation.set(r(),r(),r());o.scale.set(h*1.8,h,h*1.1);o.updateMatrix();rocks.setMatrixAt(i,o.matrix);}sc.add(rocks);}
+
     // a pessoa de referencia (1,75 m), que aparece no `compara`
     const pessoa = new T.Group();
-    { const add = (geo, cor, p, s) => { const m = new T.Mesh(geo, M(cor)); m.position.set(...p); m.scale.set(...s); pessoa.add(m); };
-      add(F.cilindro(), '#3E6FB0', [0, 1.15, 0], [0.42, 0.65, 0.26]); add(F.esfera(), '#F0C8A0', [0, 1.62, 0], [0.26, 0.28, 0.26]);
-      add(F.cilindro(), '#2D3A4F', [-0.11, 0.42, 0], [0.15, 0.84, 0.15]); add(F.cilindro(), '#2D3A4F', [0.11, 0.42, 0], [0.15, 0.84, 0.15]);
-      add(F.cilindro(), '#F0C8A0', [-0.27, 1.12, 0], [0.09, 0.62, 0.09]); add(F.cilindro(), '#F0C8A0', [0.27, 1.12, 0], [0.09, 0.62, 0.09]); }
+    { const add=(geo,cor,p,s)=>{const m=new T.Mesh(geo,M(cor));m.position.set(...p);m.scale.set(...s);pessoa.add(m);};
+      add(esferaAnimal,'#376b78',[0,1.17,0],[.46,.65,.28]);
+      add(esferaAnimal,'#d39b77',[0,1.61,0],[.25,.28,.25]);
+      add(esferaAnimal,'#302a26',[0,1.71,-.025],[.26,.09,.23]);
+      add(esferaAnimal,'#d39b77',[0,1.42,0],[.13,.16,.13]);
+      add(esferaAnimal,'#273a48',[0,.86,0],[.35,.22,.25]);
+      for(const side of [-1,1]){
+       add(cilindroAnimal,'#273a48',[side*.1,.47,0],[.16,.78,.17]);
+       add(esferaAnimal,'#252c30',[side*.1,.05,.07],[.19,.1,.32]);
+       add(cilindroAnimal,'#376b78',[side*.25,1.25,0],[.14,.3,.14]);
+       add(cilindroAnimal,'#d39b77',[side*.29,1.04,.025],[.1,.31,.1]);
+       add(esferaAnimal,'#d39b77',[side*.3,.86,.025],[.11,.15,.09]);
+      }
+    }
     sc.add(pessoa);
 
     const stats = (Array.isArray(spec.stats) ? spec.stats.slice(0, 8) : []).map((s) => ({
-      nome: String((s && s.nome) || '').toUpperCase().slice(0, 22), valor: num(s && s.valor, -1e9, 1e12, 0), unidade: String((s && s.unidade) || '').slice(0, 10),
+      nome: String((s && s.nome) || '').toUpperCase().slice(0, 22), valor: num(s && s.valor, -1e9, 1e12, 0), unidade: String((s && s.unidade) || '').slice(0, 40),
       humano: s && s.humano != null ? num(s.humano, -1e9, 1e12, null) : null,
     }));
     const statDe = (cn, i) => { if (typeof cn.stat === 'number') return stats[U.clamp(Math.round(cn.stat), 0, stats.length - 1)];
@@ -162,12 +246,13 @@ function animalV2Revelacao(s) {
       const textoV2 = animalV2Normal(cn.texto);
       const chaveV2 = /eye|pupil|vision|light/.test(textoV2) ? /eye|pupil|olho/ : /jaw|bite|bone|crush/.test(textoV2) ? /jaw|boca|mandibula/ : /lung|air|breath|energy|muscle/.test(textoV2) ? /belly|body|muscle|lung|corpo/ : /jaw|mouth|head|body|corpo/;
       const focoV2 = corpo.children.find(m=>chaveV2.test(m.userData.nome||'')) || corpo.children[0];
-      if(v2) corpo.children.forEach(m=>{if(m.userData.escalaBase)m.scale.set(...m.userData.escalaBase);});
+      corpo.children.forEach(m=>{if(m.userData.escalaBase)m.scale.set(...m.userData.escalaBase);});
       // pernas, cauda, asas e boca
       moveis.forEach((m) => { const u = m.userData; m.rotation.set(...u.giro);
         const vel = corre ? 11 : 2.2, amp = corre ? 0.55 : 0.08;
         if (u.tipo === 'perna') m.rotation.z += Math.sin(t * vel + u.fase) * amp;
         if (u.tipo === 'cauda') m.rotation.y += Math.sin(t * 3 + u.fase) * 0.35;
+        if(u.tipo==='tromba')m.rotation.z=Math.sin(t*.9)*.015;
         if (u.tipo === 'asa') m.rotation.x += Math.sin(t * (corre ? 14 : 4) + u.fase) * 0.5;
         if (u.tipo === 'boca') m.rotation.z += ataca ? -Math.max(0, Math.sin(Math.min(1, k * 1.6) * Math.PI)) * 0.6 : 0; });
       if(v2 && focoV2) {
@@ -182,7 +267,7 @@ function animalV2Revelacao(s) {
       if (ataca) x = Math.sin(U.clamp(k * 1.6, 0, 1) * Math.PI) * tamB.x * 0.35;
       bicho.position.set(x, y, 0); sombra.position.x=x;
       // o chao anda debaixo de quem corre (a textura desliza)
-      texChao.offset.x = corre ? -local * 0.9 : 0; texChao.repeat.set(400, 400);
+      texChao.offset.x = corre ? -local * 0.9 : 0; texChao.repeat.set(180, 180);
       // a pessoa entra de lado no `compara` (e fica nas cenas seguintes se a anterior comparou)
       const pessoaVis = comp || (i > 0 && spec.cenas[i - 1].acao === 'compara' && local < 0.4);
       pessoa.visible = pessoaVis; pessoa.position.set(-(tamB.x / 2 + 0.55), 0, 0.35); pessoa.rotation.y = 0.5;
@@ -195,25 +280,21 @@ function animalV2Revelacao(s) {
       cam.position.set(cx + Math.sin(ang) * dd, cy + dd * 0.22 + shake, Math.cos(ang) * dd); cam.near = dd / 500; cam.far = dd * 60; cam.updateProjectionMatrix();
       // mirar ABAIXO do animal o sobe na tela: o meio fica livre para o cartao e a legenda mora em 70%
       cam.lookAt(cx, cy * (acao === 'stat' || corre ? 0.05 : 0.4), 0);
-      if(v2) {
-        // Enquadrar pela caixa REAL da parte/animal; sem crop fixo e sem mínimo de 1 m.
-        bicho.updateMatrixWorld(true);
-        const box = new T.Box3().setFromObject(focoV2), size = new T.Vector3(), center = new T.Vector3();
-        if(comp)box.setFromObject(bicho).expandByObject(pessoa);
-        box.getSize(size); box.getCenter(center);
-        const extent = Math.max(size.x,size.y,size.z,.0001);
-        const dist = Math.max(extent/Math.tan(hfov/2),extent/Math.tan(cam.fov*Math.PI/360))*1.3;
-        const blend = i===0 ? U.clamp(local/2.5,0,1) : .18;
-        const todo = new T.Vector3(); caixaB.getCenter(todo);
-        if(!comp)center.lerp(todo,blend*.55);
-        // Ao sair de uma parte minúscula, ampliar também o volume enquadrado.
-        const extentZoom = comp ? extent : extent*(1-blend*.55)+Math.max(tamB.x,tamB.y,tamB.z)*blend*.55;
-        const dv = dist*(extentZoom/extent);
-        cam.position.set(center.x+Math.sin(ang)*dv,center.y+dv*.18,center.z+Math.cos(ang)*dv);
-        cam.near=Math.max(.000001,dv/500);cam.far=Math.max(300,dv*60);cam.updateProjectionMatrix();
-        // A peça fica acima da ficha, em ~28% da altura; mirar no centro a escondia atrás do cartão.
-        cam.lookAt(center.x,center.y-dv*.14,center.z);
-      }
+      // T464: caixa animada inteira dentro do assunto (90..875, 350..1000).
+      // Ajuste por projeção inclui profundidade, humano e zoom do diretor.
+      bicho.updateMatrixWorld(true);pessoa.updateMatrixWorld(true);
+      const box=new T.Box3().setFromObject(bicho);if(comp)box.expandByObject(pessoa);
+      const center=box.getCenter(new T.Vector3()),size=box.getSize(new T.Vector3());
+      const theta=.36+Math.sin(t*.19)*.13+(acao==='mostra'?.12*Math.sin(local*.3):0);
+      const zoom=Number(cn.plano?.zoom)||1;cam.zoom=U.clamp(zoom,.75,1.35);
+      // Descentrar o sujeito para a esquerda e acima da ficha, sem recorte 2D.
+      cam.setViewOffset(W,H,W*.055,H*.148,W,H);
+      const corners=[];for(const xx of [box.min.x,box.max.x])for(const yy of [box.min.y,box.max.y])for(const zz of [box.min.z,box.max.z])corners.push(new T.Vector3(xx,yy,zz));
+      let lo=Math.max(size.x,size.y,size.z)*.5,hi=Math.max(size.x,size.y,size.z)*15;
+      const pose=dd=>{cam.position.set(center.x+Math.sin(theta)*dd,center.y+dd*.12,center.z+Math.cos(theta)*dd);cam.near=Math.max(1e-6,dd/500);cam.far=Math.max(300,dd*100);cam.lookAt(center);cam.updateProjectionMatrix();cam.updateMatrixWorld(true);};
+      for(let j=0;j<18;j++){const dd=(lo+hi)/2;pose(dd);const pts=corners.map(v=>v.clone().project(cam));
+       const fit=pts.every(v=>v.z<1&&v.x>=-0.82&&v.x<=.62&&v.y>=-.04&&v.y<=.64);if(fit)hi=dd;else lo=dd;}
+      pose(hi*1.015);
       U3.render(R, sc, cam, spec, t); c.drawImage(gl, 0, 0, W, H);
       return { cn, i, k, local, acao };
     }
@@ -227,25 +308,25 @@ function animalV2Revelacao(s) {
       const humanoV2 = v2 ? animalV2PrimeiraMarca(st,'humano',t) : null;
       const marcoV2 = v2 ? Math.min(...[valorV2,humanoV2].filter(x=>x!==null)) : null;
       if(v2 && (!Number.isFinite(marcoV2) || t<marcoV2))return;
-      const ent = U.mola(v2 ? t-marcoV2 : local - 0.1, 10); if (ent <= 0) return;
+      const ent = Math.min(1,U.mola(v2 ? t-marcoV2 : local - 0.1, 10)); if (ent <= 0) return;
       const q = v2 ? animalV2Progresso(t,valorV2) : U.suave(U.clamp((local - 0.25) / 1.1, 0, 1));
-      const x0 = 70, w = W - 140, y0 = H * 0.42, h = v2 ? 360 : 400;
+      const x0 = 70, w = W * .74, y0 = H * .52, h = 300;
       c.save(); c.translate(W / 2, y0 + h / 2); c.scale(ent, ent); c.translate(-W / 2, -(y0 + h / 2));
       U.rr(c, x0, y0, w, h, 34); c.fillStyle = 'rgba(24,20,14,0.86)'; c.fill(); c.lineWidth = 6; c.strokeStyle = '#F6C445'; c.stroke();
-      c.textBaseline = 'middle'; c.textAlign = 'left'; { let fr = v2 ? 40 : 44; c.font = fr + 'px "Lilita One", sans-serif'; while (c.measureText(st.nome).width > w - 80 && fr > 24) c.font = (--fr) + 'px "Lilita One", sans-serif'; } c.fillStyle = '#F6C445'; c.fillText(st.nome, x0 + 40, y0 + (v2 ? 36 : 48));
+      c.textBaseline = 'middle'; c.textAlign = 'left'; { let fr = v2 ? 40 : 44; c.font = fr + 'px "Lilita One", sans-serif'; while (c.measureText(st.nome).width > w - 80 && fr > 24) c.font = (--fr) + 'px "Lilita One", sans-serif'; } c.fillStyle = '#F6C445'; c.fillText(st.nome, x0 + 40, y0 + 30);
       c.textAlign = 'right'; c.font = '96px "Lilita One", sans-serif'; c.fillStyle = '#FFFFFF'; const numeroV2=(v2 && (valorV2===null || t<valorV2) ? '—' : fmt(st.valor*q))+(st.unidade?' '+st.unidade.toUpperCase():'');
       // v2 05/11: rótulo e número em linhas próprias (antes "TIME WITHOUT WA" colidia com "1,460 DAYS")
       {let fonte=v2?68:92;c.font=fonte+'px "Lilita One", sans-serif';while(c.measureText(numeroV2).width>w-80&&fonte>26)c.font=(--fonte)+'px "Lilita One", sans-serif';}
-      c.fillText(numeroV2, x0+w-40,y0+(v2 ? 106 : 124));
+      c.fillText(numeroV2, x0+w-40,y0+90);
       if (st.humano != null && st.valor > 0) {
-        const mx = Math.max(st.valor, st.humano, 1e-9), bw = w - 260, by = y0 + (v2 ? 150 : 196);
+        const mx = Math.max(st.valor, st.humano, 1e-9), bw = w - 260, by = y0 + 130;
         const nomeA = v2 && t<revelacaoV2 ? '???' : String((spec.animal || {}).nome || 'ANIMAL').toUpperCase().slice(0, 9);
         [[nomeA, st.valor, '#F6C445'], ['HUMAN', st.humano, '#9AA7B8']].forEach(([n, v, cor], j) => {
-          const yy = by + j * 82;
+          const yy = by + j * 74;
           const qBarra = v2 ? animalV2Progresso(t,animalV2PrimeiraMarca(st,j===0?'valor':'humano',t)) : q; c.textAlign = 'left'; c.font = '40px "Lilita One", sans-serif'; c.fillStyle = cor; c.fillText(n, x0 + 40, yy + 26);
           U.rr(c, x0 + 220, yy, bw, 52, 14); c.fillStyle = 'rgba(255,255,255,0.12)'; c.fill();
           U.rr(c, x0 + 220, yy, Math.max(v2 ? 0 : 14, bw * (v / mx) * qBarra), 52, 14); c.fillStyle = cor; c.fill();
-          if(v2 && qBarra>0) {c.textAlign='right';c.font='32px "Lilita One", sans-serif';c.fillStyle='#FFFFFF';c.fillText(fmt(v*qBarra)+(st.unidade?' '+st.unidade.toUpperCase():''),x0+w-40,yy+26);}
+          if(v2 && qBarra>0) {c.textAlign='right';c.font='26px "Lilita One", sans-serif';c.fillStyle='#FFFFFF';c.fillText(fmt(v*qBarra),x0+w-40,yy+26);}
         });
         const vezes = st.humano > 0 ? st.valor / st.humano : 0;
         if (!v2 && vezes >= 1.5 && q > 0.9) { const s = U.mola(local - 1.35, 12); c.save(); c.translate(x0 + w - 120, y0 + h - 4); c.rotate(-0.08); c.scale(s, s);
@@ -270,7 +351,7 @@ function animalV2Revelacao(s) {
     function etiquetaAltura(acao, local) {
       if (acao !== 'compara' || local < 0.5) return;
       const v = tamReal, txt = (v >= 1 ? v.toLocaleString('en-US', { maximumFractionDigits: 1 }) + ' M' : Math.round(v * 100) + ' CM') + '  vs  1.75 M';
-      const s = U.mola(local - 0.5, 10); c.save(); c.translate(W / 2, H * 0.6); c.scale(s, s); c.font = '70px "Lilita One", sans-serif'; c.textAlign = 'center'; c.textBaseline = 'middle';
+      const s = U.mola(local - 0.5, 10); c.save(); c.translate(W * .43, H * 0.60); c.scale(s, s); c.font = '52px "Lilita One", sans-serif'; c.textAlign = 'center'; c.textBaseline = 'middle';
       const w = c.measureText(txt).width + 60; U.rr(c, -w / 2, -54, w, 108, 26); c.fillStyle = '#1B1B1B'; c.fill(); c.fillStyle = '#F6C445'; c.fillText(txt, 0, 4); c.restore();
     }
 
@@ -286,9 +367,12 @@ function animalV2Revelacao(s) {
       }
       if (acao === 'corre') { if(v2)cartao(statDe(cn,i),local,t,cn);else velocimetro(statDe(cn, i), local); }
       if(!v2) etiquetaAltura(acao, local);
-      if ((!v2 || (t>=3 && i>=2)) && cn.hud && typeof cn.hud !== 'object' && acao !== 'stat' && local > 0.3) { const s = U.mola(local - 0.3, 10); c.save(); c.translate(W / 2, 330); c.scale(s, s);
-        c.font = '120px "Lilita One", sans-serif'; c.textAlign = 'center'; c.textBaseline = 'middle'; const txt = U.hud(c, cn.hud, c.canvas.width * 0.84 - 70, 22), w = c.measureText(txt).width + 70;
-        U.rr(c, -w / 2, -78, w, 156, 34); c.fillStyle = '#1B1B1B'; c.fill(); c.fillStyle = '#F6C445'; c.fillText(txt, 0, 6); c.restore(); }
+      if ((!v2 || (t>=3 && i>=2)) && cn.hud && typeof cn.hud!=='object' && acao!=='stat' && local>.3) {
+        c.save();c.font='52px "Lilita One", sans-serif';c.textAlign='center';c.textBaseline='middle';
+        const txt=String(cn.hud).toUpperCase(),layout=U.textoAjustado(c,txt,W*.70,130,28),h=layout.linhas.length*layout.lh+34;
+        U.rr(c,65,190,W*.74,h,22);c.fillStyle='rgba(20,34,33,.93)';c.fill();c.fillStyle='#f4d58a';
+        layout.linhas.forEach((l,j)=>c.fillText(l,W*.43,207+layout.lh*(j+.5)));c.restore();
+      }
       U.cartaz(c, v2 ? {...spec,titulo:animalV2Titulo(spec,t,revelacaoV2)} : spec, t, { fonte: '84px "Lilita One", sans-serif', y: 150, fundo: '#F6C445', borda: '#1B1B1B', cor: '#1B1B1B', altura_linha: 100, dur: 3.0 });
       U.legenda(c, spec, t, { fonte: '100px "Lilita One", sans-serif', y: H * 0.70, cor: '#FFFFFF', cor_ativa: '#F6C445', contorno: 18, caixa: true, por_vez: 3 });
     }
