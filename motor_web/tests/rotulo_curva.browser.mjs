@@ -9,7 +9,7 @@ try{
   const Scene=THREE.Scene,Camera=THREE.PerspectiveCamera,arc=CanvasRenderingContext2D.prototype.arc;
   THREE.Scene=function(...args){const sc=new Scene(...args);window._sceneTeste=sc;return sc;};THREE.Scene.prototype=Scene.prototype;
   THREE.PerspectiveCamera=function(...args){const cam=new Camera(...args);window._camTeste=cam;return cam;};THREE.PerspectiveCamera.prototype=Camera.prototype;
-  window._dots=[];CanvasRenderingContext2D.prototype.arc=function(x,y,r,...args){if(this.canvas.id==='tela'&&r===7)_dots.push([x,y]);return arc.call(this,x,y,r,...args);};
+  window._dots=[];CanvasRenderingContext2D.prototype.arc=function(x,y,r,...args){if(this.canvas.id==='tela'&&(r===7||r===11))_dots.push([x,y]);return arc.call(this,x,y,r,...args);};
  });
  const spec=fixture('mecanismo');spec.modelo.partes=[{nome:'cano',forma:'tubo',pos:[0,1,0],tam:[1,1,1],pivo:[0,.2,0],caminho:[[0,0,0],[.6,.2,0],[.7,1,0]],raio:.05,cor:'#C88752',material:'metal'}];
  spec.cenas=[{ini:0,fim:8,acao:'mostra',camera:'frente',rotulos:[{parte:'cano',texto:'Cano'}]}];
