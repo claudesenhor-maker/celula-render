@@ -118,8 +118,12 @@
     const vfov = (cam.fov * Math.PI) / 180;
     // a camera recua o que a LARGURA ou a ALTURA pedir (a que for maior), com
     // folga para os rotulos da esquerda; nunca mais longe que a esfera antiga
+    // T503: lh e' a DIAGONAL do chao (pior caso de giro); objeto redondo/quadrado ficava com ~55% da largura. 12% mais perto.
+    const ZOOM503 = 0.80;
     const distPara = (E) => Math.min((E.r / Math.sin(hfov / 2)) * 1.02,
-      Math.max(E.lh / Math.tan(hfov / 2) * 1.35, E.ah / Math.tan(vfov / 2) * 1.6) + E.lh);
+      Math.max(E.lh / Math.tan(hfov / 2) * 1.15, E.ah / Math.tan(vfov / 2) * 1.6) + E.lh) * ZOOM503;
+    // T503: a faixa livre do quadro fica entre o cartaz (topo) e a legenda (70%): o objeto sobe 4,5% para o centro dela
+    cam.setViewOffset(gl.width, gl.height, 0, Math.round(gl.height * 0.07), gl.width, gl.height);
     sc.userData.sombra.scale.set(tamObj.x * esc * 1.6 + 1, tamObj.z * esc * 1.6 + 1, 1);
     const tamCena = Math.max(E0.r, E1.r) * 2;
     if (window.U3) { const amb = U3.ambiente(T, sc, AMB, tamCena, String(spec.fila_id || spec.titulo || 'm').length * 7919);
@@ -167,7 +171,7 @@
     }
     function corteEm(i, k) {
       let v = 0; for (let j = 0; j < i; j++) { if (cenas[j].acao === 'corte') v = 1; if (cenas[j].acao === 'monta' || cenas[j].acao === 'mostra') v = 0; }
-      if (cenas[i].acao === 'corte') v = U.lerp(v, 1, U.suave(k * 2)); if (cenas[i].acao === 'monta' || cenas[i].acao === 'mostra') v = U.lerp(v, 0, U.suave(k * 2));
+      if (cenas[i].acao === 'corte') v = U.lerp(v, 1, U.suave(k * (i === 0 ? 3.2 : 2))); if (cenas[i].acao === 'monta' || cenas[i].acao === 'mostra') v = U.lerp(v, 0, U.suave(k * 2));
       return v;
     }
 
@@ -237,7 +241,12 @@
     }
 
     // ---- 2D: rotulos com linha ate a peca, numero da frase, legenda
-    function rotulos(cn, k, local) {
+    // T503: enquanto o cartaz do titulo esta' na tela (3 s) o rotulo desce para baixo dele; antes ficava ESCONDIDO atras do cartao
+    let baseCartaz = 0;
+    if (spec.titulo) { try { c.save(); c.font = '84px "Lilita One", sans-serif'; const ly = U.textoAjustado(c, String(spec.titulo), U.areaSegura(spec).w - 100, 280, 32);
+      baseCartaz = 170 + ly.linhas.length * Math.min(100, ly.lh) + 60 + 44; c.restore(); } catch (e) { baseCartaz = 480; } }
+    function rotulos(cn, k, local, t) {
+      const topo0 = U.lerp(Math.max(H * .18, baseCartaz), H * .18, U.suave(U.clamp(((t == null ? 9 : t) - 3.0) / 0.4, 0, 1)));
       const lst = Array.isArray(cn.rotulos) ? cn.rotulos.slice(0, 4) : [];
       lst.forEach((r, j) => {
         const m = pecas[String(r.parte || '').toLowerCase()]; if (!m || !r.texto) return;
@@ -253,14 +262,14 @@
         if(wp.z < -1 || wp.z > 1 || px < 0 || px > W || py < 0 || py > H) return;
         c.save();
         const txt = String(r.texto).toUpperCase().slice(0, 48), bx = 42, maxW = W * .78;
-        let fonte=42; c.font = fonte+'px "Lilita One", sans-serif';
-        while(fonte>28 && c.measureText(txt).width>maxW-36){fonte-=2;c.font=fonte+'px "Lilita One", sans-serif';}
+        let fonte=56; c.font = fonte+'px "Lilita One", sans-serif';
+        while(fonte>38 && c.measureText(txt).width>maxW-36){fonte-=2;c.font=fonte+'px "Lilita One", sans-serif';}
         const linhas=U.linhas(c,txt,maxW-36), w=Math.min(maxW,Math.max(...linhas.map(l=>c.measureText(l).width))+36);
-        const h=linhas.length*(fonte+8)+24, topo=H*.18+j*136, ey=topo+h/2, lx=bx+w;
-        c.globalAlpha=q;c.strokeStyle='#FFD23F';c.lineWidth=3;
+        const h=linhas.length*(fonte+8)+24, topo=topo0+j*150, ey=topo+h/2, lx=bx+w;
+        c.globalAlpha=q;c.strokeStyle='#FFD23F';c.lineWidth=5;
         c.beginPath();c.moveTo(lx,ey);c.lineTo(lx+22,ey);c.lineTo(lx+22+(px-lx-22)*q,ey+(py-ey)*q);c.stroke();
-        if(q>.95){c.fillStyle='#FFD23F';c.beginPath();c.arc(px,py,7,0,Math.PI*2);c.fill();}
-        U.rr(c,bx,topo,w,h,12);c.fillStyle='#10243F';c.fill();c.lineWidth=2;c.strokeStyle='#FFD23F';c.stroke();
+        if(q>.95){c.fillStyle='#FFD23F';c.beginPath();c.arc(px,py,11,0,Math.PI*2);c.fill();}
+        U.rr(c,bx,topo,w,h,14);c.fillStyle='#10243F';c.fill();c.lineWidth=3;c.strokeStyle='#FFD23F';c.stroke();
         c.fillStyle='#FFF6DB';c.textAlign='left';c.textBaseline='middle';
         linhas.forEach((l,n)=>c.fillText(l,bx+18,topo+12+(n+.5)*(fonte+8)));c.restore();
       });
@@ -296,7 +305,7 @@
       const { cn, i, k, local } = pose(t);
       U3.render(R, sc, cam, spec, t); c.imageSmoothingQuality = 'high'; c.drawImage(gl, 0, 0, W, H);
       if (i > 0 && local < 0.12) { c.fillStyle = 'rgba(255,255,255,' + (0.35 * (1 - local / 0.12)).toFixed(2) + ')'; c.fillRect(0, 0, W, H); }
-      if (!piloto454 || t >= 3.0) { rotulos(cn, k, local); numero(cn, local); }
+      if (!piloto454 || t >= 3.0) { rotulos(cn, k, local, t); numero(cn, local); }
       referencia454(cn);
       U.cartaz(c, spec, t, { fonte: '84px "Lilita One", sans-serif', y: 170, fundo: '#FFFFFF', borda: '#10243F', cor: '#10243F', altura_linha: 100, dur: 3.0 });
       c.save();
