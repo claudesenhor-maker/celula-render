@@ -591,7 +591,9 @@ def avisar(payload):
 def main():
     t0 = time.time()
     spec_json = os.environ.get("SPEC_JSON")
-    if spec_json:
+    # 13/11: no disparo manual (workflow_dispatch) o render.yml passa SPEC_JSON = "null" (toJSON de payload vazio);
+    # isso era lido como spec e o job quebrava antes de baixar o SPEC_URL -- o render de teste nunca funcionou.
+    if spec_json and spec_json.strip() not in ("null", ""):
         spec = json.loads(spec_json)
     else:
         spec = requests.get(os.environ["SPEC_URL"], timeout=60).json()
