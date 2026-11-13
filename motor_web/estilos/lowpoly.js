@@ -132,6 +132,11 @@
     const R = new T.WebGLRenderer({ canvas: gl, antialias: true, preserveDrawingBuffer: true });
     R.setSize(W, H, false);
     const cam = new T.PerspectiveCamera(38, W / H, 0.1, 400);
+    // T503 (12/11): a faixa util do quadro fica entre o cartaz (topo) e a legenda (70%); o fundo era ~30% de grama vazia.
+    // A cena sobe 6% e a camera chega 10% mais perto (so no mundo plano; o globo ja cabe).
+    // Enquanto o cartaz do titulo esta na tela (3 s) a cena fica 2% mais BAIXA (a cabeca do protagonista nao entra no cartaz);
+    // depois sobe 6%. Aplicado por quadro em pose3D.
+    const ZOOM503 = 0.9;
 
     // ---------------------------------------------------------- utilitarios
     const caixas = new Map();
@@ -638,8 +643,10 @@
     function pose3D(o, cn, t, k, local) {
       const acao = o.acao, D = Math.max(0.01, cn.fim - cn.ini);
       // ---- camera
+      const vo503 = U.lerp(-0.02, 0.06, U.suave(U.clamp((t - 3.0) / 0.5, 0, 1)));
+      cam.setViewOffset(W, H, 0, Math.round(H * vo503), W, H);
       const cam0 = cn.camera || (o.globo ? 'orbita' : 'orbita');
-      let ang = 0.5 * Math.sin(t * 0.21) + k * 0.55, dist = o.globo ? 15.5 : 21, alt = o.globo ? 2 : 9.5, alvoY = o.globo ? 0 : 1.6;
+      let ang = 0.5 * Math.sin(t * 0.21) + k * 0.55, dist = o.globo ? 15.5 : 21 * ZOOM503, alt = o.globo ? 2 : 9.5 * ZOOM503, alvoY = o.globo ? 0 : 1.6;
       if (cam0 === 'orbita') ang += k * 0.9;
       if (cam0 === 'zoom_in') dist *= U.lerp(1.12, 0.62, U.suave(k));
       if (cam0 === 'zoom_out') dist *= U.lerp(0.62, 1.1, U.suave(k));
