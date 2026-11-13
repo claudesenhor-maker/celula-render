@@ -54,7 +54,8 @@
       switch (nome) {
         case 'pessoa': {
           // unidade: altura = 1 (capsula base: 0,6 de largura x 1 de altura)
-          const pele = '#E8B996', roupa = cor || '#E46A86';
+          // v3: a cor do item vinha cor de pele e a pessoa parecia sem camisa -- roupa sempre de roupa
+          const pele = '#E8B996', roupa = '#3E7CB1';
           add('cilindro', '#2F3C55', [-0.045, 0.24, 0], [0.075, 0.44, 0.075], null, 'tecido'); add('cilindro', '#2F3C55', [0.045, 0.24, 0], [0.075, 0.44, 0.075], null, 'tecido');
           add('caixa', '#1E1E22', [-0.045, 0.016, 0.02], [0.08, 0.032, 0.12], null, 'borracha'); add('caixa', '#1E1E22', [0.045, 0.016, 0.02], [0.08, 0.032, 0.12], null, 'borracha');
           add('capsula', roupa, [0, 0.64, 0], [0.42, 0.38, 0.32], null, 'tecido');
@@ -88,9 +89,16 @@
           add('caixa', cor || '#D23A3A', [0, 0.16, 0], [1, 0.18, 0.42], null, 'metal'); add('caixa', cor || '#D23A3A', [-0.05, 0.3, 0], [0.55, 0.16, 0.38], null, 'metal');
           add('caixa', '#24313E', [-0.05, 0.31, 0], [0.5, 0.12, 0.39], null, 'vidro');
           [[-0.32, 0.21], [0.32, 0.21], [-0.32, -0.21], [0.32, -0.21]].forEach(([x, z]) => { add('cilindro', '#1B1B1E', [x, 0.08, z], [0.16, 0.06, 0.16], [90, 0, 0], 'borracha'); add('cilindro', '#B9C0C7', [x, 0.08, z * 1.08], [0.08, 0.02, 0.08], [90, 0, 0], 'cromado'); }); break;
-        case 'onibus':
-          add('caixa', cor || '#F2B705', [0, 0.17, 0], [1, 0.26, 0.24], null, 'metal'); add('caixa', '#2C3A48', [0.02, 0.21, 0], [0.9, 0.08, 0.245], null, 'vidro');
-          [-0.35, 0.33].forEach((x) => [0.12, -0.12].forEach((z) => add('cilindro', '#1B1B1E', [x, 0.045, z], [0.09, 0.04, 0.09], [90, 0, 0], 'borracha'))); break;
+        case 'onibus': {   // v3 (13/11): era uma caixa amarela com 2 rodas; agora janelas, porta, para-brisa, faixa, 6 rodas
+          const cb = cor || '#F2B705';
+          add('caixa', cb, [0, 0.19, 0], [1, 0.27, 0.22], null, 'metal'); add('caixa', '#FFFFFF', [0, 0.335, 0], [0.98, 0.02, 0.21], null, 'metal');
+          for (let k = 0; k < 7; k++) add('caixa', '#2C3A48', [-0.36 + k * 0.105, 0.24, 0.111], [0.085, 0.085, 0.004], null, 'vidro');
+          add('caixa', '#2C3A48', [0.497, 0.22, 0], [0.006, 0.13, 0.19], null, 'vidro');
+          add('caixa', '#2C3A48', [0.42, 0.17, 0.111], [0.06, 0.17, 0.004], null, 'vidro');
+          add('caixa', '#1B1B1E', [0, 0.11, 0.111], [1, 0.012, 0.003], null, 'metal');
+          add('caixa', '#FFE9A8', [0.5, 0.1, 0.07], [0.006, 0.025, 0.04], null, 'vidro'); add('caixa', '#FFE9A8', [0.5, 0.1, -0.07], [0.006, 0.025, 0.04], null, 'vidro');
+          [-0.38, -0.26, 0.34].forEach((x) => [0.112, -0.112].forEach((z) => { add('cilindro', '#1B1B1E', [x, 0.05, z], [0.1, 0.035, 0.1], [90, 0, 0], 'borracha'); add('cilindro', '#B9C0C7', [x, 0.05, z * 1.06], [0.05, 0.01, 0.05], [90, 0, 0], 'cromado'); }));
+          break; }
         case 'aviao':
           add('capsula', cor || '#F2F4F7', [0, 0.12, 0], [0.14, 1.6, 0.14], [0, 0, 90], 'metal'); add('lamina', cor || '#E1E5EA', [0.02, 0.1, 0], [0.18, 1, 1], null, 'metal');
           add('lamina', cor || '#E1E5EA', [0.44, 0.12, 0], [0.08, 0.5, 0.36], null, 'metal'); add('lamina', '#2F6FC4', [0.45, 0.2, 0], [0.14, 1, 0.18], [90, 0, 0], 'metal');
@@ -104,6 +112,11 @@
           add('cilindro', '#2B2B2B', [0, 0.32, 0], [0.122, 0.02, 0.122], null, 'metal');
           [0, 120, 240].forEach((a) => add('lamina', '#B33A2F', [Math.sin((a * Math.PI) / 180) * 0.07, 0.12, Math.cos((a * Math.PI) / 180) * 0.07], [0.12, 0.18, 0.03], [0, a, 0], 'metal'));
           add('cone', '#5A5F66', [0, 0.06, 0], [0.09, 0.08, 0.09], [180, 0, 0], 'aco'); break;
+        case 'disco': {   // v3: espelho de telescopio, prato, moeda, roda -- disco EM PE de frente para a camera
+          add('cilindro', '#DCE6F0', [0, 0.5, 0], [1, 0.05, 1], [90, 0, 0], 'cromado');
+          add('toro', '#AAB4BF', [0, 0.5, 0.0], [1.22, 1.22, 0.25], null, 'aco');
+          add('cilindro', '#59616B', [0, 0.5, 0.03], [0.1, 0.06, 0.1], [90, 0, 0], 'metal');
+          add('caixa', '#3A4250', [0, 0.02, 0], [0.5, 0.04, 0.2], null, 'metal'); break; }
         case 'esfera': add('esfera', cor || '#5DAA5A', [0, 0.5, 0], [1, 1, 1], null, 'pedra'); break;
         case 'cubo': add('caixa', cor || '#E2574C', [0, 0.5, 0], [1, 1, 1]); break;
         case 'cone': add('cone', cor || '#F2B705', [0, 0.5, 0], [0.8, 1, 0.8]); break;
@@ -111,16 +124,27 @@
       }
       return g;
     }
+    // v3 (13/11): o roteiro descreve o onibus em 2 caixas e o motor tem um modelo pronto bem melhor -- o NOME decide.
+    const PELO_NOME = [[/autob[uú]s|\bbus(es)?\b|[oô]nibus/i, 'onibus'], [/\bpersona|\bperson\b|pessoa|humano|human\b/i, 'pessoa'],
+      [/\bcoche|\bcarro|\bcar\b|\bauto\b/i, 'carro'], [/avi[oó]n|avi[aã]o|airplane|\bplane\b|jet\b/i, 'aviao'], [/\bbarco|navio|\bship\b|buque|crucero/i, 'navio'],
+      [/cohete|foguete|rocket/i, 'foguete'], [/espejo|espelho|mirror|\bdisco\b|\bdisc\b|\bplato\b|\bprato\b|moneda|moeda|\bcoin\b/i, 'disco'], [/edificio|pr[eé]dio|building|rascacielos|skyscraper/i, 'predio'], [/[aá]rbol|[aá]rvore|\btree\b/i, 'arvore'], [/\bcasa\b|\bhouse\b/i, 'casa']];
+    const modeloPeloNome = (n) => { for (const [re, m] of PELO_NOME) if (re.test(String(n || ''))) return m; return null; };
     const itens = (Array.isArray(spec.itens) ? spec.itens.slice(0, 12) : []).map((it, i) => {
       const tam = num(it.tamanho_m != null ? it.tamanho_m : it.altura_m, 0.001, 2e7, 1), cor = corOk(it.cor, null);
       let g;
-      if (Array.isArray(it.partes) && it.partes.length) {
+      const pronto = it.modelo ? null : modeloPeloNome(it.nome);
+      if (pronto) g = pecaPronta(pronto, cor);
+      else if (Array.isArray(it.partes) && it.partes.length) {
         g = new T.Group();
         it.partes.slice(0, 24).forEach((p) => { const m = new T.Mesh((F[p.forma] || F.caixa)(), M(corOk(p.cor, cor || '#B8C4D0'), p.material));
           m.position.set(...vet(p.pos, -5, 5, [0, 0.5, 0])); m.scale.set(...vet(p.tam, 0.001, 5, [1, 1, 1])); m.rotation.set(...vet(p.giro, -360, 360, [0, 0, 0]).map((a) => (a * Math.PI) / 180)); g.add(m); });
       } else g = pecaPronta(String(it.modelo || 'cilindro'), cor);
       // normaliza: a MAIOR dimensao vira `tamanho_m` (a baleia mede 30 m de
       // comprimento, nao de altura; a torre, 330 m de altura)
+      // v3 (13/11): item CHATO (folha, espelho, pista, pegada) deitado no chao vira uma linha invisivel -- a comparacao
+      // do titulo some. Ele fica EM PE, inclinado para a camera, como uma placa: a area aparece.
+      const b0 = new T.Box3().setFromObject(g), dx0 = b0.max.x - b0.min.x, dy0 = b0.max.y - b0.min.y, dz0 = b0.max.z - b0.min.z;
+      if (dy0 < 0.2 * Math.max(dx0, dz0) && dz0 > 0.3 * dx0) { const pe = new T.Group(); pe.add(g); g.rotation.x = Math.PI / 2 * 0.88; g = pe; g.userData.emPe = true; }
       const b = new T.Box3().setFromObject(g), maior = Math.max(1e-6, b.max.y - b.min.y, b.max.x - b.min.x);
       g.scale.multiplyScalar(tam / maior); g.position.y = -b.min.y * (tam / maior);
       const b2 = new T.Box3().setFromObject(g), alt = Math.max(1e-6, b2.max.y - b2.min.y), larg = Math.max(alt * 0.2, b2.max.x - b2.min.x);
@@ -133,8 +157,11 @@
     const chaoTam = Math.max(10, x * 4 + (itens.length ? itens[itens.length - 1].alt * 20 : 10));
     // CHAO QUE ACOMPANHA O ZOOM (23/10): o disco tem 60x a distancia da camera
     // e a grama repete na mesma proporcao -- de perto parece grama, de longe campo
-    const chao = new T.Mesh(new T.CircleGeometry(1, 64), T3 ? new T.MeshLambertMaterial({ map: U3.textura(T, 'grama', 13, 120) }) : new T.MeshStandardMaterial({ color: '#8DB36B', roughness: 1 }));
+    // v3: a grama texturizada virava um borrao verde em metade do quadro; chao liso + GRADE DE MEDIDA (a grade
+    // acompanha o zoom: as linhas mantem o espacamento na tela e dao a escala ao olho)
+    const chao = new T.Mesh(new T.CircleGeometry(1, 64), new T.MeshBasicMaterial({ color: '#86B36A', fog: false }));
     chao.rotation.x = -Math.PI / 2; chao.position.x = x / 2; chao.scale.setScalar(chaoTam); chao.receiveShadow = true; sc.add(chao);
+    const grade = new T.GridHelper(1, 40, '#4E7A3C', '#557F42'); grade.position.y = 0.0005; grade.material.transparent = true; grade.material.opacity = 0.75; sc.add(grade);
 
     const idxAlvo = (cn, i) => {
       if (typeof cn.alvo === 'number') return U.clamp(Math.round(cn.alvo), 0, Math.max(0, itens.length - 1));
@@ -144,10 +171,13 @@
     // o enquadramento que mostra os itens 0..a inteiros: centro e distancia
     function quadroDe(a) {
       if (!itens.length) return { cx: 0, cy: 1, d: 6 };
-      const it = itens[a], x0 = Math.max(itens[0].x - itens[0].larg, it.x - Math.max(it.alt * 1.2, it.larg * 0.65)), x1 = it.x + it.larg * 0.65;
+      const it = itens[a]; let x0 = Math.max(itens[0].x - itens[0].larg, it.x - Math.max(it.alt * 1.2, it.larg * 0.65)); const x1 = it.x + it.larg * 0.65;
+      // v3: a comparacao do titulo precisa dos DOIS no quadro -- o item anterior entra sempre
+      if (a > 0) x0 = Math.min(x0, itens[a - 1].x - itens[a - 1].larg * 0.95);
       const hfov = 2 * Math.atan(Math.tan((cam.fov * Math.PI) / 360) * cam.aspect), vfov = (cam.fov * Math.PI) / 180;
       // v2 05/11: margens mais justas -- o item da vez ocupa o quadro (antes ~25% da altura)
-      const h = it.alt * 1.3, w = x1 - x0, d = Math.max((w / 2) / Math.tan(hfov / 2) * 0.98, (h / 2) / Math.tan(vfov / 2) * 1.05);
+      // v3: o item ocupa ~55% da altura util (antes 1,3x de folga + metade de baixo do quadro vazia)
+      const h = it.alt * 1.15, w = x1 - x0, d = Math.max((w / 2) / Math.tan(hfov / 2) * 0.95, (h / 2) / Math.tan(vfov / 2) * 0.98);
       return { cx: (x0 + x1) / 2, cy: it.alt * 0.5, d };
     }
     // interpola em LOG (a distancia muda por ordens de grandeza)
@@ -161,7 +191,7 @@
       // na faixa livre entre ele e a legenda -- antes o cartaz cobria a cabeca da
       // pessoa e a etiqueta "PERSON 1.7 m". Depois a camera volta ao normal.
       const wT = spec.titulo ? 1 - U.suave(U.clamp((t - 3.0) / 0.8, 0, 1)) : 0;
-      let miraY = cy * 0.62;
+      let miraY = cy * 0.82;   // v3: mira mais perto do centro do item -- ele desce para o meio do quadro
       if (wT > 0 && itens[a]) {
         const vt = Math.tan((cam.fov * Math.PI) / 360), faixa = 640 / H;
         const dT = Math.max(d, itens[a].alt / (2 * vt * faixa));
@@ -181,7 +211,8 @@
       cam.position.set(cx + Math.sin(ang) * d * Math.cos(elev), cy * 0.55 + d * Math.sin(elev), Math.cos(ang) * d * Math.cos(elev)); cam.near = d / 5000; cam.far = d * 400; cam.updateProjectionMatrix();
       if (T3) {
         chao.position.set(cx, 0, 0); chao.scale.setScalar(d * 60);
-        nevoa.near=d*6;nevoa.far=d*45;
+        grade.position.set(cx, d * 0.0004, 0); grade.scale.setScalar(d * 6);
+        nevoa.near=d*25;nevoa.far=d*160;   // v3: a nevoa a 6x lavava o chao de branco
         sol.position.set(cx + d * 0.7, d * 1.4, d * 1.1); sol.target.position.set(cx, 0, 0);
         const sh = sol.shadow.camera; sh.left = sh.bottom = -d * 1.2; sh.right = sh.top = d * 1.2; sh.near = d * 0.05; sh.far = d * 5; sh.updateProjectionMatrix();
       }
@@ -203,7 +234,8 @@
         const destaque = j === a, ent = destaque ? U.mola(local - 0.15, 10) : 1;
         c.save();
         c.font = (destaque ? '64px' : '42px') + ' "Lilita One", sans-serif';
-        const l1 = it.nome.toUpperCase(), w1 = Math.min(W - 40, Math.max(c.measureText(l1).width, c.measureText(real).width) + 40), hh = destaque ? 150 : 104;
+        // v3: "AUTOBÚS DE 12 METROS / 12 m" repetia a medida -- se o nome ja traz numero, fica so o nome
+        const l1 = it.nome.toUpperCase(), soNome = /\d/.test(it.nome), w1 = Math.min(W - 40, Math.max(c.measureText(l1).width, soNome ? 0 : c.measureText(real).width) + 40), hh = soNome ? (destaque ? 92 : 66) : destaque ? 150 : 104;
         const bx = U.clamp(px, w1 / 2 + 20, W - w1 / 2 - 20), by = Math.max(yMin, py - 40);
         const caixa = [bx - w1 / 2, by - hh, bx + w1 / 2, by];
         if (!destaque && postas.some((r) => caixa[0] < r[2] + 12 && caixa[2] > r[0] - 12 && caixa[1] < r[3] + 12 && caixa[3] > r[1] - 12)) { c.restore(); return; }
@@ -211,7 +243,9 @@
         c.translate(bx, by); c.scale(ent, ent);
         c.textAlign = 'center'; c.textBaseline = 'bottom';
         U.rr(c, -w1 / 2, -hh, w1, hh, 22); c.fillStyle = destaque ? '#FFD23F' : 'rgba(255,255,255,0.85)'; c.fill();
-        c.fillStyle = '#1B1B1B'; c.fillText(l1, 0, -hh / 2 + 4, w1 - 30); c.font = (destaque ? '54px' : '36px') + ' "Lilita One", sans-serif'; c.fillText(real, 0, -12, w1 - 30);
+        c.fillStyle = '#1B1B1B';
+        if (soNome) c.fillText(l1, 0, -hh * 0.18, w1 - 30);
+        else { c.fillText(l1, 0, -hh / 2 + 4, w1 - 30); c.font = (destaque ? '54px' : '36px') + ' "Lilita One", sans-serif'; c.fillText(real, 0, -12, w1 - 30); }
         c.restore();
       });
       // A COTA (23/10, pedido do dono: o canal "dimensiona as coisas"): uma linha
@@ -234,7 +268,8 @@
           c.restore();
         }
       }
-      if (cn.hud && typeof cn.hud !== 'object' && local > 0.3) { const s = U.mola(local - 0.3, 10); c.save(); c.translate(W / 2, 300); c.scale(s, s); c.font = '120px "Lilita One", sans-serif'; c.textAlign = 'center'; c.textBaseline = 'middle';
+      // v3: o HUD aparecia atras do cartaz do titulo -- so' entra depois dele
+      if (cn.hud && typeof cn.hud !== 'object' && local > 0.3 && !(spec.titulo && t < 3.3)) { const s = U.mola(local - 0.3, 10); c.save(); c.translate(W / 2, 300); c.scale(s, s); c.font = '120px "Lilita One", sans-serif'; c.textAlign = 'center'; c.textBaseline = 'middle';
         const txt = U.hud(c, cn.hud, c.canvas.width * 0.84 - 70, 22), w = c.measureText(txt).width + 70; U.rr(c, -w / 2, -78, w, 156, 34); c.fillStyle = '#1B1B1B'; c.fill(); c.fillStyle = '#FFD23F'; c.fillText(txt, 0, 6); c.restore(); }
       U.cartaz(c, spec, t, { fonte: '84px "Lilita One", sans-serif', y: 170, fundo: '#FFD23F', borda: '#1B1B1B', cor: '#1B1B1B', altura_linha: 100, dur: 3.0 });
       U.legenda(c, spec, t, { fonte: '100px "Lilita One", sans-serif', y: H * 0.70, cor: '#FFFFFF', cor_ativa: '#FFD23F', contorno: 18, caixa: true, por_vez: 3 });
