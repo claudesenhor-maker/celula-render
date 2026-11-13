@@ -133,6 +133,10 @@ def camas_de_ambiente(spec):
     return out
 
 
+# T503 (13/11, ordem do dono): o quiz (ODD ONE OUT) tem a maior retencao da casa e poucos likes, comentarios e
+# inscritos. A ultima cena ganha CTA_QUIZ_S segundos de ENCERRAMENTO (placar nos comentarios, like, inscrever);
+# o motor desenha (`spec.cta_s`) e o cronometro/"plim" do ultimo nivel recuam o mesmo tanto.
+CTA_QUIZ_S = 2.6
 CPS_LEITURA = 14.0      # caracteres por segundo que alguem le no celular
 PAUSA_NARRADO = 0.22    # respiro entre cenas narradas (a voz nao emenda)
 
@@ -231,11 +235,15 @@ def linha_do_tempo(spec, tmp, modo_tts):
             t = c["fim"]; faixas.append(wav); respiros.append(PAUSA_NARRADO)
         voz = juntar_com_respiro(faixas, respiros, os.path.join(tmp, "voz.wav"), tmp)
     else:
-        for c in cenas:
+        if spec.get("estilo") == "quiz" and cenas:
+            spec["cta_s"] = CTA_QUIZ_S
+        for k, c in enumerate(cenas):
             dur = float(c.get("dur_s") or 2.5)
             texto = str(c.get("texto") or "")
             if texto and (c.get("acao") == "cartela" or spec.get("estilo") == "pixel"):
                 dur = max(dur, len(texto) / CPS_LEITURA + 1.0)
+            if k == len(cenas) - 1 and spec.get("cta_s"):
+                dur += float(spec["cta_s"])
             c["ini"], c["fim"] = round(t, 3), round(t + dur, 3)
             t = c["fim"]
         voz = _silencio(os.path.join(tmp, "voz.wav"), t)
@@ -282,12 +290,17 @@ def eventos_sonoros(spec):
             ev.append({"nome": nome, "t": c["ini"] + 0.05, "ganho": 0.9})
         # quiz: um tique por segundo do cronometro e o "plim" da resposta
         if spec.get("estilo") == "quiz":
-            fim_relogio = c["fim"] - 1.3
+            ultima = c is spec["cenas"][-1]
+            fim_relogio = c["fim"] - 1.3 - (float(spec.get("cta_s") or 0) if ultima else 0)
             tt = c["ini"] + 0.35
             while tt < fim_relogio:
                 ev.append({"nome": "clique", "t": tt, "ganho": 0.6, "cadencia": True})
                 tt += 1.0
             ev.append({"nome": "plim", "t": fim_relogio + 0.05, "ganho": 1.0})
+            if ultima and spec.get("cta_s"):   # encerramento: um pop por botao (placar, like, inscrever)
+                t_cta = c["fim"] - float(spec["cta_s"])
+                for j in range(3):
+                    ev.append({"nome": "pop", "t": round(t_cta + 0.1 + 0.35 * j, 3), "ganho": 0.7})
         # o "blip" de maquina de escrever do pixel: 1 a cada 3 letras
         if spec.get("estilo") == "pixel" and c.get("texto") and c.get("acao") != "batalha":
             for j in range(0, len(c["texto"]), 3):

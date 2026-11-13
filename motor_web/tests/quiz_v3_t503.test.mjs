@@ -76,3 +76,20 @@ test('v3: legendas em espanhol e portugues', () => {
     assert.ok(log.join('|').includes(frase), idioma);
   }
 });
+
+test('encerramento (cta_s): placar nos comentarios, like e inscrever no fim; o jogo do ultimo nivel acaba antes', () => {
+  const log = []; const { U, MOTORES, tela } = carregar(log);
+  const sp = spec(); sp.cta_s = 2.6; sp.cenas.at(-1).fim += 2.6; sp.dur_s += 2.6;
+  const m = MOTORES.quiz.criar(tela(), sp, U);
+  const fimJogo = sp.dur_s - 2.6;
+  log.length = 0; m.quadro(fimJogo - 0.2);
+  assert.ok(!log.join(' ').includes('COMMENT YOUR SCORE'), 'revelacao ainda sem encerramento');
+  log.length = 0; m.quadro(fimJogo + 0.9);
+  let txt = log.join(' ');
+  assert.ok(txt.includes('COMMENT YOUR SCORE') && txt.includes('LIKE IF YOU GOT 4/4') && txt.includes('SUBSCRIBE'), txt);
+  log.length = 0; m.quadro(sp.dur_s - 0.05);
+  assert.ok(log.join(' ').includes('SUBSCRIBED'), 'o botao e apertado');
+  // sem cta_s (spec antigo) o fim nao muda
+  const log2 = []; const k = carregar(log2); const sp2 = spec(); const m2 = k.MOTORES.quiz.criar(k.tela(), sp2, k.U);
+  m2.quadro(sp2.dur_s - 0.05); assert.ok(!log2.join(' ').includes('SUBSCRIBE'));
+});

@@ -30,3 +30,11 @@ tempo de revelação (1,3 s), eventos de som do `montar_web.py`, `window.QUIZ_IT
 ## Medir (quando o dono religar os canais)
 Mediana de views, retenção e "fica" de ODD ONE OUT nos 7 dias após o 1º vídeo com a v3 contra os 30 dias anteriores
 (1.188 / 0,77 / 0,40). Reverter: `git revert` do commit da v3.
+
+## v3.1 — encerramento de conversão (13/11, ordem do dono)
+O canal tem a maior retenção da casa; o problema é **likes, comentários e inscritos**. `montar_web.py` dá à última cena
+mais `CTA_QUIZ_S` = 2,6 s (`spec.cta_s`); o cronômetro e o "plim" do último nível recuam o mesmo tanto e entram três "pop".
+Nesses 2,6 s o motor desenha: "COMMENT YOUR SCORE" com botões 0..N (responder = digitar um número), "♥ LIKE IF YOU GOT N/N"
+e o botão SUBSCRIBE com sino, que é "apertado" e vira SUBSCRIBED ("NEW LEVELS EVERY DAY"). Idiomas en/es/pt.
+A descrição do SEO do canal passa a pedir o placar nos comentários e a inscrição. Testes: `quiz_v3_t503.test.mjs`
+(encerramento) e `test_quiz_cta_t503.py` (tempo e som). Medir: likes, comentários e inscritos por 1.000 views.

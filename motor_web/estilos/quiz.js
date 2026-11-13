@@ -86,11 +86,14 @@
   // FRASES PADRAO da legenda (E2), por idioma: abertura, escalada entre niveis, revelacao, fim
   const FRASES = {
     en: { abre: 'Find the odd one out', sobe: ['Now look closer', 'It gets harder', "Don't blink", 'Most people quit here'], ultimo: 'Final level',
-      achou: 'Found it?', fim: 'How many did you get? _/N' },
+      achou: 'Found it?', fim: 'How many did you get? _/N',
+      cta: { placar: 'Comment your score', like: 'Like if you got N/N', inscr: 'Subscribe', inscrito: 'Subscribed', sub: 'New levels every day' } },
     es: { abre: 'Encuentra el diferente', sobe: ['Ahora mira mejor', 'Se pone difícil', 'No parpadees', 'Casi todos fallan aquí'], ultimo: 'Último nivel',
-      achou: '¿Lo viste?', fim: '¿Cuántos encontraste? _/N' },
+      achou: '¿Lo viste?', fim: '¿Cuántos encontraste? _/N',
+      cta: { placar: 'Comenta tu puntaje', like: 'Like si sacaste N/N', inscr: 'Suscríbete', inscrito: 'Suscrito', sub: 'Niveles nuevos cada día' } },
     pt: { abre: 'Ache o diferente', sobe: ['Agora olhe melhor', 'Fica mais difícil', 'Não pisque', 'Quase todos erram aqui'], ultimo: 'Último nível',
-      achou: 'Achou?', fim: 'Quantos você achou? _/N' },
+      achou: 'Achou?', fim: 'Quantos você achou? _/N',
+      cta: { placar: 'Comente sua nota', like: 'Curta se fez N/N', inscr: 'Inscreva-se', inscrito: 'Inscrito', sub: 'Níveis novos todo dia' } },
   };
 
   function criar(tela, spec, U) {
@@ -299,8 +302,80 @@
       c.restore();
     }
 
+    // ---- ENCERRAMENTO (T503, 13/11, ordem do dono): o canal tem a maior retencao da casa e poucos likes,
+    // comentarios e inscritos. Os ultimos `spec.cta_s` segundos (montar_web.py: CTA_QUIZ_S) viram uma tela de
+    // conversao: placar nos comentarios (botoes 0..N -- responder e' digitar um numero), like e inscrever
+    // (o botao e' "apertado" e vira INSCRITO). Sem `cta_s` (spec antigo) nada muda.
+    const CTA = num(spec.cta_s, 0, 6, 0);
+    function coracao(x, y, r, cor) {
+      c.save(); c.translate(x, y); c.scale(r, r); c.beginPath(); c.moveTo(0, 0.85); c.bezierCurveTo(-1.2, 0, -0.75, -1, 0, -0.4);
+      c.bezierCurveTo(0.75, -1, 1.2, 0, 0, 0.85); c.fillStyle = cor; c.fill(); c.restore();
+    }
+    function sino(x, y, r) {
+      c.save(); c.translate(x, y); c.scale(r, r); c.fillStyle = '#FFF'; c.beginPath(); c.moveTo(-0.7, 0.45); c.quadraticCurveTo(-0.6, 0.3, -0.6, -0.1);
+      c.quadraticCurveTo(-0.6, -0.75, 0, -0.78); c.quadraticCurveTo(0.6, -0.75, 0.6, -0.1); c.quadraticCurveTo(0.6, 0.3, 0.7, 0.45); c.closePath(); c.fill();
+      c.beginPath(); c.arc(0, 0.6, 0.18, 0, TAU); c.fill(); c.restore();
+    }
+    function botao(x, y, w, h, fundo, borda) {
+      U.rr(c, x - w / 2, y - h / 2, w, h, h / 2); c.fillStyle = fundo; c.fill(); if (borda) { c.lineWidth = 6; c.strokeStyle = borda; c.stroke(); }
+    }
+    function encerramento(u, nv) {
+      const T = F.cta;
+      c.save(); c.globalAlpha = U.clamp(u / 0.25, 0, 1) * 0.72; c.fillStyle = '#11111B'; c.fillRect(0, 300, W, H - 300); c.restore();
+      const pop = (k) => U.clamp(U.mola(u - 0.1 - 0.35 * k, 11), 0, 1.2);
+      c.save(); c.textAlign = 'center'; c.textBaseline = 'middle';
+      // 1) placar: titulo + botoes 0..N
+      let p = pop(0);
+      if (p > 0) {
+        c.save(); c.translate(CX, 640); c.scale(p, p); c.translate(-CX, -640);
+        contornado(T.placar.toUpperCase(), CX, 560, 74, 880, '#FFF');
+        const n = N + 1, bw = Math.min(150, (GX1 - GX0 - 20 * (n - 1)) / n), x0 = CX - ((n - 1) * (bw + 20)) / 2;
+        for (let k = 0; k < n; k++) {
+          const x = x0 + k * (bw + 20), destaque = k === N, pulso = destaque ? 1 + 0.06 * Math.sin(u * 9) : 1;
+          c.save(); c.translate(x, 700); c.scale(pulso, pulso);
+          c.beginPath(); c.arc(0, 0, bw / 2, 0, TAU); c.fillStyle = destaque ? '#FFD23F' : '#FFF'; c.fill(); c.lineWidth = 6; c.strokeStyle = '#111'; c.stroke();
+          c.font = Math.round(bw * 0.55) + 'px ' + FONTE; c.fillStyle = '#111'; c.fillText(String(k), 0, 4); c.restore();
+        }
+        // seta para baixo: "responde ai"
+        const dy = 10 * Math.sin(u * 8);
+        c.beginPath(); c.moveTo(CX - 34, 800 + dy); c.lineTo(CX + 34, 800 + dy); c.lineTo(CX, 850 + dy); c.closePath(); c.fillStyle = '#FFF'; c.fill();
+        c.restore();
+      }
+      // 2) like
+      p = pop(1);
+      if (p > 0) {
+        c.save(); c.translate(CX, 990); c.scale(p, p); c.translate(-CX, -990);
+        botao(CX, 990, 760, 130, '#FFF', '#111');
+        coracao(CX - 300, 994, 46 * (1 + 0.12 * Math.max(0, Math.sin(u * 7))), '#E2373C');
+        c.font = '60px ' + FONTE; c.fillStyle = '#111'; c.textAlign = 'left'; c.fillText(T.like.replace(/N/g, String(N)).toUpperCase(), CX - 240, 996, 560);
+        c.restore();
+      }
+      // 3) inscrever: o botao e' "apertado" 0,7 s depois de aparecer e vira INSCRITO
+      p = pop(2);
+      if (p > 0) {
+        const aperto = u - 0.8 - 0.7, apertado = aperto > 0, s = apertado && aperto < 0.18 ? 0.92 : 1;
+        c.save(); c.translate(CX, 1180); c.scale(p * s, p * s); c.translate(-CX, -1180);
+        botao(CX, 1180, 760, 140, apertado ? '#3A3A44' : '#E2373C', '#111');
+        sino(CX - 290, 1180, 44);
+        c.font = '66px ' + FONTE; c.fillStyle = '#FFF'; c.textAlign = 'left';
+        c.fillText((apertado ? T.inscrito : T.inscr).toUpperCase(), CX - 230, 1184, 540);
+        c.restore();
+        c.save(); c.textAlign = 'center'; contornado(T.sub.toUpperCase(), CX, 1310, 52, 860, '#FFF'); c.restore();
+        // dedo que aperta (um circulo branco com sombra, como o toque na tela)
+        if (u > 0.8 + 0.35 && u < 0.8 + 1.4) {
+          const k = U.clamp((u - 1.15) / 0.35, 0, 1), x = CX + 260 + (1 - U.saida(k)) * 160, y = 1200 + (1 - U.saida(k)) * 180;
+          c.save(); c.globalAlpha = 0.9; c.beginPath(); c.arc(x, y, apertado && aperto < 0.25 ? 30 : 38, 0, TAU); c.fillStyle = '#FFF'; c.fill();
+          c.lineWidth = 6; c.strokeStyle = '#111'; c.stroke(); c.restore();
+        }
+      }
+      c.restore();
+    }
+
     function quadro(t) {
-      const { c: cn, i, local } = U.cenaEm(spec, t), nv = niveis[i], dur = Math.max(2, cn.fim - cn.ini), resta = dur - REVELA - local;
+      const fase = U.cenaEm(spec, t), cn = fase.c, i = fase.i, local = fase.local, nv = niveis[i];
+      const ultimoNivel = i === N - 1, cta = ultimoNivel ? CTA : 0;
+      // o jogo do ultimo nivel acaba `cta` s antes da cena: o resto e' o encerramento
+      const dur = Math.max(2, cn.fim - cn.ini - cta), resta = dur - REVELA - local;
       nv._dur = dur;
       const L = camadasDe(i);
       c.drawImage(L.fundo, 0, 0);
@@ -323,6 +398,7 @@
       else if (!(i === 0 && spec.titulo && (t < tituloAte || curto0))) legenda(legendaNivel(i), i === 0 && spec.titulo ? tituloAte : cn.ini, t);
       // lampejo branco na troca de nivel (corte com batida)
       if (i > 0 && local < 0.14) { c.save(); c.globalAlpha = 0.45 * (1 - local / 0.14); c.fillStyle = '#FFF'; c.fillRect(0, 0, W, H); c.restore(); }
+      if (cta && local >= dur) encerramento(local - dur, nv);
       U.cartaz(c, spec, t, { fonte: '84px ' + FONTE, y: 100, altura_max: 240, fundo: '#111', borda: '#FFF', cor: '#FFF', altura_linha: 100, dur: 2.2 });
     }
     return { quadro };
