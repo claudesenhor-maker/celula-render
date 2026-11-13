@@ -1,28 +1,32 @@
-# Plano do motor `quiz` — T503 (13/11/2026)
+# Motor `quiz` — v3 (redesenho, T503, 13/11/2026)
 
-Canal: ODD ONE OUT (en, mediana 1.170 — o melhor canal; "fica" 0,40). Regra do dono: **não piorar o que está bom**.
-Formato: grade de itens iguais com um diferente, cronômetro, resposta circulada. Sem voz. 28,7 s de 32 s com quadro
-congelado (T487) — e mesmo assim é o melhor canal: a retenção vem da TAREFA dada ao espectador, não de animação.
+Canal: **ODD ONE OUT** (en) — o melhor canal da casa nos últimos 30 dias: mediana 1.188 views, retenção média 0,77,
+"fica" 0,40 (61 vídeos). Ordem do dono (13/11): "pegue o nosso melhor canal e redesenhe completamente o motor; ache
+todos os erros; mais retentivo; mais detalhes; melhore a legenda". Contrato do spec intacto; som intacto (REVELA = 1,3 s).
 
-## Evidência (folhas: `/var/lib/videos-auto/motores-plano/quiz/{antes,depois}/`, specs reais `odd1`, `odd2` de 12/11)
-1. A grade começava em y=540 e terminava em y=1380: entre o cartão e a área coberta pelo app (y>1440) sobravam
-   60 px, e no topo o rótulo do nível (y=300) e o cronômetro (y=430) gastavam 240 px em duas linhas.
-2. Símbolos pequenos: grade 6×9 em 840 px de altura → célula de 93 px; no celular (360 px de largura) vira ~31 px.
-3. Nível 1: o cartaz do título (2,2 s) fica sobre o rótulo/cronômetro — coerente, não muda.
+Folhas antes/depois na VM: `/var/lib/videos-auto/motores-plano/quiz/{antes,depois2,v3c}/` (5 specs reais do canal:
+odd1–odd5) e na branch `folhas/2026-11-13` (`quiz/v3b`, `quiz/v3c`). Teste: `motor_web/tests/quiz_v3_t503.test.mjs`.
 
-## Mudanças (motor_web/estilos/quiz.js; contrato do spec intacto)
-| # | O quê | Por que dá views | Como validar | Reverter |
-|---|---|---|---|---|
-| Q1 | Rótulo do nível e cronômetro na MESMA linha (y=330; cronômetro à direita, "FOUND IT?" no lugar do cronômetro) | Libera 110 px no topo | folha depois (gancho) | `git revert` |
-| Q2 | Grade de y=430 a y=1440 (era 540–1380) e x até 895 (era 890) | Grade 20% mais alta → símbolos ~15–20% maiores, mais legíveis no celular; a tarefa ("ache o diferente") fica mais fácil de aceitar no 1º segundo | folha depois (cenas); célula de 93 → 112 px na 6×9 | idem |
+## Erros achados (v2) e o que a v3 faz
+| # | Erro na v2 | Efeito | v3 |
+|---|---|---|---|
+| E1 | `sem_pedaco` e os furos dos ícones (chave, peixe, casa, olho, gato) usavam `destination-out`: o furo atravessava o cartão e mostrava o fundo colorido | O diferente virava um ponto amarelo/rosa no meio da grade — nível sem desafio (31 de 61 vídeos tinham `sem_pedaco`; com ele no nível 1 a mediana é 1.125 contra 1.228 sem) | Furo pintado com a cor do cartão (opaco) |
+| E2 | As frases que o roteiro escreve na premissa ("If you blink, your streak ends", "But now, look closer", "How many did you catch?") nunca apareciam | O roteiro prometia escalada e pedido de comentário que o vídeo não mostrava | Legenda no alto (faixa livre depois do cartaz do título): `cena.legenda` > `spec.legendas` > frases entre aspas da premissa > frases padrão do idioma (en/es/pt), sem repetir o rótulo nem outro nível |
+| E3 | "FOUND IT?" na mesma linha do rótulo ("MYTHIC FOUND IT?") | Texto encavalado | Virou legenda |
+| E4 | Resposta = círculo fino de ~40 px numa grade 12×16 | Invisível no celular: o payoff do vídeo não era visto | Holofote (o resto do cartão escurece), anel vermelho/branco que pulsa, o diferente **ampliado** (≥ 150 px) no lugar |
+| E5 | Nível 1 curto (4 s): só 0,2 s entre o cartaz e a revelação | A frase de abertura só piscaria | A abertura passa para o nível 2 |
 
-O que NÃO muda: regras de dificuldade (piso 6×9 → 10×16), camuflagem, cores, cartaz, tempo de revelação, variação por vídeo
-(política de conteúdo repetitivo).
+## Retenção e detalhe
+- Placar de progresso "2/4" + barrinhas dos níveis (feitos / atual enchendo / futuros): quem está no 3 fica para o 4.
+- Cronômetro com anel que esvazia; vermelho e tremendo nos 2 últimos segundos.
+- Troca de nível com lampejo branco e cartão que sobe com mola (o nível 1 já está no quadro 0).
+- Fim: "How many did you get? _/4" (ou a pergunta final da premissa + "_/4") — pede o placar nos comentários.
+- Fundo com listras e vinheta, cartão com sombra e borda, itens com sombra curta; letras com respiro na legenda.
 
-## Validação
-- `npm test` (quiz/depois/npm-test.log); folhas antes/depois conferidas em tamanho real (odd1, odd2).
-- Push no main → `validar-motores` (disparo manual, se o push pela API não acionar) → 1º render real.
+## Não mudou
+Regras de dificuldade (piso 6×9 → 10×16, camuflagem por tremor, sutileza por nível), cores por nível, cartaz do título,
+tempo de revelação (1,3 s), eventos de som do `montar_web.py`, `window.QUIZ_ITENS`.
 
-## Pendente / próxima rodada
-- Hipótese T487 não aplicada: entrada animada da grade no 1º meio segundo (hoje `entra` em 0,35 s a partir de −0,25 s: já é rápida).
-- Medir ao vivo: mediana e "fica" por versão do motor em ODD ONE OUT, 7 dias após o push.
+## Medir (quando o dono religar os canais)
+Mediana de views, retenção e "fica" de ODD ONE OUT nos 7 dias após o 1º vídeo com a v3 contra os 30 dias anteriores
+(1.188 / 0,77 / 0,40). Reverter: `git revert` do commit da v3.
