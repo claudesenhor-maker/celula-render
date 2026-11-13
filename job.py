@@ -596,6 +596,11 @@ def main():
     else:
         spec = requests.get(os.environ["SPEC_URL"], timeout=60).json()
     fila_id = spec.get("fila_id", "sem-id")
+    # ESTILO COPY (13/11, dono: voz de narrador melhor): so' a narracao pelo ElevenLabs, cujas chaves so' existem aqui.
+    # Nenhum render de canal pede este modo; ver estilo_copy_narracao.py.
+    if spec.get("modo") == "estilo_copy_narracao":
+        import estilo_copy_narracao
+        return estilo_copy_narracao.rodar(spec)
     print(f"[job] fila_id={fila_id}  trechos={len(spec.get('trechos') or spec.get('cenas') or [])}")
     # O MOTOR WEB (13/10, HISTORICO §109): os 4 canais de arte por codigo tem
     # spec proprio (`cenas`, nao `trechos`) e render proprio (Chrome headless).
