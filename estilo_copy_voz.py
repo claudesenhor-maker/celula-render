@@ -1,7 +1,12 @@
 """Narração privada Chatterbox, por plano, sem publicação nem callback de produção."""
 import hashlib,json,os,re,subprocess,sys
 from pathlib import Path
-REF='https://toonzueira.duckdns.org/supabase/storage/v1/object/public/toonzueira/vozes_ref/timeline_drop_1.mp3'
+# 13/11 (dono: a voz tinha sotaque forte): a referencia era a do TIMELINE DROP -- um canal em INGLES. O clone
+# fazia um narrador americano falar portugues. Agora a voz vem do BANCO DE VOZES (pt, aprovada, nota 10):
+# Elena Vinter, narradora brasileira suave. Outra voz do banco: ESTILO_COPY_REF com uma URL de vozes_banco/.
+BANCO='https://toonzueira.duckdns.org/supabase/storage/v1/object/public/toonzueira/vozes_banco/'
+REF=os.environ.get('ESTILO_COPY_REF') or BANCO+'pt/S4M4JhZIzYGUlDsYIOow.mp3'
+if not REF.startswith(BANCO+'pt/'):raise ValueError('A voz do Estilo Copy precisa ser do banco de vozes em portugues')
 
 def duracao(p):
  return float(subprocess.check_output(['ffprobe','-v','error','-show_entries','format=duration','-of','default=nw=1:nk=1',str(p)],text=True))
@@ -16,7 +21,7 @@ def gerar():
  if ' '.join(falas)!=texto:raise ValueError('As falas não correspondem ao texto completo')
  raiz=Path('estilo-copy-voz');raiz.mkdir(exist_ok=True);partes=raiz/'partes';partes.mkdir(exist_ok=True)
  cfg={'motor':'chatterbox','voice':'pt-BR-FranciscaNeural','lingua':'pt','ref_url':REF,'exaggeration':.40,'cfg_weight':.45,'temperature':.65}
- velocidade=1.12;marcas=[];inicio=0;logs=[]
+ velocidade=1.06;marcas=[];inicio=0;logs=[]
  for i,fala in enumerate(falas):
   p=partes/f'{i:02}.wav';mm=_sintetizar_local(fala,cfg,str(p),motor='chatterbox')
   fim=max((m['fim_s'] for m in mm),default=0)
@@ -30,7 +35,7 @@ def gerar():
  (raiz/'concat.txt').write_text(''.join("file '"+str((partes/f'{i:02}-corte.wav').resolve())+"'\n" for i in range(len(falas))))
  subprocess.run(['ffmpeg','-v','error','-f','concat','-safe','0','-i',str(raiz/'concat.txt'),'-af',f'atempo={velocidade}','-c:a','libmp3lame','-b:a','160k','-y',str(raiz/'voz-continua.mp3')],check=True)
  (raiz/'palavras.json').write_text(json.dumps(marcas,ensure_ascii=False))
- (raiz/'proveniencia.json').write_text(json.dumps({'motor':'chatterbox','idioma':'pt','referencia':REF,'origem':'Banco do projeto: ElevenLabs Voice Design, voz sintética sem pessoa real (23/10)','texto_sha256':hashlib.sha256(texto.encode()).hexdigest(),'velocidade':velocidade,'metodo':'por-plano-com-corte-apos-ultima-palavra','planos':logs},ensure_ascii=False,indent=2))
+ (raiz/'proveniencia.json').write_text(json.dumps({'motor':'chatterbox','idioma':'pt','referencia':REF,'origem':'Banco de vozes do projeto (banco_vozes pt/S4M4JhZIzYGUlDsYIOow, Elena Vinter, aprovada nota 10); clone Chatterbox local, sem custo','texto_sha256':hashlib.sha256(texto.encode()).hexdigest(),'velocidade':velocidade,'metodo':'por-plano-com-corte-apos-ultima-palavra','planos':logs},ensure_ascii=False,indent=2))
  import shutil
  shutil.rmtree(partes);(raiz/'concat.txt').unlink()
  print('Narração gerada; palavras:',len(marcas),flush=True)
