@@ -114,15 +114,18 @@
       const { c: cn, i, local } = U.cenaEm(spec, t), nv = niveis[i], dur = Math.max(2, cn.fim - cn.ini), resta = dur - REVELA - local;
       c.fillStyle = nv.fundo; c.fillRect(0, 0, W, H);
       c.save(); c.textAlign = 'center'; c.textBaseline = 'middle'; c.font = '78px "Lilita One", sans-serif'; c.fillStyle = '#111';
-      c.fillText(nv.rotulo, W / 2, 300);
+      // T503 (13/11): rotulo e cronometro na MESMA linha (y=330) e a grade comeca em 430 (era 540) e vai ate 1440 (era 1380):
+      // a grade ganha 20% de altura e os simbolos ficam maiores; o rodape coberto pelo app (y>1440) segue livre.
+      // (v2) y=400: abaixo do cartaz do titulo de 2 linhas (acaba em ~340); cronometro r=60 para nao tocar a grade (480).
+      c.fillText(nv.rotulo, W / 2 - 140, 400, 420);
       if (resta > 0) {
         const seg = Math.ceil(resta), pulso = 1 + 0.12 * Math.max(0, 1 - (resta % 1) * 4);
-        c.translate(W / 2, 430); c.scale(pulso, pulso); c.beginPath(); c.arc(0, 0, 70, 0, Math.PI * 2); c.fillStyle = seg <= 2 ? '#E2373C' : '#111'; c.fill();
-        c.font = '90px "Lilita One", sans-serif'; c.fillStyle = '#FFF'; c.fillText(String(seg), 0, 6);
+        c.translate(W - 290, 400); c.scale(pulso, pulso); c.beginPath(); c.arc(0, 0, 60, 0, Math.PI * 2); c.fillStyle = seg <= 2 ? '#E2373C' : '#111'; c.fill();
+        c.font = '80px "Lilita One", sans-serif'; c.fillStyle = '#FFF'; c.fillText(String(seg), 0, 6);
       }
       c.restore();
       // a grade: dentro da zona segura (topo 520, rodape H-520, margem direita do app)
-      const x0 = 50, x1 = W - 190, y0 = 540, y1 = H - 540, cw = (x1 - x0) / nv.col, ch = (y1 - y0) / nv.lin;
+      const x0 = 50, x1 = W - 185, y0 = 480, y1 = 1440, cw = (x1 - x0) / nv.col, ch = (y1 - y0) / nv.lin;
       const tam = Math.floor(Math.min(cw * 0.86, ch * 0.86));
       const entra = U.saida(U.clamp((local + 0.25) / 0.35, 0, 1));   // 23/10: a grade ja' aparece no 1o quadro
       // CAMUFLAGEM (23/10): do nivel de dificuldade 3 em diante todos os itens
@@ -152,7 +155,7 @@
         for (let n = 0; n <= k; n++) { const a = rj2(), b = rj2(); rj2(); if (n === k) { jx = (a - 0.5) * 2 * tremor * cw; jy = (b - 0.5) * 2 * tremor * ch; } }
         const cx = x0 + (k % nv.col + 0.5) * cw + jx, cy = y0 + (Math.floor(k / nv.col) + 0.5) * ch + jy, q = U.mola(-resta, 10);
         c.save(); c.lineWidth = 12; c.strokeStyle = '#E2373C'; c.beginPath(); c.arc(cx, cy, Math.max(cw, ch) * 0.62 * q, 0, Math.PI * 2); c.stroke();
-        c.font = '84px "Lilita One", sans-serif'; c.textAlign = 'center'; c.fillStyle = '#111'; c.fillText('FOUND IT?', W / 2, 430); c.restore();
+        c.font = '84px "Lilita One", sans-serif'; c.textAlign = 'center'; c.fillStyle = '#111'; c.font = '70px "Lilita One", sans-serif'; c.fillText('FOUND IT?', W / 2 + 190, 400, 400); c.restore();
       }
       U.cartaz(c, spec, t, { fonte: '84px "Lilita One", sans-serif', y: 100, altura_max: 240, fundo: '#111', borda: '#FFF', cor: '#FFF', altura_linha: 100, dur: 2.2 });
     }
