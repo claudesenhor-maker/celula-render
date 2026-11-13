@@ -307,7 +307,7 @@
       // cabelo uma bola MAIOR que ela); cabelo em touca, olhos pequenos, pescoco.
       const pescoco = new T.Mesh(new T.CylinderGeometry(0.11, 0.13, 0.18, 6), M(pele)); pescoco.position.y = 1.76; corpo.add(pescoco);
       const cabeca = new T.Group(); cabeca.position.y = 2.06; corpo.add(cabeca);
-      const crane = new T.Mesh(new T.IcosahedronGeometry(0.34, 1), M(pele)); crane.scale.set(1, 1.08, 0.98); cabeca.add(crane);
+      const crane = new T.Mesh(new T.IcosahedronGeometry(0.34, 1), M(pele, { emis: new T.Color(pele).multiplyScalar(0.32).getStyle() })); crane.scale.set(1, 1.08, 0.98); cabeca.add(crane);
       const estilo = Math.floor(r() * 3);
       const cabelo = new T.Mesh(new T.SphereGeometry(0.375, 10, 6, 0, Math.PI * 2, 0, Math.PI * (estilo === 1 ? 0.62 : 0.5)), M(cab));
       cabelo.position.set(0, 0.05, -0.02); cabelo.rotation.x = -0.25; cabeca.add(cabelo);
@@ -369,7 +369,7 @@
     const RAIO = 8;
     function terreno(cen, r) {
       const cores = { deserto: ['#E8B86A', '#D9A050'], polo: ['#F4F7FA', '#DCE9F2'], vulcao: ['#5A4048', '#46323A'], floresta: ['#78B66B', '#5E9E55'],
-        oceano: ['#E8D9A8', '#D8C690'], cidade: ['#9CB48A', '#8AA57A'], montanha: ['#7FAF6E', '#8C8C8C'], praia: ['#EBD9A6', '#D9C48E'], campo: ['#9BC46A', '#86B25A'], lua: ['#B9B4AA', '#9C978E'] }[cen] || ['#9CB48A', '#8AA57A'];
+        oceano: ['#E8D9A8', '#D8C690'], areia_movedica: ['#EED9A0', '#E0C688'], cidade: ['#9CB48A', '#8AA57A'], montanha: ['#7FAF6E', '#8C8C8C'], praia: ['#EBD9A6', '#D9C48E'], campo: ['#9BC46A', '#86B25A'], lua: ['#B9B4AA', '#9C978E'] }[cen] || ['#9CB48A', '#8AA57A'];
       const aneis = 14, segs = 40, pos = [], idx = [], cor = [];
       const alt = (x, z) => {
         const d = Math.hypot(x, z) / RAIO, borda = U.clamp((1 - d) * 4, 0, 1);
@@ -459,6 +459,7 @@
           }
           const pos = Array.isArray(d.pos) && d.pos.length === 3 ? vet(d.pos, -30, 30, [0, 0, 0]) : (() => { const [x, z] = vet(d.pos, -30, 30, [0, 0, 0]); return [x, null, z]; })();
           if (pos[1] === null) pos[1] = o.terreno ? o.terreno.userData.alt(pos[0], pos[2]) : 0;
+          if (d.modelo === 'pessoa') g.userData.ehPessoa = true;
           g.position.set(pos[0], pos[1], pos[2]);
           const esc = num(d.escala, 0.05, 30, 1); g.scale.setScalar(esc);
           g.rotation.y = (num(d.giro, -360, 360, 0) * Math.PI) / 180;
@@ -471,6 +472,7 @@
     function animarCriados(o, k, t) {
       (o.criados || []).forEach((g) => {
         const u = g.userData.criado; let px = u.base.x, py = u.base.y, pz = u.base.z, rx = u.giro.x, ry = u.giro.y, rz = u.giro.z, s = u.esc, vis = true;
+        if (g.userData.ehPessoa) posar(g, (MODO[o.acao] || ['parado'])[0], t, k);   // v3: a pessoa criada pela IA tambem se mexe
         u.anim.forEach((a) => {
           const de = num(a.de, 0, 1, 0), ate = Math.max(de + 0.01, num(a.ate, 0, 1, 1)), q = U.suave((k - de) / (ate - de));
           if (a.mover) { const m = vet(a.mover, -40, 40, [0, 0, 0]); px += m[0] * q; py += m[1] * q; pz += m[2] * q; }
@@ -484,9 +486,61 @@
       });
     }
 
+    // v3 (13/11, T503 'melhore brutalmente'): o CENARIO vem da historia. Areia movedica virava 'praia' (gente em pe
+    // dentro do mar) e 'cocina que explota' virava uma rua de predios com uma caixa cinza.
+    const CEN_PISTAS = [
+      ['areia_movedica', /(arena movediza|areia movedi[cç]a|quicksand)/i],
+      ['cozinha', /\b(cocinas?|cozinhas?|kitchens?|hornos?|fornos?|ovens?|estufas?|fog[aã]o|stoves?|microondas|micro-ondas|microwaves?|harina|farinha|flour|sart[eé]n|frigideira|frying pan|nevera|geladeira|fridge)\b/i],
+    ];
+    // o cenario achado vale para o VIDEO: "Tus pies se hundirían" nao repete "arena movediza", mas e' a mesma areia
+    const pistaDe = (txt) => { for (const [c, re] of CEN_PISTAS) if (re.test(txt)) return c; return null; };
+    const CEN_VIDEO = pistaDe([spec.titulo].concat(spec.cenas.map((c) => c.texto)).join(' | '));
+    const GENERICOS = { praia: 1, oceano: 1, cidade: 1, campo: 1, deserto: 1 };
+    function cenarioDaCena(cn) {
+      const proprio = pistaDe(String(cn.texto || ''));
+      if (proprio) return proprio;
+      if (CEN_VIDEO && (!cn.cenario || GENERICOS[cn.cenario])) return CEN_VIDEO;
+      return cn.cenario || 'cidade';
+    }
+    // COZINHA: ambiente interno (piso de ladrilho, duas paredes, bancada com fogao, armarios, janela, geladeira).
+    function cozinha(r, fogo) {
+      const g = new T.Group();
+      const piso = new T.Group();
+      for (let i = -6; i < 6; i++) for (let j = -5; j < 5; j++) { const q = new T.Mesh(caixaGeo(1, 0.1, 1), M((i + j) % 2 ? '#E9E1D3' : '#CFC3AE')); q.position.set(i + 0.5, -0.05, j + 0.5); piso.add(q); }
+      g.add(piso);
+      const parede = M('#F2D7A6'), parede2 = M('#E8C690');
+      const fundo = new T.Mesh(caixaGeo(12, 6, 0.3), parede); fundo.position.set(0, 3, -3.6); g.add(fundo);
+      const lado = new T.Mesh(caixaGeo(0.3, 6, 10), parede2); lado.position.set(-5.6, 3, 1.3); g.add(lado);
+      const azul = M('#3E7CB1'), tampo = M('#F4F1EA');
+      const banc = new T.Mesh(caixaGeo(8, 1.1, 1.3), azul); banc.position.set(0, 0.55, -2.8); g.add(banc);
+      const tp = new T.Mesh(caixaGeo(8.2, 0.16, 1.45), tampo); tp.position.set(0, 1.18, -2.8); g.add(tp);
+      for (let k = 0; k < 5; k++) { const p2 = new T.Mesh(caixaGeo(0.04, 0.9, 0.02), M('#2D5F8C')); p2.position.set(-3.2 + k * 1.6, 0.55, -2.14); g.add(p2); }
+      const fog = new T.Mesh(caixaGeo(1.8, 0.08, 1.1), M('#2B2B2B')); fog.position.set(1.4, 1.3, -2.8); g.add(fog);
+      const bocas = [];
+      [[-0.45, -0.25], [0.45, -0.25], [-0.45, 0.25], [0.45, 0.25]].forEach(([x, z]) => { const b = new T.Mesh(new T.TorusGeometry(0.18, 0.04, 4, 12), M(fogo ? '#FF7A2A' : '#555', fogo ? { emis: '#FF4A00' } : undefined)); b.rotation.x = Math.PI / 2; b.position.set(1.4 + x, 1.36, -2.8 + z); g.add(b); bocas.push(b); });
+      const arm = M('#FFFFFF');
+      for (let k = 0; k < 4; k++) { const a = new T.Mesh(caixaGeo(1.7, 1.2, 0.7), arm); a.position.set(-3 + k * 1.95, 4.1, -3.1); g.add(a); const pux = new T.Mesh(caixaGeo(0.3, 0.06, 0.06), M('#999')); pux.position.set(-3 + k * 1.95, 3.65, -2.72); g.add(pux); }
+      const jan = new T.Mesh(caixaGeo(2.2, 1.6, 0.1), M('#BFE3FF', { emis: '#3A6A8A' })); jan.position.set(-2.2, 2.6, -3.42); g.add(jan);
+      const mold = new T.Mesh(caixaGeo(2.4, 0.12, 0.14), M('#FFFFFF')); mold.position.set(-2.2, 1.75, -3.4); g.add(mold);
+      const gel = new T.Mesh(caixaGeo(1.4, 3.6, 1.3), M('#DCE3E8')); gel.position.set(-4.6, 1.8, -2.6); g.add(gel);
+      const panela = new T.Mesh(new T.CylinderGeometry(0.32, 0.28, 0.32, 10), M('#B0B6BC')); panela.position.set(1.85, 1.52, -2.55); g.add(panela);
+      const lamp = new T.Mesh(new T.ConeGeometry(0.45, 0.4, 10, 1, true), M('#2B2B2B')); lamp.position.set(0, 5.1, -0.5); g.add(lamp);
+      const lb = brilho('rgba(255,225,160,1)', 2.2); lb.position.set(0, 4.85, -0.5); g.add(lb);
+      g.userData = { alt: () => 0, bocas, interior: true };
+      return g;
+    }
+    // AREIA MOVEDICA: a poca escura com aneis que ondulam em volta de quem afunda
+    function poca() {
+      const g = new T.Group();
+      const d = new T.Mesh(new T.CircleGeometry(2.1, 28), M('#A98A55')); d.rotation.x = -Math.PI / 2; d.position.y = 0.04; g.add(d);
+      const aneis = [];
+      for (let k = 0; k < 3; k++) { const a = new T.Mesh(new T.RingGeometry(0.5, 0.62, 28), new T.MeshBasicMaterial({ color: '#7A5E34', transparent: true, opacity: 0.6, side: T.DoubleSide, depthWrite: false })); a.rotation.x = -Math.PI / 2; a.position.y = 0.06; g.add(a); aneis.push(a); }
+      g.userData = { aneis }; return g;
+    }
+
     function montar(cn, idx) {
       const sc = new T.Scene(), r = U.rng((spec.semente || 'lp') + ':' + idx);
-      const acao = cn.acaoV2, cen = cn.cenario || 'cidade';
+      const acao = cn.acaoV2, cen = cenarioDaCena(cn);
       const globo = cen === 'planeta' || cen === 'espaco';
       // hora: a do roteiro, senao a que a acao pede
       const horaPad = { noite_eterna: 'dia', amanhece: 'noite', aurora: 'noite', esquenta: 'quente', estiagem: 'quente', sol_cresce: 'quente', congela: 'frio', chove: 'tempestade', vento: 'tempestade', sem_ar: 'cinza', incendio: 'entardecer', erupcao: 'entardecer' }[acao];
@@ -528,9 +582,14 @@
         const solS = brilho('rgba(255,230,160,1)', 9); solS.position.set(-26, 10, -30); sc.add(solS); o.solS = solS;
         sol.position.set(-20, 8, 14);
       } else {
-        const tr = terreno(cen === 'oceano' ? 'praia' : cen, r); sc.add(tr); o.terreno = tr;
-        sc.fog = new T.Fog(new T.Color(CEU[hora][1]), 30, 70);
-        const solS = brilho(hora === 'noite' ? 'rgba(220,230,255,1)' : 'rgba(255,240,190,1)', hora === 'noite' ? 3 : 4.5); solS.material.opacity = 0.85; sc.add(solS); o.solS = solS;
+        const interior = cen === 'cozinha';
+        const fogo = /(fuego|fogo|fire|llama|chama|explo|incend)/i.test(String(cn.texto || '') + ' ' + String(spec.titulo || ''));
+        const tr = interior ? cozinha(r, fogo) : terreno(cen === 'oceano' ? 'praia' : cen, r); sc.add(tr); o.terreno = tr; o.interior = interior;
+        if (interior) { sc.background = new T.Color('#F2D7A6'); o.bocas = tr.userData.bocas; }
+        else sc.fog = new T.Fog(new T.Color(CEU[hora][1]), 30, 70);
+        // v3: o sol era um borrao que estourava o quadro; menor e mais suave
+        const solS = brilho(hora === 'noite' ? 'rgba(220,230,255,1)' : 'rgba(255,240,190,1)', hora === 'noite' ? 2.2 : 2.6); solS.material.opacity = 0.6; if (!interior) sc.add(solS); o.solS = interior ? null : solS;
+        if (cen === 'areia_movedica') { const pc = poca(); pc.position.set(0, 0, 1.6); sc.add(pc); o.poca = pc; }
         const livre = (x, z) => Math.hypot(x, z - 1) > 2.6 && Math.hypot(x, z) < RAIO - 0.8;
         // 23/10 (dono: "cenarios confusos"): predio, casa e piramide entre a camera e quem age tapavam a cena.
         // A camera anda pelo arco da frente (azimute ~ -0,7..2,1 rad a partir de +z): construcao so' fora dele;
@@ -567,9 +626,12 @@
             const b = new T.Group(); const casco = new T.Mesh(caixaGeo(1.4, 0.35, 0.6), M('#C8553D')); b.add(casco); const v2 = new T.Mesh(new T.ConeGeometry(0.45, 1.1, 3), M('#FFFFFF')); v2.position.y = 0.7; b.add(v2); sombra(b); sc.add(b); o.barco = b;
           }
         }
-        for (let k = 0; k < 4; k++) { const n = nuvem(r, hora === 'tempestade' || hora === 'cinza' ? '#9AA3B0' : '#FFFFFF'); n.userData = { a: r() * 6.28, h: 7 + r() * 3, d: 5 + r() * 4 }; sc.add(n); o.nuvens.push(n); }
+        for (let k = 0; k < (o.interior ? 0 : 4); k++) { const n = nuvem(r, hora === 'tempestade' || hora === 'cinza' ? '#9AA3B0' : '#FFFFFF'); n.userData = { a: r() * 6.28, h: 7 + r() * 3, d: 5 + r() * 4 }; sc.add(n); o.nuvens.push(n); }
         // gente: 1 protagonista no centro + figurantes; multidao = 14
-        const n = acao === 'multidao' || acao === 'sem_ar' || acao === 'corre' ? 12 : Math.max(1, (cn.atores || ['pessoa']).length) + (cen === 'cidade' ? 2 : 1);
+        // v3: 'corre' fazia 12 bonecos tapando a acao; e quando a IA ja cria a pessoa (cn.criar), o protagonista
+        // padrao ficava DUPLICADO ao lado dela. Agora: multidao so' quando a cena pede; pessoa criada = protagonista.
+        const iaCriaPessoa = Array.isArray(cn.criar) && cn.criar.some((d) => d && d.modelo === 'pessoa');
+        const n = acao === 'multidao' || acao === 'sem_ar' ? 12 : iaCriaPessoa ? 0 : acao === 'corre' ? 3 : Math.max(1, (cn.atores || ['pessoa']).length) + (cen === 'cidade' ? 2 : 1);
         for (let i = 0; i < Math.min(14, n); i++) {
           const p = pessoa(r, i);
           if (i === 0) p.position.set(0, 0, 1.6);
@@ -646,14 +708,16 @@
       const vo503 = U.lerp(-0.02, 0.06, U.suave(U.clamp((t - 3.0) / 0.5, 0, 1)));
       cam.setViewOffset(W, H, 0, Math.round(H * vo503), W, H);
       const cam0 = cn.camera || (o.globo ? 'orbita' : 'orbita');
-      let ang = 0.5 * Math.sin(t * 0.21) + k * 0.55, dist = o.globo ? 15.5 : 21 * ZOOM503, alt = o.globo ? 2 : 9.5 * ZOOM503, alvoY = o.globo ? 0 : 1.6;
+      // v3: a camera ficava a 19 m -- gente com 15% da altura do quadro e metade de ceu/mar vazio. Agora ~14 m (25%).
+      let ang = 0.5 * Math.sin(t * 0.21) + k * 0.55, dist = o.globo ? 15.5 : 14.5, alt = o.globo ? 2 : 6.2, alvoY = o.globo ? 0 : 1.5;
       if (cam0 === 'orbita') ang += k * 0.9;
       if (cam0 === 'zoom_in') dist *= U.lerp(1.12, 0.62, U.suave(k));
-      if (cam0 === 'zoom_out') dist *= U.lerp(0.62, 1.1, U.suave(k));
+      if (cam0 === 'zoom_out') dist *= U.lerp(0.62, 0.95, U.suave(k));
       if (cam0 === 'sobrevoo') { alt = o.globo ? 9 : 16; dist *= 0.72; }
       if (cam0 === 'perto') { dist *= o.globo ? 0.7 : 0.55; alt *= o.globo ? 1 : 0.42; alvoY = o.globo ? 0 : 1.7; ang = 0.25 * Math.sin(t * 0.3); }
       if (!o.globo && (acao === 'cresce') ) alvoY += U.saida(k) * 2.5;
       if (!o.globo && (acao === 'noite_eterna' || acao === 'aurora' || acao === 'lua_perto' || acao === 'impacto' || acao === 'chuva_meteoros' || acao === 'sol_cresce')) { alt *= 0.55; alvoY = 4 + 2 * U.suave(k); }
+      if (o.interior) { dist = Math.min(dist, 9.5); alt = Math.min(alt, 4.2); ang = U.clamp(ang, -0.45, 0.6); alvoY = 1.4; }   // cozinha: dentro do comodo
       // empurrao de entrada: a cena chega 10% mais perto e assenta (substitui o flash)
       dist *= 1 - 0.1 * (1 - U.saida(U.clamp(local / 0.5, 0, 1)));
       const foco = !o.globo && cam0 === 'perto' ? 1.6 : 0;
@@ -695,6 +759,9 @@
         if (o.rochas && acao === 'impacto') { const m = o.rochas[0], q = U.clamp(k / 0.6, 0, 1); m.visible = q < 1; m.position.set(U.lerp(-14, 0, q) * 1.0, U.lerp(8, 1.6, q), U.lerp(-6, 2.6, q)); }
         o.halo.material.opacity = 0.75;
       }
+      // ---- v3: poca de areia movedica (aneis que se abrem) e o fogo do fogao tremendo
+      if (o.poca) o.poca.userData.aneis.forEach((a, j) => { const q = (t * 0.55 + j / 3) % 1; a.scale.setScalar(1 + q * 2.6); a.material.opacity = 0.6 * (1 - q); });
+      if (o.bocas) o.bocas.forEach((b, j) => { if (b.material.emissive) b.material.emissive.setRGB(1, 0.29 + 0.12 * Math.sin(t * 13 + j), 0); });
       // ---- agua
       if (o.agua) {
         const n0 = o.agua.userData.nivel0;
@@ -754,6 +821,7 @@
         if (acao === 'para_de_girar' && k > 0.3) { x += (k - 0.3) * 3.2; p.rotation.z = -0.6 * U.saida((k - 0.3) / 0.7); }
         if (acao === 'vento') { x += Math.sin(t * 3 + j) * 0.05 + 0.25; p.rotation.z = -0.25; }
         if (acao === 'inunda' && o.agua) y = Math.max(y, o.agua.userData.nivel - 1.4);
+        if (o.poca && j === 0) y -= 0.35 + 0.5 * U.suave(k);   // v3: quem esta na areia movedica afunda
         if (acao === 'impacto' && k > 0.6) { p.rotation.x = -U.saida((k - 0.6) / 0.2) * 1.3; }
         p.position.set(x, y, z);
       });

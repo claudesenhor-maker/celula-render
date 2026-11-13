@@ -122,7 +122,9 @@
     // O CARTAZ DO 1o SEGUNDO (o mesmo papel do `legendas.Titulo` do recorte):
     // a promessa do video escrita enquanto o feed decide. Sai em ~3 s.
     cartaz(c, spec, t, est) {
-      if (!spec.titulo) return;
+      // v3 (13/11): o emoji do titulo virava um quadrado vazio -- o Chrome do render nao tem fonte de emoji.
+      const titulo = String(spec.titulo || '').replace(/[\p{Extended_Pictographic}\uFE0F\u200D\u20E3]/gu, '').replace(/\s+/g, ' ').trim();
+      if (!titulo) return;
       const dur = est.dur || 3.2;
       if (t > dur + 0.4) return;
       // 23/10 (retencao): o cartaz ja' esta' NO QUADRO 0 -- e' o quadro que o feed
@@ -131,7 +133,7 @@
       c.save();
       c.font = est.fonte; c.textAlign = 'center'; c.textBaseline = 'middle';
       const area = U.areaSegura(spec);
-      const layout = U.textoAjustado(c, est.caixa ? spec.titulo.toUpperCase() : spec.titulo, area.w - 100, 280, 32);
+      const layout = U.textoAjustado(c, est.caixa ? titulo.toUpperCase() : titulo, area.w - 100, 280, 32);
       const ls = layout.linhas;
       const lh = Math.min(est.altura_linha || 96, layout.lh), h = ls.length * lh + 60, w = Math.min(area.w, Math.max(...ls.map((l) => c.measureText(l).width)) + 90);
       // Alguns motores reservam espaço abaixo do título para o cronômetro.
