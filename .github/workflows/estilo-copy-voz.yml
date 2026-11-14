@@ -9,6 +9,11 @@ on:
         description: 'Narração original de ficção (20 a 8000 caracteres)'
         required: true
         type: string
+      ajustes:
+        description: 'JSON: ref (banco pt), emocoes (uma por fala), falas, cfg_weight, temperature, velocidade'
+        required: false
+        type: string
+        default: ''
 permissions:
   contents: read
 jobs:
@@ -35,6 +40,7 @@ jobs:
         env:
           ESTILO_COPY_TEXTO: ${{ inputs.texto || github.event.client_payload.texto }}
           ESTILO_COPY_FALAS_JSON: ${{ toJSON(github.event.client_payload.falas) }}
+          ESTILO_COPY_AJUSTES: ${{ inputs.ajustes || toJSON(github.event.client_payload.ajustes) }}
           OMP_NUM_THREADS: '2'
           MKL_NUM_THREADS: '2'
         run: python estilo_copy_voz.py
