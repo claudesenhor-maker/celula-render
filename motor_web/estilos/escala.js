@@ -292,7 +292,7 @@
       [/cohete|foguete|rocket/i, 'foguete'], [/espejo|espelho|mirror|\bdisco\b|\bdisc\b|\bplato\b|\bprato\b|moneda|moeda|\bcoin\b/i, 'disco'], [/edificio|pr[eé]dio|building|rascacielos|skyscraper/i, 'predio'], [/noria|ferris|roda[- ]gigante|london eye|high roller|ain d[uú]b[aá]i|ain dubai|observation wheel|\brueda\b/i, 'roda_gigante'], [/[aá]rbol|[aá]rvore|\btree\b/i, 'arvore'], [/\bcasa\b|\bhouse\b/i, 'casa']];
     const modeloPeloNome = (n) => { for (const [re, m] of PELO_NOME) if (re.test(String(n || ''))) return m; return null; };
     const itens = (Array.isArray(spec.itens) ? spec.itens.slice(0, 12) : []).map((it, i) => {
-      const tam = num(it.tamanho_m != null ? it.tamanho_m : it.altura_m, 0.001, 2e12, 1)   // 14/11: ate' o Sol (era 2e7 = 20.000 km), cor = corOk(it.cor, null);
+      const tam = num(it.tamanho_m != null ? it.tamanho_m : it.altura_m, 0.001, 2e12, 1), cor = corOk(it.cor, null);   // 14/11: teto ate' o Sol (era 2e7 = 20.000 km)
       let g;
       const v7 = modeloV7PeloNome(it.nome), v7g = v7 ? modeloV7(v7, cor) : null;
       const pronto = v7g ? null : (it.modelo ? null : modeloPeloNome(it.nome));
