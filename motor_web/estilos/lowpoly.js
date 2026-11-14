@@ -159,7 +159,7 @@
     const facetada = new WeakMap();
     function facetar(raiz) {
       raiz.traverse(q=>{
-        if(!q.isMesh || q.material.isMeshBasicMaterial)return;
+        if(!q.isMesh || q.material.isMeshBasicMaterial || q.userData.liso)return;   // v4: personagem fica liso
         if(facetada.has(q.geometry)){q.geometry=facetada.get(q.geometry);return;}
         const original=q.geometry,g=original.index?original.toNonIndexed():original;
         g.computeVertexNormals();facetada.set(original,g);facetada.set(g,g);q.geometry=g;
@@ -298,37 +298,91 @@
     function gelo() { const m = new T.Mesh(caixaGeo(1.1, 2.9, 1.1), new T.MeshLambertMaterial({  color: '#BFE8FF', transparent: true, opacity: 0.55 })); m.position.y = 1.45; return m; }
 
     // -------------------------------------------------------------- pessoa
+    // v4 (14/11, dono: "personagens 3D desfigurados e de baixa qualidade"): era tronco de cilindro de 7 lados, membros
+    // de 6 lados, cabeca de icosaedro (rosto facetado), olho = bolinha preta, sem maos nem orelhas. Agora: formas LISAS
+    // (capsulas e esferas de 24-32 segmentos, material com brilho suave), proporcao de boneco simpatico (cabeca ~1/3,3),
+    // olho com branco, iris, pupila e brilho, sobrancelha que expressa, nariz, orelhas, bochecha, mao com polegar,
+    // manga e sapato. A interface (userData) e' a mesma: posar() e as cenas nao mudam.
+    const PM = {};
+    const MP = (cor, o) => {   // material liso de personagem (cache por cor)
+      o = o || {}; const k = cor + JSON.stringify(o);
+      if (!PM[k]) PM[k] = new T.MeshLambertMaterial({ color: cor,   // Lambert: ilumina por vertice, barato no SwiftShader
+        emissive: o.emis || '#000000', transparent: !!o.op, opacity: o.op || 1, depthWrite: !o.op });
+      return PM[k];
+    };
+    const GP = {};
+    // three r128 nao tem CapsuleGeometry: capsula = torno (Lathe) de meio-circulo + reta + meio-circulo
+    const capsula = (r, l) => { const k = 'c' + r + ':' + l; if (!GP[k]) { const pts = [];
+      for (let i = 0; i <= 8; i++) { const a = -Math.PI / 2 + (i / 8) * (Math.PI / 2); pts.push(new T.Vector2(Math.cos(a) * r, Math.sin(a) * r - l / 2)); }
+      for (let i = 0; i <= 8; i++) { const a = (i / 8) * (Math.PI / 2); pts.push(new T.Vector2(Math.cos(a) * r, Math.sin(a) * r + l / 2)); }
+      pts[0].x = 0.0001; pts[pts.length - 1].x = 0.0001; GP[k] = new T.LatheGeometry(pts, 24); } return GP[k]; };
+    const esfera = (r, a, b) => { const k = 's' + r + ':' + a + ':' + b; if (!GP[k]) GP[k] = new T.SphereGeometry(r, 28, 20, 0, Math.PI * 2, a || 0, b || Math.PI); return GP[k]; };
+    const mesh = (geo, mat, x, y, z, pai) => { const m = new T.Mesh(geo, mat); m.userData.liso = true; m.position.set(x || 0, y || 0, z || 0); if (pai) pai.add(m); return m; };
     function pessoa(r, idx) {
       const g = new T.Group(), corpo = new T.Group(); g.add(corpo);
       const roupa = COR.roupa[idx % COR.roupa.length], pele = COR.pele[Math.floor(r() * COR.pele.length)], cab = COR.cabelo[Math.floor(r() * COR.cabelo.length)];
-      const tronco = new T.Mesh(new T.CylinderGeometry(0.33, 0.42, 1.0, 7), M(roupa)); tronco.position.y = 1.2; corpo.add(tronco);
-      const quadril = new T.Mesh(new T.CylinderGeometry(0.46, 0.4, 0.25, 7), M(COR.calca)); quadril.position.y = 0.62; corpo.add(quadril);
-      // 23/10 (dono: "pessoas confusas"): cabeca proporcional ao corpo (era 0,46 para um tronco de 1,0 e o
-      // cabelo uma bola MAIOR que ela); cabelo em touca, olhos pequenos, pescoco.
-      const pescoco = new T.Mesh(new T.CylinderGeometry(0.11, 0.13, 0.18, 6), M(pele)); pescoco.position.y = 1.76; corpo.add(pescoco);
+      const cPele = new T.Color(pele), mPele = MP(pele, { emis: cPele.clone().multiplyScalar(0.18).getStyle(), rough: 0.55 });
+      const mRoupa = MP(roupa), mCalca = MP(COR.calca, { rough: 0.8 }), mCab = MP(cab, { rough: 0.45 }), mSapato = MP('#2A2A30', { rough: 0.4 });
+      const escuro = new T.Color(roupa).multiplyScalar(0.72).getStyle();
+      // quadril/bermuda e tronco (capsulas achatadas na profundidade)
+      const quadril = mesh(capsula(0.3, 0.14), mCalca, 0, 0.9, 0, corpo); quadril.rotation.z = Math.PI / 2; quadril.scale.set(1, 1.05, 0.8);
+      const tronco = mesh(capsula(0.34, 0.42), mRoupa, 0, 1.33, 0, corpo); tronco.scale.set(1.02, 1, 0.74);
+      const barra = mesh(new T.TorusGeometry(0.335, 0.035, 8, 28), MP(escuro), 0, 1.02, 0, corpo); barra.rotation.x = Math.PI / 2; barra.scale.set(1.02, 0.74, 1);
+      const gola = mesh(new T.TorusGeometry(0.13, 0.035, 8, 20), MP(escuro), 0, 1.66, 0.02, corpo); gola.rotation.x = Math.PI / 2;
+      mesh(new T.CylinderGeometry(0.1, 0.115, 0.16, 18), mPele, 0, 1.72, 0, corpo);
+      // cabeca
       const cabeca = new T.Group(); cabeca.position.y = 2.06; corpo.add(cabeca);
-      const crane = new T.Mesh(new T.IcosahedronGeometry(0.34, 1), M(pele, { emis: new T.Color(pele).multiplyScalar(0.32).getStyle() })); crane.scale.set(1, 1.08, 0.98); cabeca.add(crane);
+      const crane = mesh(esfera(0.37), mPele, 0, 0, 0, cabeca); crane.scale.set(1, 1.04, 0.96);
+      [-1, 1].forEach((s) => { const o = mesh(esfera(0.085), mPele, s * 0.36, -0.02, 0, cabeca); o.scale.set(0.55, 1, 0.8); });
+      const nariz = mesh(esfera(0.055), MP(cPele.clone().multiplyScalar(0.94).getStyle(), { rough: 0.5 }), 0, -0.05, 0.36, cabeca); nariz.scale.set(1, 0.9, 0.8);
+      [-1, 1].forEach((s) => { const b = mesh(new T.CircleGeometry(0.06, 20), MP('#FF7A8A', { op: 0.35 }), s * 0.2, -0.1, 0.325, cabeca); b.rotation.y = s * 0.45; });
+      // cabelo: 0 curto com franja, 1 chanel (mais longo), 2 coque
       const estilo = Math.floor(r() * 3);
-      const cabelo = new T.Mesh(new T.SphereGeometry(0.375, 10, 6, 0, Math.PI * 2, 0, Math.PI * (estilo === 1 ? 0.62 : 0.5)), M(cab));
-      cabelo.position.set(0, 0.05, -0.02); cabelo.rotation.x = -0.25; cabeca.add(cabelo);
-      if (estilo === 2) { const coque = new T.Mesh(new T.IcosahedronGeometry(0.15, 1), M(cab)); coque.position.set(0, 0.3, -0.24); cabeca.add(coque); }
-      const olhoM = M('#151515'), olhos = [];
-      [-0.12, 0.12].forEach((x) => { const o = new T.Mesh(new T.SphereGeometry(0.052, 8, 6), olhoM); o.position.set(x, 0.03, 0.31); cabeca.add(o); olhos.push(o);
-        const b = new T.Mesh(new T.SphereGeometry(0.017, 5, 4), M('#FFFFFF')); b.position.set(x + 0.016, 0.05, 0.355); cabeca.add(b); olhos.push(b); });
-      const bocaRiso = new T.Mesh(new T.TorusGeometry(0.075, 0.018, 4, 8, Math.PI), M('#5A2020')); bocaRiso.rotation.z = Math.PI; bocaRiso.position.set(0, -0.12, 0.315); cabeca.add(bocaRiso);
-      const bocaO = new T.Mesh(new T.CircleGeometry(0.055, 8), M('#5A2020')); bocaO.position.set(0, -0.14, 0.335); cabeca.add(bocaO);
-      const bocaReta = new T.Mesh(caixaGeo(0.11, 0.022, 0.02), M('#5A2020')); bocaReta.position.set(0, -0.13, 0.335); cabeca.add(bocaReta);
+      const calota = mesh(esfera(0.395, 0, Math.PI * (estilo === 1 ? 0.6 : 0.47)), mCab, 0, 0.05, -0.03, cabeca); calota.rotation.x = -0.55; calota.scale.set(1, 1.02, 1);
+      const franja = mesh(capsula(0.07, 0.34), mCab, 0.04, 0.3, 0.24, cabeca); franja.rotation.z = Math.PI / 2 + 0.18; franja.rotation.y = 0.08; franja.scale.set(1, 1, 0.7);
+      if (estilo === 1) { const nuca = mesh(esfera(0.39, Math.PI * 0.3, Math.PI * 0.45), mCab, 0, 0.0, -0.06, cabeca); nuca.scale.set(1.04, 1.1, 1); }
+      if (estilo === 2) { mesh(esfera(0.15), mCab, 0, 0.36, -0.22, cabeca); }
+      // olhos: [grupoEsq, brilhoEsq, grupoDir, brilhoDir] -- par = olho inteiro (escala/piscar), impar = brilho
+      const olhos = [], sobr = [];
+      const mBranco = MP('#FFFFFF', { rough: 0.3 }), mIris = MP('#3B2A20', { rough: 0.25 }), mPup = MP('#0C0C0C', { rough: 0.2 }), mBrilho = MP('#FFFFFF', { emis: '#FFFFFF' });
+      [-0.13, 0.13].forEach((x) => {
+        const og = new T.Group(); og.position.set(x, 0.05, 0.315); cabeca.add(og);
+        const br = mesh(esfera(0.075), mBranco, 0, 0, 0, og); br.scale.set(0.85, 1.05, 0.5);
+        mesh(esfera(0.047), mIris, 0, -0.005, 0.03, og).scale.set(1, 1, 0.45);
+        mesh(esfera(0.026), mPup, 0, -0.005, 0.045, og).scale.set(1, 1, 0.4);
+        olhos.push(og);
+        const b = mesh(esfera(0.014), mBrilho, x + 0.018, 0.075, 0.37, cabeca); olhos.push(b);
+        const s = mesh(capsula(0.016, 0.085), mCab, x, 0.17, 0.33, cabeca); s.rotation.z = Math.PI / 2 + (x < 0 ? -0.12 : 0.12); sobr.push(s);
+      });
+      const mBoca = MP('#7A2B2B', { rough: 0.5 });
+      const bocaRiso = mesh(new T.TorusGeometry(0.075, 0.02, 10, 24, Math.PI), mBoca, 0, -0.15, 0.33, cabeca); bocaRiso.rotation.z = Math.PI;
+      const bocaO = new T.Group(); bocaO.position.set(0, -0.17, 0.33); cabeca.add(bocaO);
+      mesh(esfera(0.06), mBoca, 0, 0, 0, bocaO).scale.set(0.85, 1.1, 0.35);
+      mesh(esfera(0.03), MP('#E86A6A'), 0, -0.025, 0.012, bocaO).scale.set(1.2, 0.7, 0.3);   // lingua
+      const bocaReta = mesh(capsula(0.016, 0.09), mBoca, 0, -0.15, 0.34, cabeca); bocaReta.rotation.z = Math.PI / 2;
+      // membros: pivo no ombro/quadril; 0,1 = bracos, 2,3 = pernas
       const membros = [];
-      [[-0.55, 1.6, 'b'], [0.55, 1.6, 'b'], [-0.2, 0.58, 'p'], [0.2, 0.58, 'p']].forEach(([x, y, tipo]) => {
+      [[-0.44, 1.6, 'b'], [0.44, 1.6, 'b'], [-0.16, 0.86, 'p'], [0.16, 0.86, 'p']].forEach(([x, y, tipo]) => {
         const piv = new T.Group(); piv.position.set(x, y, 0);
-        const l = tipo === 'b' ? 0.75 : 0.6;
-        const m = new T.Mesh(new T.CylinderGeometry(tipo === 'b' ? 0.11 : 0.14, tipo === 'b' ? 0.1 : 0.13, l, 6), M(tipo === 'b' ? roupa : COR.calca)); m.position.y = -l / 2; piv.add(m);
-        const ponta = new T.Mesh(tipo === 'b' ? new T.IcosahedronGeometry(0.12, 0) : caixaGeo(0.22, 0.12, 0.34), M(tipo === 'b' ? pele : '#2B2B2B'));
-        ponta.position.set(0, -l, tipo === 'b' ? 0 : 0.06); piv.add(ponta);
+        if (tipo === 'b') {
+          const s = Math.sign(x);
+          mesh(esfera(0.13), mRoupa, 0, 0, 0, piv).scale.set(1, 1, 0.9);              // ombro
+          const manga = mesh(capsula(0.11, 0.2), mRoupa, 0, -0.17, 0, piv);
+          mesh(capsula(0.085, 0.36), mPele, 0, -0.42, 0, piv);                        // antebraco
+          const mao = mesh(esfera(0.105), mPele, 0, -0.68, 0.01, piv); mao.scale.set(0.9, 1.05, 0.75);
+          const pol = mesh(capsula(0.035, 0.06), mPele, -s * 0.07, -0.64, 0.05, piv); pol.rotation.z = s * 0.6;
+          manga.scale.set(1.05, 1, 1);
+        } else {
+          mesh(capsula(0.13, 0.36), mCalca, 0, -0.26, 0, piv);                        // coxa+canela (calca)
+          mesh(new T.CylinderGeometry(0.1, 0.1, 0.08, 18), MP('#F4F4F4'), 0, -0.6, 0, piv);   // meia
+          const sap = mesh(esfera(0.14), mSapato, 0, -0.72, 0.07, piv); sap.scale.set(0.95, 0.6, 1.45);
+          const sola = mesh(esfera(0.14, Math.PI * 0.5, Math.PI * 0.5), MP('#EDEDED'), 0, -0.735, 0.07, piv); sola.scale.set(0.97, 0.45, 1.48);
+        }
         corpo.add(piv); membros.push(piv);
       });
-      const suor = []; for (let k = 0; k < 3; k++) { const s = new T.Mesh(new T.IcosahedronGeometry(0.06, 0), M('#7CC7FF')); s.visible = false; cabeca.add(s); suor.push(s); }
-      g.userData = { corpo, cabeca, membros, olhos, bocaRiso, bocaO, bocaReta, suor, fase: r() * 10 };
+      const suor = []; for (let k = 0; k < 3; k++) { const s = mesh(esfera(0.055), MP('#7CC7FF', { rough: 0.15 }), 0, 0, 0, cabeca); s.scale.set(0.8, 1.2, 0.8); s.visible = false; suor.push(s); }
+      g.traverse((o) => { if (o.isMesh) o.castShadow = true; });
+      g.userData = { corpo, cabeca, membros, olhos, sobr, bocaRiso, bocaO, bocaReta, suor, fase: r() * 10 };
       return sombra(g);
     }
     // POSES: cada modo diz ombros (x frente/tras, z abre), quadril, corpo, cabeca e boca.
@@ -360,6 +414,9 @@
       const pisca = ((tf % 3.7) < 0.12) ? 0.12 : 1;
       u.olhos.forEach((o, j) => { if (j % 2 === 0) o.scale.set(olhoS, olhoS * pisca, olhoS); else o.visible = pisca === 1; });
       u.bocaRiso.visible = boca === 'riso'; u.bocaO.visible = boca === 'O'; u.bocaReta.visible = boca === 'reta';
+      // v4: sobrancelha expressa -- sobe no susto/medo (olho grande), franze no frio/sufoco (boca reta), relaxa no resto
+      if (u.sobr) u.sobr.forEach((s, j) => { const lado = j ? 1 : -1, susto = olhoS > 1.15, tenso = boca === 'reta';
+        s.position.y = 0.17 + (susto ? 0.045 : boca === 'O' ? 0.02 : 0); s.rotation.z = Math.PI / 2 + lado * (susto ? -0.28 : tenso ? 0.32 : 0.12); });
     }
 
     // ------------------------------------------------------------- cenarios
@@ -720,7 +777,9 @@
       if (o.interior) { dist = Math.min(dist, 9.5); alt = Math.min(alt, 4.2); ang = U.clamp(ang, -0.45, 0.6); alvoY = 1.4; }   // cozinha: dentro do comodo
       // empurrao de entrada: a cena chega 10% mais perto e assenta (substitui o flash)
       dist *= 1 - 0.1 * (1 - U.saida(U.clamp(local / 0.5, 0, 1)));
-      const foco = !o.globo && cam0 === 'perto' ? 1.6 : 0;
+      // 14/11 (dono: imagens nao centralizadas): a camera girava em volta de (0,0) e o protagonista fica em z=1,6 -- com o giro
+      // ele escorregava para o lado. Agora a camera sempre mira o protagonista.
+      const foco = !o.globo ? (o.gente && o.gente[0] ? o.gente[0].userData.z0 : 1.6) : 0;
       cam.position.set(Math.sin(ang) * dist, alt, Math.cos(ang) * dist + foco); cam.lookAt(0, alvoY, foco);
       const sacode = acao === 'tremor' ? 0.35 : acao === 'erupcao' ? 0.18 * U.suave(k) : acao === 'explode' || acao === 'impacto' ? (k > 0.55 && k < 0.8 ? 0.6 * (1 - (k - 0.55) / 0.25) : 0) : acao === 'para_de_girar' && k > 0.3 && k < 0.65 ? 0.25 : 0;
       if (sacode) { const rr = U.rng(Math.floor(t * 30)); cam.position.x += (rr() - 0.5) * sacode; cam.position.y += (rr() - 0.5) * sacode * 0.7; }

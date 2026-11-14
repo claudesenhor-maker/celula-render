@@ -56,15 +56,18 @@ test('v3: todos os quadros desenham sem erro e mostram placar, legenda e pedido 
   assert.ok(!txt.includes('NOW LOOK CLOSER'), 'legenda nao repete o rotulo "LOOK CLOSER"');
 });
 
-test('v3: as frases entre aspas da premissa viram as legendas do roteiro', () => {
+test('14/11: a premissa (nota interna, as vezes em portugues) NUNCA vira legenda; spec.legendas sim', () => {
   const log = []; const { U, MOTORES, tela } = carregar(log);
-  const sp = spec({ metadados: { premissa: "Abre com 'If you blink, your streak ends', depois 'But now, smaller' e fecha com 'How many did you catch?'." } });
+  const sp = spec({ metadados: { premissa: "Abre com 'que um furo dessa grade esta', depois 'dito em uma frase:' e fecha." } });
   const m = MOTORES.quiz.criar(tela(), sp, U);
   for (let t = 0; t < sp.dur_s; t += 1 / 6) m.quadro(t);
   const txt = log.join(' ');
-  assert.ok(txt.includes('IF YOU BLINK, YOUR STREAK ENDS'), 'abertura passa para o nivel 2 quando o nivel 1 e curto');
-  assert.ok(txt.includes('BUT NOW, SMALLER'));
-  assert.ok(txt.includes('HOW MANY DID YOU CATCH? _/4'));
+  assert.ok(!txt.includes('QUE UM FURO DESSA GRADE ESTA') && !txt.includes('DITO EM UMA FRASE'), 'premissa em PT nao aparece no canal em ingles');
+  const log2 = []; const c2 = carregar(log2);
+  const sp2 = spec({ legendas: ['If you blink, your streak ends', 'But now, smaller', 'How many did you catch?'] });
+  const m2 = c2.MOTORES.quiz.criar(c2.tela(), sp2, c2.U);
+  for (let t = 0; t < sp2.dur_s; t += 1 / 6) m2.quadro(t);
+  assert.ok(log2.join(' ').includes('BUT NOW, SMALLER'), 'spec.legendas continua valendo');
 });
 
 test('v3: legendas em espanhol e portugues', () => {

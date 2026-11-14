@@ -106,7 +106,9 @@
     const FONTE = '"Lilita One", sans-serif';
     const N = spec.cenas.length;
     // o cartao da grade: dentro da zona segura (botoes do app a direita, legenda do app embaixo de 1440)
-    const GX0 = 50, GX1 = W - 185, GY0 = 500, GY1 = 1440, CX = (GX0 + GX1) / 2, PAD = 18;
+    // 14/11 (dono: "legendas e imagens nao estao centralizadas"): o cartao ia de 50 a W-185 (centro em 43% da
+    // largura, fugindo dos botoes do app). Agora e' simetrico; os botoes do app ficam sobre a borda do fundo.
+    const GX0 = 64, GX1 = W - 64, GY0 = 500, GY1 = 1440, CX = (GX0 + GX1) / 2, PAD = 18;
     // MAIS DIFICIL (23/10, pedido do dono): a grade e a sutileza tem um PISO que sobe a cada nivel.
     // SIMETRIA: girar um circulo, girar 90 graus um quadrado ou espelhar um coracao nao muda nada.
     const GIRO_INVISIVEL = { circulo: 1 }, ESPELHO_INVISIVEL = { circulo: 1, quadrado: 1, cruz: 1, hexagono: 1, estrela: 1, coracao: 1, gota: 1, triangulo: 1,
@@ -145,7 +147,9 @@
     const lingua = /^es/i.test(spec.idioma || '') ? 'es' : /^pt/i.test(spec.idioma || '') ? 'pt' : 'en';
     const F = FRASES[lingua];
     let roteiro = Array.isArray(spec.legendas) ? spec.legendas.map(String) : null;
-    if (!roteiro) {
+    // 14/11: a premissa e' nota interna (muitas vezes em portugues) -- legendas em PT apareciam no canal em ingles.
+    // So' spec.legendas, cena.legenda ou o padrao do idioma.
+    if (false) {
       const prem = String((spec.metadados && spec.metadados.premissa) || '');
       const aspas = [...prem.matchAll(/['‘’"“”]([^'‘’"“”]{4,42})['‘’"“”]/g)].map((m) => m[1].trim())
         .filter((s) => /[a-zA-ZÀ-ÿ]/.test(s) && !/[{}<>]/.test(s));

@@ -31,8 +31,17 @@ class QuizCTA(unittest.TestCase):
         s = self.spec()
         self.m.linha_do_tempo(s, tempfile.mkdtemp(), "mudo")
         self.assertEqual(s["cta_s"], self.m.CTA_QUIZ_S)
-        self.assertAlmostEqual(s["dur_s"], 15 + self.m.CTA_QUIZ_S, places=3)
-        self.assertAlmostEqual(s["cenas"][-1]["fim"] - s["cenas"][-1]["ini"], 6 + self.m.CTA_QUIZ_S, places=3)
+        # 14/11: piso de procura por nivel (PISO_QUIZ_S = 6/7/8/9 s, o modo impossivel nao fica com 2 s)
+        piso = self.m.PISO_QUIZ_S
+        durs = [max(d, piso[min(k, len(piso) - 1)]) for k, d in enumerate([4, 5, 6])]
+        self.assertAlmostEqual(s["dur_s"], sum(durs) + self.m.CTA_QUIZ_S, places=3)
+        self.assertAlmostEqual(s["cenas"][-1]["fim"] - s["cenas"][-1]["ini"], durs[-1] + self.m.CTA_QUIZ_S, places=3)
+
+    def test_nivel_dificil_tem_tempo_de_procura(self):
+        s = {"estilo": "quiz", "narrado": False, "cenas": [{"dur_s": 3}, {"dur_s": 3}, {"dur_s": 3}, {"dur_s": 3.3}]}
+        self.m.linha_do_tempo(s, tempfile.mkdtemp(), "mudo")
+        imp = s["cenas"][3]["fim"] - s["cenas"][3]["ini"] - s["cta_s"]
+        self.assertGreaterEqual(imp - 1.3, 7.0)   # >= 7 s de procura no IMPOSSIBLE (antes ~2 s)
 
     def test_plim_do_ultimo_nivel_recua_e_ha_pops_no_encerramento(self):
         s = self.spec()

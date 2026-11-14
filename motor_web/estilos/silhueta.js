@@ -191,7 +191,7 @@
       // camera: empurra devagar sempre; `zoom_out` abre, `paralaxe` desliza
       const z = cn.camera === 'zoom_out' ? U.lerp(1.25, 1, U.suave(k)) : U.lerp(1.04, 1.22, U.suave(k));
       const desl = (cn.camera === 'paralaxe' ? 160 : 60) * U.suave(k);
-      c.save(); c.translate(W * 0.42, H * 0.5); c.scale(z, z); c.translate(-W * 0.42, -H * 0.5);
+      c.save(); c.translate(W * 0.5, H * 0.5); c.scale(z, z); c.translate(-W * 0.5, -H * 0.5);
       const g = c.createLinearGradient(0, 0, 0, CHAO); cor.forEach((col, i) => g.addColorStop(i / (cor.length - 1), col)); c.fillStyle = g; c.fillRect(-100, -100, W + 200, H + 200);
       if (hora === 'noite' || cn.cenario === 'ceu_estrelado') { const r = U.rng(3); for (let i = 0; i < 160; i++) { const a = 0.4 + 0.6 * Math.abs(Math.sin(t * (0.5 + r()) + i)); c.fillStyle = 'rgba(255,255,255,' + (a * r()).toFixed(2) + ')'; c.fillRect(r() * W, r() * CHAO * 0.8, 3, 3); } }
       if (DISCO[hora]) { const dx = W * 0.62 - desl * 0.1, dy = CHAO - 520; const gl = c.createRadialGradient(dx, dy, 60, dx, dy, 520); gl.addColorStop(0, DISCO[hora]); gl.addColorStop(0.25, DISCO[hora] + '88'); gl.addColorStop(1, 'rgba(0,0,0,0)'); c.fillStyle = gl; c.fillRect(0, 0, W, H); c.beginPath(); c.arc(dx, dy, 170, 0, U.TAU); c.fillStyle = DISCO[hora]; c.fill(); }

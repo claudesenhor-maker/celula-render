@@ -405,7 +405,7 @@
         info.marcas.forEach(([kk, p, tam]) => { const q = proj(p.clone().add(new T.Vector3(0, tam * 1.6, 0))); if (q.atras) return;
           if (kk === info.alvo) etiqueta(CORPOS[kk].nome.toUpperCase(), null, q.x, q.y - 40, true, U.mola(local - 0.2, 10)); });
         contador('TIME LAPSE', '+' + tempoD(Math.max(0, info.dias)), H * 0.19);
-        c.save(); c.font = '30px "Lilita One", sans-serif'; c.fillStyle = 'rgba(200,210,230,0.8)'; c.textAlign = 'center'; c.fillText('REFERENCE: ' + dataReferencia.slice(0,10) + ' · NOT TO SCALE', W * 0.43, H * 0.225, W * 0.77); c.restore();
+        c.save(); c.font = '30px "Lilita One", sans-serif'; c.fillStyle = 'rgba(200,210,230,0.8)'; c.textAlign = 'center'; c.fillText('REFERENCE: ' + dataReferencia.slice(0,10) + ' · NOT TO SCALE', W * 0.5, H * 0.225, W * 0.86); c.restore();
       } else if (acao === 'foco' || acao === 'dia') {
         const b = CORPOS[info.alvo];
         if (acao === 'dia' && b.dia) { contador('ONE DAY ON ' + b.nome.toUpperCase(), tempoH(b.dia * U.suave(k)), H * 0.6); }

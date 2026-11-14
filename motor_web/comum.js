@@ -65,7 +65,8 @@
       return out;
     },
     areaSegura(spec) {
-      return { x: spec.w * 0.035, y: spec.h * 0.078, w: spec.w * 0.79, h: spec.h * 0.66, cx: spec.w * 0.43 };
+      // 14/11 (dono: legendas e imagens nao centralizadas): era x 3,5%, largura 79%, centro 43% (fugia dos botoes do app); agora simetrico
+      return { x: spec.w * 0.07, y: spec.h * 0.078, w: spec.w * 0.86, h: spec.h * 0.66, cx: spec.w * 0.5 };
     },
     camada(w, h, pintar) {
       const cv = document.createElement('canvas'); cv.width=w;cv.height=h;pintar(cv.getContext('2d'));return cv;

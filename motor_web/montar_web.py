@@ -137,6 +137,7 @@ def camas_de_ambiente(spec):
 # inscritos. A ultima cena ganha CTA_QUIZ_S segundos de ENCERRAMENTO (placar nos comentarios, like, inscrever);
 # o motor desenha (`spec.cta_s`) e o cronometro/"plim" do ultimo nivel recuam o mesmo tanto.
 CTA_QUIZ_S = 2.6
+PISO_QUIZ_S = (6.0, 7.0, 8.0, 9.0)
 CPS_LEITURA = 14.0      # caracteres por segundo que alguem le no celular
 PAUSA_NARRADO = 0.22    # respiro entre cenas narradas (a voz nao emenda)
 
@@ -242,6 +243,10 @@ def linha_do_tempo(spec, tmp, modo_tts):
             texto = str(c.get("texto") or "")
             if texto and (c.get("acao") == "cartela" or spec.get("estilo") == "pixel"):
                 dur = max(dur, len(texto) / CPS_LEITURA + 1.0)
+            if spec.get("estilo") == "quiz":
+                # 14/11 (dono: "no modo impossivel nao deixe um tempo tao curto, fica realmente impossivel achar em
+                # 2 segundos"): piso por nivel, contando a revelacao de 1,3 s -> 4,7 / 5,7 / 6,7 / 7,7 s de procura
+                dur = max(dur, PISO_QUIZ_S[min(k, len(PISO_QUIZ_S) - 1)])
             if k == len(cenas) - 1 and spec.get("cta_s"):
                 dur += float(spec["cta_s"])
             c["ini"], c["fim"] = round(t, 3), round(t + dur, 3)

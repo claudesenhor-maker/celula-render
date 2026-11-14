@@ -53,17 +53,45 @@
         if (giro) m.rotation.set(...giro.map((a) => (a * Math.PI) / 180)); g.add(m); return m; };
       switch (nome) {
         case 'pessoa': {
-          // unidade: altura = 1 (capsula base: 0,6 de largura x 1 de altura)
-          // v3: a cor do item vinha cor de pele e a pessoa parecia sem camisa -- roupa sempre de roupa
-          const pele = '#E8B996', roupa = '#3E7CB1';
-          add('cilindro', '#2F3C55', [-0.045, 0.24, 0], [0.075, 0.44, 0.075], null, 'tecido'); add('cilindro', '#2F3C55', [0.045, 0.24, 0], [0.075, 0.44, 0.075], null, 'tecido');
-          add('caixa', '#1E1E22', [-0.045, 0.016, 0.02], [0.08, 0.032, 0.12], null, 'borracha'); add('caixa', '#1E1E22', [0.045, 0.016, 0.02], [0.08, 0.032, 0.12], null, 'borracha');
-          add('capsula', roupa, [0, 0.64, 0], [0.42, 0.38, 0.32], null, 'tecido');
-          add('capsula', roupa, [-0.135, 0.63, 0], [0.11, 0.36, 0.11], [0, 0, 6], 'tecido'); add('capsula', roupa, [0.135, 0.63, 0], [0.11, 0.36, 0.11], [0, 0, -6], 'tecido');
-          add('esfera', pele, [-0.152, 0.445, 0], [0.055, 0.06, 0.055]); add('esfera', pele, [0.152, 0.445, 0], [0.055, 0.06, 0.055]);
-          add('cilindro', pele, [0, 0.835, 0], [0.055, 0.04, 0.055]); add('esfera', pele, [0, 0.91, 0], [0.14, 0.16, 0.15]);
-          for(const lado of [-1,1])add('esfera','#302523',[lado*.025,.92,.071],[.014,.016,.012]);
-          add('meia_esfera', '#3A2618', [0, 0.925, -0.006], [0.148, 0.15, 0.158], null, 'tecido'); break; }
+          // v4 (14/11, dono: "personagens 3D desfigurados e de baixa qualidade"): era cilindro + caixa de sapato + bola de
+          // cabeca com 2 pontinhos. Agora proporcao de boneco simpatico (cabeca ~1/5), maos, sapato arredondado, olho com
+          // branco e pupila, sorriso, cabelo com franja, manga e cinto. Unidade: altura = 1.
+          const pele = '#E8B996', roupa = '#3E7CB1', calca = '#2F3C55', cab = '#3A2618';
+          for (const l of [-1, 1]) {
+            add('capsula', calca, [l * 0.05, 0.25, 0], [0.085, 0.42, 0.09], null, 'tecido');
+            add('esfera', '#1E1E22', [l * 0.05, 0.03, 0.025], [0.085, 0.06, 0.15], null, 'borracha');
+            add('capsula', roupa, [l * 0.15, 0.6, 0], [0.075, 0.2, 0.075], [0, 0, l * 8], 'tecido');
+            add('capsula', pele, [l * 0.168, 0.47, 0.005], [0.058, 0.18, 0.058], [0, 0, l * 5]);
+            add('esfera', pele, [l * 0.175, 0.385, 0.01], [0.06, 0.068, 0.05]);
+          }
+          add('capsula', roupa, [0, 0.6, 0], [0.27, 0.34, 0.19], null, 'tecido');
+          add('cilindro', '#22283A', [0, 0.45, 0], [0.25, 0.03, 0.18], null, 'borracha');
+          add('cilindro', pele, [0, 0.765, 0], [0.06, 0.05, 0.06]);
+          add('esfera', pele, [0, 0.88, 0], [0.2, 0.21, 0.19]);
+          for (const l of [-1, 1]) {
+            add('esfera', pele, [l * 0.098, 0.875, 0], [0.03, 0.045, 0.03]);
+            add('esfera', '#FFFFFF', [l * 0.04, 0.9, 0.085], [0.032, 0.038, 0.016], null, 'ceramica');
+            add('esfera', '#1A1410', [l * 0.04, 0.898, 0.093], [0.018, 0.022, 0.01]);
+            add('capsula', cab, [l * 0.042, 0.94, 0.086], [0.012, 0.03, 0.01], [0, 0, 90 + l * 10]);
+          }
+          add('esfera', '#D9A07E', [0, 0.873, 0.097], [0.022, 0.02, 0.018]);
+          add('capsula', '#8A2E2E', [0, 0.848, 0.09], [0.011, 0.045, 0.01], [0, 0, 90]);
+          add('meia_esfera', cab, [0, 0.905, -0.012], [0.205, 0.16, 0.2], [-22, 0, 0], 'tecido');
+          add('capsula', cab, [0.015, 0.968, 0.07], [0.03, 0.13, 0.03], [0, 0, 80], 'tecido');
+          break; }
+        case 'roda_gigante': {
+          // v4 (14/11): a IA descrevia a London Eye como um anel DEITADO num tripe. Modelo pronto: aro em pe, raios,
+          // 16 cabines, cubo, cavalete em A e base. Unidade: altura = 1.
+          const aco = '#E9EEF3', R0 = 0.44, cy = 0.53;
+          const aro = new T.Mesh(new T.TorusGeometry(R0, 0.012, 8, 72), M(aco, 'metal')); aro.position.y = cy; g.add(aro);
+          const aro2 = new T.Mesh(new T.TorusGeometry(R0 * 0.97, 0.006, 6, 72), M(aco, 'metal')); aro2.position.set(0, cy, 0.03); g.add(aro2);
+          for (let k = 0; k < 16; k++) { const an = (k / 16) * Math.PI * 2;
+            const r = new T.Mesh(new T.CylinderGeometry(0.0035, 0.0035, R0, 4), M(aco, 'metal')); r.position.set(Math.cos(an) * R0 / 2, cy + Math.sin(an) * R0 / 2, 0.015); r.rotation.z = an - Math.PI / 2; g.add(r);
+            const cab = new T.Mesh(new T.SphereGeometry(0.028, 12, 8), M(k % 4 ? '#BFE3F2' : (cor || '#E8473C'), 'vidro')); cab.scale.set(1, 0.75, 1.3); cab.position.set(Math.cos(an) * (R0 + 0.02), cy + Math.sin(an) * (R0 + 0.02), 0.02); g.add(cab); }
+          const cubo = new T.Mesh(new T.CylinderGeometry(0.035, 0.035, 0.08, 16), M('#9AA5B1', 'metal')); cubo.rotation.x = Math.PI / 2; cubo.position.set(0, cy, 0.02); g.add(cubo);
+          for (const l of [-1, 1]) for (const zz of [-0.09, 0.12]) { const p = new T.Mesh(new T.CylinderGeometry(0.008, 0.012, cy * 1.08, 8), M('#C9D2DB', 'metal')); p.position.set(l * 0.13, cy / 2, zz); p.rotation.z = l * 0.24; g.add(p); }
+          const base = new T.Mesh(new T.BoxGeometry(0.42, 0.02, 0.32), M('#8E8E8E', 'concreto')); base.position.y = 0.01; g.add(base);
+          break; }
         case 'arvore':
           add('cilindro', '#6E4A2C', [0, 0.22, 0], [0.07, 0.44, 0.07], null, 'madeira');
           add('esfera', cor || '#4E9A5C', [0, 0.55, 0], [0.5, 0.4, 0.5]); add('esfera', cor || '#5DAA66', [-0.1, 0.72, 0.05], [0.4, 0.34, 0.4]);
@@ -127,7 +155,7 @@
     // v3 (13/11): o roteiro descreve o onibus em 2 caixas e o motor tem um modelo pronto bem melhor -- o NOME decide.
     const PELO_NOME = [[/autob[uú]s|\bbus(es)?\b|[oô]nibus/i, 'onibus'], [/\bpersona|\bperson\b|pessoa|humano|human\b/i, 'pessoa'],
       [/\bcoche|\bcarro|\bcar\b|\bauto\b/i, 'carro'], [/avi[oó]n|avi[aã]o|airplane|\bplane\b|jet\b/i, 'aviao'], [/\bbarco|navio|\bship\b|buque|crucero/i, 'navio'],
-      [/cohete|foguete|rocket/i, 'foguete'], [/espejo|espelho|mirror|\bdisco\b|\bdisc\b|\bplato\b|\bprato\b|moneda|moeda|\bcoin\b/i, 'disco'], [/edificio|pr[eé]dio|building|rascacielos|skyscraper/i, 'predio'], [/[aá]rbol|[aá]rvore|\btree\b/i, 'arvore'], [/\bcasa\b|\bhouse\b/i, 'casa']];
+      [/cohete|foguete|rocket/i, 'foguete'], [/espejo|espelho|mirror|\bdisco\b|\bdisc\b|\bplato\b|\bprato\b|moneda|moeda|\bcoin\b/i, 'disco'], [/edificio|pr[eé]dio|building|rascacielos|skyscraper/i, 'predio'], [/noria|ferris|roda[- ]gigante|london eye|high roller|ain d[uú]bai|\brueda\b/i, 'roda_gigante'], [/[aá]rbol|[aá]rvore|\btree\b/i, 'arvore'], [/\bcasa\b|\bhouse\b/i, 'casa']];
     const modeloPeloNome = (n) => { for (const [re, m] of PELO_NOME) if (re.test(String(n || ''))) return m; return null; };
     const itens = (Array.isArray(spec.itens) ? spec.itens.slice(0, 12) : []).map((it, i) => {
       const tam = num(it.tamanho_m != null ? it.tamanho_m : it.altura_m, 0.001, 2e7, 1), cor = corOk(it.cor, null);
@@ -150,7 +178,7 @@
       const b2 = new T.Box3().setFromObject(g), alt = Math.max(1e-6, b2.max.y - b2.min.y), larg = Math.max(alt * 0.2, b2.max.x - b2.min.x);
       g.traverse((o) => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; } });
       sc.add(g);
-      return { nome: String(it.nome || 'item ' + (i + 1)).slice(0, 26), tam, alt, larg, g };
+      return { nome: String(it.nome || 'item ' + (i + 1)).slice(0, 26), tam, alt, larg, g, s0: g.scale.clone(), y0: g.position.y };
     });
     // lado a lado, do menor para a direita, com um respiro proporcional
     let x = 0; itens.forEach((it, i) => { if (i) x += (itens[i - 1].larg + it.larg) * 0.5 + Math.max(itens[i - 1].larg, it.larg) * 0.25; it.x = x; it.g.position.x = x; });
@@ -159,10 +187,35 @@
     // e a grama repete na mesma proporcao -- de perto parece grama, de longe campo
     // v3: a grama texturizada virava um borrao verde em metade do quadro; chao liso + GRADE DE MEDIDA (a grade
     // acompanha o zoom: as linhas mantem o espacamento na tela e dao a escala ao olho)
-    const chao = new T.Mesh(new T.CircleGeometry(1, 64), new T.MeshBasicMaterial({ color: '#86B36A', fog: false }));
+    // v4: o renderer usa tom ACES + saida sRGB; cor 'Basic' em hex passava pelo tom e saia LAVADA (o chao claro do v3).
+    // Cor convertida para linear e fora do tone mapping = a cor que se pediu.
+    const corPura = (hex, extra) => Object.assign({ color: new T.Color(hex).convertSRGBToLinear(), fog: false, toneMapped: false }, extra || {});
+    const chao = new T.Mesh(new T.CircleGeometry(1, 64), new T.MeshBasicMaterial(corPura('#79B256')));
     chao.rotation.x = -Math.PI / 2; chao.position.x = x / 2; chao.scale.setScalar(chaoTam); chao.receiveShadow = true; sc.add(chao);
-    const grade = new T.GridHelper(1, 40, '#4E7A3C', '#557F42'); grade.position.y = 0.0005; grade.material.transparent = true; grade.material.opacity = 0.75; sc.add(grade);
+    const grade = new T.GridHelper(1, 40, new T.Color('#4F8A35').convertSRGBToLinear(), new T.Color('#5E9741').convertSRGBToLinear()); grade.material.toneMapped = false; grade.position.y = 0.0005; grade.material.transparent = true; grade.material.opacity = 0.9; sc.add(grade);
 
+    // v4 (14/11, dono: "na comparacao de tamanhos tente ser mais criativo, algo que prenda, mais dinamico, mais movimento
+    // e mais detalhes"): HORIZONTE com morros e nuvens em unidade "distancia da camera" -- em qualquer zoom (1 cm ou
+    // 1000 km) o fundo tem detalhe e paralaxe, em vez de ceu liso + chao liso.
+    const horizonte = new T.Group(); sc.add(horizonte);
+    { const rh = U.rng('horizonte'), mMorro = [new T.MeshBasicMaterial(corPura('#8FB8C8')), new T.MeshBasicMaterial(corPura('#A9C9D8'))];   // azulados: longe
+      for (let k = 0; k < 34; k++) { const a = (k / 34) * Math.PI * 2 + rh() * 0.1, r0 = 150 + (k % 2) * 25, h = 1.2 + rh() * 2.6;
+        const m = new T.Mesh(new T.SphereGeometry(10 + rh() * 12, 14, 8, 0, Math.PI * 2, 0, Math.PI / 2), mMorro[k % 2]); m.position.set(Math.cos(a) * r0, -0.3, Math.sin(a) * r0); m.scale.y = h / 6; horizonte.add(m); }
+      const mNuv = new T.MeshBasicMaterial(corPura('#FFFFFF', { transparent: true, opacity: 0.95 }));
+      for (let k = 0; k < 14; k++) { const n = new T.Group(), a = rh() * Math.PI * 2, r0 = 38 + rh() * 30, y = 9 + rh() * 9;
+        for (let j = 0; j < 4; j++) { const b = new T.Mesh(new T.SphereGeometry(1, 12, 8), mNuv); b.position.set((j - 1.5) * 1.6, (j % 2) * 0.5, 0); b.scale.set(1.6 + rh(), 1 + rh() * 0.5, 1); n.add(b); }
+        n.position.set(Math.cos(a) * r0, y, Math.sin(a) * r0); n.lookAt(0, y, 0); n.scale.setScalar(1.4 + rh() * 1.2); n.userData.v = 0.4 + rh() * 0.6; horizonte.add(n); } }
+    // chao com vida: tufos de grama e flores em unidade de distancia (acompanham o zoom como a grade)
+    const tufos = new T.Group(); sc.add(tufos);
+    { const rt = U.rng('tufos'), mT = [new T.MeshBasicMaterial(corPura('#5E9A3E')), new T.MeshBasicMaterial(corPura('#4C8A33'))], mF = ['#FFFFFF', '#FFD23F', '#F27DA3'].map((h) => new T.MeshBasicMaterial(corPura(h)));
+      for (let k = 0; k < 160; k++) { const a = rt() * Math.PI * 2, r0 = 0.9 + Math.pow(rt(), 0.7) * 30, x = Math.cos(a) * r0, z = Math.sin(a) * r0 * 0.9 + 0.3;
+        if (Math.abs(z) < 0.5 && Math.abs(x) < 1.5) continue;
+        const tf = new T.Group(); tf.position.set(x, 0, z);
+        for (let j = 0; j < 3; j++) { const f = new T.Mesh(new T.ConeGeometry(0.035, 0.16 + rt() * 0.1, 4), mT[j % 2]); f.position.set((j - 1) * 0.04, 0.08, 0); f.rotation.z = (j - 1) * 0.35; tf.add(f); }
+        if (rt() < 0.3) { const fl = new T.Mesh(new T.SphereGeometry(0.035, 8, 6), mF[k % 3]); fl.position.y = 0.2; tf.add(fl); }
+        tufos.add(tf); } }
+    const poeira = new T.Mesh(new T.RingGeometry(0.62, 1, 48), new T.MeshBasicMaterial({ color: '#E9DFC8', transparent: true, opacity: 0, depthWrite: false, side: T.DoubleSide }));
+    poeira.rotation.x = -Math.PI / 2; sc.add(poeira);
     const idxAlvo = (cn, i) => {
       if (typeof cn.alvo === 'number') return U.clamp(Math.round(cn.alvo), 0, Math.max(0, itens.length - 1));
       const k = itens.findIndex((it) => it.nome.toLowerCase() === String(cn.alvo || '').toLowerCase());
@@ -202,15 +255,29 @@
       // camera quase ao rés do chao, de frente: o ceu domina e o chao fica numa
       // faixa embaixo; mirar abaixo do centro do objeto o SOBE no quadro (a
       // legenda mora em 70% da altura)
-      const ang = Math.sin(t * 0.2) * 0.07;
+      // v4: na TROCA a camera voa em arco (gira para um lado e sobe) e assenta; parada, gira devagar em volta
+      const lado = i % 2 ? -1 : 1, salto = Math.abs(Math.log(B.d / Math.max(1e-9, A.d)));
+      const voo = a !== ant ? Math.sin(Math.PI * q) : 0;
+      let ang = lado * (0.42 * voo + 0.16 * Math.sin(local * 0.9)) + Math.sin(t * 0.35) * 0.05;
+      // entrada do item da vez: cai do alto e quica (mola); os outros ficam no tamanho normal
+      const entra = a !== ant || i === 0 ? U.clamp((local - 0.12) / 0.55, 0, 1) : 1;
+      itens.forEach((it, j) => { const sEnt = j === a && entra < 1 ? Math.max(0.001, U.mola(entra * 1.4, 9)) : 1;
+        it.g.scale.copy(it.s0).multiplyScalar(sEnt); it.g.position.y = it.y0 * sEnt + (j === a && entra < 1 ? it.alt * 1.6 * Math.pow(1 - U.clamp(entra * 2.2, 0, 1), 2) : 0); });
+      const pouso = U.clamp((entra - 0.45) / 0.4, 0, 1), treme = a !== ant && pouso > 0 && pouso < 1 ? (1 - pouso) * 0.012 : 0;
       // v2 05/11: item chato e largo (avião, pista, zona) visto do chão vira uma linha;
       // a câmera sobe em ângulo proporcional a largura/altura e mostra a ÁREA.
       const elevDe = (j) => { const it = itens[j]; if (!it) return 0; const r = it.larg / Math.max(1e-6, it.alt); return U.clamp((Math.log(r) - 1.2) / 2.4, 0, 0.75); };
-      const elev = U.lerp(elevDe(ant), elevDe(a), q);
+      const elev = U.clamp(0.17 + U.lerp(elevDe(ant), elevDe(a), q) + 0.32 * voo * U.clamp(salto / 1.5, 0.35, 1), 0, 0.9);
       if (elev > 0.01) { miraY = U.lerp(miraY, 0, U.clamp(elev / 0.4, 0, 1)); }
-      cam.position.set(cx + Math.sin(ang) * d * Math.cos(elev), cy * 0.55 + d * Math.sin(elev), Math.cos(ang) * d * Math.cos(elev)); cam.near = d / 5000; cam.far = d * 400; cam.updateProjectionMatrix();
+      cam.position.set(cx + Math.sin(ang) * d * Math.cos(elev) + Math.sin(t * 61) * treme * d, cy * 0.55 + d * Math.sin(elev) + Math.cos(t * 53) * treme * d, Math.cos(ang) * d * Math.cos(elev));
+      horizonte.position.set(cam.position.x, 0, cam.position.z); horizonte.scale.setScalar(d);
+      horizonte.children.forEach((n) => { if (n.userData.v) n.rotation.z = 0; });
+      horizonte.rotation.y = t * 0.012; tufos.position.set(cx, 0, 0); tufos.scale.setScalar(d * 0.5);
+      if (itens[a]) { const it = itens[a], qp = U.clamp((entra - 0.5) / 0.5, 0, 1);
+        poeira.visible = a !== ant && qp > 0 && qp < 1; poeira.position.set(it.x, Math.max(1e-4, d * 0.0006), 0);
+        poeira.scale.setScalar(Math.max(it.larg * 0.6, it.alt * 0.3) * (0.55 + qp * 0.8)); poeira.material.opacity = 0.45 * (1 - qp) * (1 - qp); } cam.near = d / 5000; cam.far = d * 2000; cam.updateProjectionMatrix();
       if (T3) {
-        chao.position.set(cx, 0, 0); chao.scale.setScalar(d * 60);
+        chao.position.set(cx, 0, 0); chao.scale.setScalar(d * 600);   // v4: com o voo em arco a borda do disco (60x) aparecia como cupula
         grade.position.set(cx, d * 0.0004, 0); grade.scale.setScalar(d * 6);
         nevoa.near=d*25;nevoa.far=d*160;   // v3: a nevoa a 6x lavava o chao de branco
         sol.position.set(cx + d * 0.7, d * 1.4, d * 1.1); sol.target.position.set(cx, 0, 0);
@@ -218,25 +285,34 @@
       }
       cam.lookAt(cx, miraY, 0);
       U3.render(R, sc, cam, spec, t); c.drawImage(gl, 0, 0, W, H);
+      // v4: LINHAS DE VELOCIDADE quando o salto de tamanho e' grande (a camera recua por ordens de grandeza)
+      if (a !== ant && salto > 0.7 && voo > 0.05) {
+        const rv = U.rng('vel' + i), forca = voo * U.clamp(salto / 3, 0.3, 1);
+        c.save(); c.translate(W / 2, H * 0.48); c.strokeStyle = 'rgba(255,255,255,' + (0.55 * forca).toFixed(3) + ')'; c.lineCap = 'round';
+        for (let k = 0; k < 46; k++) { const an = rv() * Math.PI * 2, r0 = 300 + rv() * 260 + ((t * 2400 + rv() * 900) % 700), len = 90 + rv() * 220 * forca;
+          c.lineWidth = 3 + rv() * 6; c.beginPath(); c.moveTo(Math.cos(an) * r0, Math.sin(an) * r0); c.lineTo(Math.cos(an) * (r0 + len), Math.sin(an) * (r0 + len)); c.stroke(); }
+        c.restore();
+      }
       // etiquetas: nome e altura de cada item visivel, ancoradas no topo dele.
       // 23/10: o destaque e' posto primeiro; etiqueta secundaria que bateria
       // numa ja posta some (antes "1 BARCO" cobria "KHALIFA"); nunca sai pela
       // borda (conta a largura real) nem sobe para baixo do selo do alto.
       const comHud = !!(cn.hud && typeof cn.hud !== 'object');
-      const yMin = comHud ? 540 : t < 3.4 ? 590 : 330, postas = [];
+      const yMin = spec.titulo && t < 3.4 ? 620 : comHud ? 540 : 330, postas = [];   // v4: o titulo vem antes do HUD
       const ordem = itens.map((it, j) => j).filter((j) => j <= a).sort((x, y) => (y === a) - (x === a));
       ordem.forEach((j) => {
         const it = itens[j];
         const p = new T.Vector3(it.x, it.alt, 0).project(cam); if (p.z > 1) return;
         const px = (p.x * 0.5 + 0.5) * W, py = (-p.y * 0.5 + 0.5) * H; if (px < -50 || px > W + 50 || py < 0) return;
         const tamPx = Math.abs(py - (-new T.Vector3(it.x, 0, 0).project(cam).y * 0.5 + 0.5) * H); if (tamPx < 26 && j !== a) return;
-        const v = it.tam, real = v >= 1000 ? (v / 1000).toLocaleString('en-US', { maximumFractionDigits: 1 }) + ' km' : v >= 1 ? v.toLocaleString('en-US', { maximumFractionDigits: 1 }) + ' m' : (v * 100).toLocaleString('en-US', { maximumFractionDigits: 1 }) + ' cm';
+        const conta = j === a && (a !== ant || i === 0) ? U.saida(U.clamp((local - 0.2) / 0.7, 0, 1)) : 1;   // v4: o numero CONTA ate' a medida
+        const v = it.tam * conta, real = v >= 1000 ? (v / 1000).toLocaleString('en-US', { maximumFractionDigits: 1 }) + ' km' : v >= 1 ? v.toLocaleString('en-US', { maximumFractionDigits: 1 }) + ' m' : (v * 100).toLocaleString('en-US', { maximumFractionDigits: 1 }) + ' cm';
         const destaque = j === a, ent = destaque ? U.mola(local - 0.15, 10) : 1;
         c.save();
         c.font = (destaque ? '64px' : '42px') + ' "Lilita One", sans-serif';
         // v3: "AUTOBÚS DE 12 METROS / 12 m" repetia a medida -- se o nome ja traz numero, fica so o nome
         const l1 = it.nome.toUpperCase(), soNome = /\d/.test(it.nome), w1 = Math.min(W - 40, Math.max(c.measureText(l1).width, soNome ? 0 : c.measureText(real).width) + 40), hh = soNome ? (destaque ? 92 : 66) : destaque ? 150 : 104;
-        const bx = U.clamp(px, w1 / 2 + 20, W - w1 / 2 - 20), by = Math.max(yMin, py - 40);
+        const bx = U.clamp(px, w1 * 0.58 + 20, W - w1 * 0.58 - 20), by = Math.max(yMin, py - 40);
         const caixa = [bx - w1 / 2, by - hh, bx + w1 / 2, by];
         if (!destaque && postas.some((r) => caixa[0] < r[2] + 12 && caixa[2] > r[0] - 12 && caixa[1] < r[3] + 12 && caixa[3] > r[1] - 12)) { c.restore(); return; }
         postas.push(caixa);
@@ -266,6 +342,19 @@
           if (cresce > 0.98) { c.lineWidth = 6; c.beginPath(); c.moveTo(x1 - 22, y1); c.lineTo(x1 + 22, y1); c.stroke();
             c.beginPath(); c.moveTo(x1, y1 - 2); c.lineTo(x1 - 14, y1 + 24); c.lineTo(x1 + 14, y1 + 24); c.closePath(); c.fill(); }
           c.restore();
+        }
+      }
+      // v4: SELO "xN" -- quantas vezes o item da vez e' maior (ou menor) que o anterior; gira e assenta com mola
+      if (a > 0 && itens[a] && itens[a - 1] && local > 0.55 && !(spec.titulo && t < 3.3)) {
+        const rz = itens[a].tam / itens[a - 1].tam, maior = rz >= 1, x = maior ? rz : 1 / rz;
+        if (x >= 1.5) {
+          const fmt = x >= 1e6 ? (x / 1e6).toLocaleString('en-US', { maximumFractionDigits: 1 }) + 'M' : x >= 1e4 ? Math.round(x / 1e3) + 'K' : x >= 10 ? Math.round(x).toLocaleString('en-US') : x.toFixed(1).replace(/\.0$/, '');
+          const lg = /^es/i.test(spec.idioma || '') ? (maior ? 'MÁS GRANDE' : 'MÁS PEQUEÑO') : /^pt/i.test(spec.idioma || '') ? (maior ? 'MAIOR' : 'MENOR') : (maior ? 'BIGGER' : 'SMALLER');
+          const sp = U.mola(local - 0.55, 9), gira = (1 - U.clamp((local - 0.55) / 0.35, 0, 1)) * -0.5;
+          c.save(); c.translate(W / 2, H * 0.785); c.rotate(gira); c.scale(sp * 0.8, sp * 0.8); c.textAlign = 'center'; c.textBaseline = 'middle';   // faixa livre abaixo da legenda
+          c.font = '118px "Lilita One", sans-serif'; const t1 = '×' + fmt; const w1 = c.measureText(t1).width; c.font = '50px "Lilita One", sans-serif'; const w2 = c.measureText(lg).width;
+          const ww = Math.max(w1, w2) + 80; U.rr(c, -ww / 2, -100, ww, 200, 40); c.fillStyle = '#E8473C'; c.fill(); c.lineWidth = 8; c.strokeStyle = '#1B1B1B'; c.stroke();
+          c.fillStyle = '#FFFFFF'; c.font = '118px "Lilita One", sans-serif'; c.fillText(t1, 0, -18); c.font = '50px "Lilita One", sans-serif'; c.fillText(lg, 0, 58); c.restore();
         }
       }
       // v3: o HUD aparecia atras do cartaz do titulo -- so' entra depois dele
