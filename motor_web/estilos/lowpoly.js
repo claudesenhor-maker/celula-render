@@ -303,6 +303,7 @@
     // enfiava a mao no tronco e a perna andava dura. Agora: COTOVELO e JOELHO (cada membro em 2 segmentos), ombro afastado
     // do tronco, palpebra de verdade (pisca sem achatar o olho), cabelo com volume, cinto, gola, bolso, cadarco.
     // E o boneco nunca fica parado: respira, troca o peso, olha em volta, gesticula e mexe a boca quando a narracao fala.
+    const MAT_CONTORNO = new T.MeshBasicMaterial({ color: '#241A16', side: T.BackSide });
     const PM = {};
     const MP = (cor, o) => {
       o = o || {}; const k = cor + JSON.stringify(o);
@@ -351,7 +352,7 @@
       const mBranco = MP('#FFFFFF'), mIris = MP(['#3B2A20', '#2E5E8C', '#3E6B3A'][Math.floor(r() * 3)]), mPup = MP('#0C0C0C'), mBrilho = MP('#FFFFFF', { emis: '#FFFFFF' });
       [-0.13, 0.13].forEach((x) => {
         const og = new T.Group(); og.position.set(x, 0.05, 0.315); cabeca.add(og);
-        const br = mesh(esfera(0.075), mBranco, 0, 0, 0, og); br.scale.set(0.85, 1.05, 0.5);
+        const br = mesh(esfera(0.075), mBranco, 0, 0, 0, og); br.scale.set(0.85, 1.05, 0.5); br.userData.semContorno = true;
         const iris = new T.Group(); og.add(iris); og.userData.iris = iris;
         mesh(esfera(0.047), mIris, 0, -0.005, 0.03, iris).scale.set(1, 1, 0.45);
         mesh(esfera(0.026), mPup, 0, -0.005, 0.045, iris).scale.set(1, 1, 0.4);
@@ -401,6 +402,11 @@
       // o tronco carrega os ombros: braco acompanha a respiracao e a inclinacao
       membros.slice(0, 2).forEach((b) => { tronco.attach(b); });
       const suor = []; for (let k = 0; k < 3; k++) { const s = mesh(esfera(0.055), MP('#7CC7FF'), 0, 0, 0, cabeca); s.scale.set(0.8, 1.2, 0.8); s.visible = false; suor.push(s); }
+      // v6 (14/11, dono: "melhore a qualidade do personagem"): CONTORNO de desenho animado -- casco invertido escuro em
+      // cada peca visivel (olho, boca e brilho ficam sem: ja' sao detalhes de contorno)
+      const cascos = []; g.traverse((o) => { if (!o.isMesh || !o.geometry || o.userData.semContorno) return; if (!o.geometry.boundingSphere) o.geometry.computeBoundingSphere();
+        const r0 = o.geometry.boundingSphere.radius * Math.max(o.scale.x, o.scale.y, o.scale.z); if (r0 < 0.045) return; cascos.push([o, r0]); });
+      cascos.forEach(([o, r0]) => { const h = new T.Mesh(o.geometry, MAT_CONTORNO); h.userData.liso = true; h.userData.semContorno = true; h.scale.setScalar(1 + 0.034 / r0); o.add(h); });
       g.traverse((o) => { if (o.isMesh) o.castShadow = true; });
       g.userData = { corpo, tronco, cabeca, membros, cot, joe, olhos, palp, sobr, bocaRiso, bocaO, bocaReta, suor, fase: r() * 10, mao: r() < 0.5 ? 0 : 1 };
       return sombra(g);
@@ -408,6 +414,8 @@
     // POSES v5: ombro (x frente/tras, z abre), COTOVELO (dobra para a frente), quadril, JOELHO; e por baixo de tudo
     // o MOVIMENTO DE BASE (respira, troca o peso, olha em volta, gesticula). `fala` 0..1 = a narracao esta falando agora.
     function posar(p, modo, t, k, fala) {
+      // v6: apontar/olhar para cima sao gestos de ENTRADA (35% da cena); depois o boneco volta a atuar e gesticular
+      if ((modo === 'aponta' || modo === 'olha_cima') && k > 0.35) modo = 'parado';
       const u = p.userData, m = u.membros, tf = t + u.fase, cot = u.cot || [], joe = u.joe || [];
       const rot = (q, x, z) => { q.rotation.x = x; q.rotation.z = z || 0; };
       const dobra = (q, a) => { if (q) q.rotation.x = -a; };            // cotovelo: antebraco para a frente
@@ -434,11 +442,20 @@
         case 'medo': rot(m[0], -0.6, 0.5); rot(m[1], -0.6, -0.5); cE = cD = 2.1; rot(m[2], 0.15); rot(m[3], -0.15); jE = jD = 0.35; boca = 'O'; tremor = 0.02; agach = 0.92; olhoS = 1.3; cabY *= 0.4; break;
         case 'nada': rot(m[0], 0.5 + Math.sin(tf * 4) * 0.4, 0.6); rot(m[1], -0.5 - Math.sin(tf * 4) * 0.4, -0.6); cE = cD = 0.5; rot(m[2], Math.sin(tf * 4) * 0.4); rot(m[3], -Math.sin(tf * 4) * 0.4); jE = 0.3 + Math.sin(tf * 4) * 0.2; jD = 0.3 - Math.sin(tf * 4) * 0.2; boca = 'O'; break;
         default: {
-          // PARADO nao e' estatico: troca o peso e, quando a narracao fala, a mao da vez GESTICULA
-          rot(m[0], Math.sin(tf * 1.4) * 0.05, 0.12); rot(m[1], -Math.sin(tf * 1.4) * 0.05, -0.12); rot(m[2], 0, -0.03 * peso); rot(m[3], 0, -0.03 * peso);
-          jE = 0.04 + Math.max(0, peso) * 0.12; jD = 0.04 + Math.max(0, -peso) * 0.12;
-          if (fala > 0) { const b = u.mao, gesto = Math.sin(tf * 2.3) * 0.5 + 0.5;
-            rot(m[b], -0.55 - gesto * 0.35, (b ? -1 : 1) * (0.25 + gesto * 0.15)); if (b) cD = 1.3 + Math.sin(tf * 4.1) * 0.25; else cE = 1.3 + Math.sin(tf * 4.1) * 0.25; }
+          // v6 (dono: "muitas articulacoes, pouco movimento percebido"): PARADO vira ATUACAO -- a cada ~2,2 s o boneco passa
+          // por um gesto (gesticula, maos na cintura, coca a cabeca, aponta, cruza os bracos), com transicao suave; troca o
+          // peso de perna com amplitude visivel. Falando: cabeca acena no ritmo e os DOIS bracos gesticulam.
+          const POSES = [ // [ombroE x, z, ombroD x, z, cotE, cotD, cabX, cabY]
+            [-0.45, 0.35, -0.6, -0.4, 1.3, 1.5, 0.05, 0.25], [0.1, 0.55, 0.1, -0.55, 1.9, 1.9, -0.05, -0.2], [0.05, 0.15, -2.4, -0.5, 0.3, 2.3, 0.12, 0.15],
+            [0.05, 0.15, -1.45, -0.15, 0.3, 0.1, -0.05, 0.35], [-0.6, 0.25, -0.6, -0.25, 2.2, 2.2, 0.02, -0.15]];
+          const ph = tf / 2.2, i0 = Math.floor(ph) % POSES.length, i1 = (i0 + 1) % POSES.length, w = U.suave(U.clamp((ph % 1 - 0.7) / 0.3, 0, 1));
+          const P = POSES[i0].map((v, q) => v + (POSES[i1][q] - v) * w);
+          rot(m[0], P[0], P[1]); rot(m[1], P[2], P[3]); cE = P[4]; cD = P[5]; cabX = P[6] + Math.sin(tf * 0.9) * 0.04; cabY = P[7];
+          rot(m[2], 0, -0.06 * peso); rot(m[3], 0, -0.06 * peso);
+          jE = 0.05 + Math.max(0, peso) * 0.25; jD = 0.05 + Math.max(0, -peso) * 0.25; bob = Math.abs(Math.sin(tf * 1.6)) * 0.03;
+          if (fala > 0) { const g1 = Math.sin(tf * 3.1), g2 = Math.sin(tf * 2.4 + 1.3);
+            rot(m[0], -0.6 - 0.35 * g1, 0.3 + 0.2 * g2); rot(m[1], -0.6 - 0.35 * g2, -0.3 - 0.2 * g1); cE = 1.4 + 0.4 * g2; cD = 1.4 + 0.4 * g1;
+            cabX = 0.08 * Math.sin(tf * 7) + 0.04; cabY *= 0.5; bob = Math.abs(Math.sin(tf * 3.5)) * 0.05; }
         }
       }
       if (modo !== 'calor') u.suor.forEach((s) => { s.visible = false; });
@@ -446,8 +463,9 @@
       // abaixa o corpo o quanto os joelhos dobram (o pe nao afunda no chao)
       const dobraJ = Math.min(jE, jD), desce = 0.4 * (1 - Math.cos(dobraJ)) * 0.9;
       u.corpo.position.y = bob - desce; u.corpo.rotation.x = inclina; u.corpo.scale.y = agach;
-      u.corpo.position.x = (tremor ? Math.sin(tf * 60) * tremor : 0) + (modo === 'parado' || !modo ? peso * 0.025 : 0);
-      u.corpo.rotation.z = modo === 'parado' || !modo ? -peso * 0.025 : 0;
+      u.corpo.position.x = (tremor ? Math.sin(tf * 60) * tremor : 0) + (modo === 'parado' || !modo ? peso * 0.06 : 0);
+      u.corpo.rotation.z = modo === 'parado' || !modo ? -peso * 0.05 : 0;
+      if (modo === 'parado' || !modo) u.corpo.rotation.y = 0.35 * Math.sin(tf * 0.45);   // vira o corpo devagar (olha os outros)
       if (u.tronco) { const resp = Math.sin(tf * 2.2); u.tronco.scale.set(1 + resp * 0.012, 1 + resp * 0.018, 1 + resp * 0.02); }
       u.cabeca.rotation.x = cabX; u.cabeca.rotation.z = cabZ; u.cabeca.rotation.y = cabY;
       // olhos acompanham a cabeca (as pupilas olham antes); piscar fecha a PALPEBRA
@@ -812,6 +830,16 @@
             for (let k = 0; k < 9; k++) { const tb = new T.Mesh(caixaGeo(4.2, 0.12, 0.34), k % 2 ? tabua : tabua2); tb.position.set(0, 0.42, -0.2 + k * 0.36); pier.add(tb); }
             [[-1.9, -0.2], [1.9, -0.2], [-1.9, 2.7], [1.9, 2.7]].forEach(([x, z]) => { const st = new T.Mesh(new T.CylinderGeometry(0.1, 0.1, 1.2, 6), tabua2); st.position.set(x, 0.0, z); pier.add(st); });
             sombra(pier); sc.add(pier); o.pier = pier; }
+        }
+        // 14/11 (dono: "o cenario esta com o horizonte arredondado parecendo que e' um planeta, sensacao estranha"): o chao
+        // era um DISCO flutuando no ceu -- de cima, a borda vira uma curva. Agora o chao continua ate' o horizonte (mesma cor
+        // da borda do terreno) e a nevoa funde com o ceu numa linha RETA.
+        if (!interior && !marAberto && tr.userData && tr.userData.topo && tr.userData.topo.geometry.attributes.color) {
+          const ca = tr.userData.topo.geometry.attributes.color, med = [0, 0, 0]; let n = 0;
+          for (let i = 0; i < ca.count; i += 7) { med[0] += ca.getX(i); med[1] += ca.getY(i); med[2] += ca.getZ(i); n++; }
+          const chaoLongo = new T.Mesh(new T.RingGeometry(RAIO - 0.4, 320, 96, 4), new T.MeshLambertMaterial({ color: new T.Color(med[0] / n * 0.93, med[1] / n * 0.93, med[2] / n * 0.93) }));
+          chaoLongo.rotation.x = -Math.PI / 2; chaoLongo.position.y = 0.02; sc.add(chaoLongo); o.chaoLongo = chaoLongo;
+          if (sc.fog) { sc.fog.near = 22; sc.fog.far = 95; }
         }
         if (!marAberto && (cen === 'oceano' || cen === 'praia' || acao === 'inunda' || acao === 'seca' || acao === 'derrete')) {
           const nivel0 = cen === 'oceano' || cen === 'praia' || acao === 'seca' ? 0.18 : -0.6;
@@ -1203,6 +1231,66 @@
       const ls = U.linhas(g, String(txt || '').toUpperCase(), 330).slice(0, 3), w = Math.max(...ls.map((l) => g.measureText(l).width)) + 50, h = ls.length * 58 + 34;
       U.rr(g, -10, -h / 2, w, h, 26); g.fillStyle = cor || '#FFD23F'; g.fill(); g.fillStyle = '#111'; ls.forEach((l, q) => g.fillText(l, 15, -h / 2 + 46 + q * 58)); g.restore();
     }
+    // 14/11 (dono: "na tela de explicacao faca algo mais interativo e com mais sentido, explicando a explosao em si, nao
+    // apenas bolinhas com um desenho e uma seta"). REACAO: simulacao num corte do comodo. `esquema`:
+    //   {tipo:'reacao', fases:[{f:'nuvem'|'superficie'|'oxigenio'|'ignicao'|'pressao', texto}], particula?:'#E8D9B5'}
+    // As fases dividem a cena (inicio_j = 0,25 + j*(D-0,6)/n); o som de cada fase sai em montar_web no mesmo tempo.
+    const RQ = { x0: 110, x1: 970, y0: 470, y1: 1180 };
+    const PART = (() => { const r = U.rng('reacao'), out = []; for (let k = 0; k < 170; k++) out.push({ x: RQ.x0 + 40 + r() * (RQ.x1 - RQ.x0 - 80), y: RQ.y0 + 40 + r() * (RQ.y1 - RQ.y0 - 120), f: r() * 6.28, s: 5 + r() * 6 }); return out; })();
+    const FOGAO = { x: RQ.x0 + 150, y: RQ.y1 - 60 };
+    function reacao(e, local, D, t) {
+      const fases = (Array.isArray(e.fases) ? e.fases : []).slice(0, 4), n = Math.max(1, fases.length);
+      const ini = (j) => 0.25 + j * Math.max(0.9, (D - 0.6) / n), tem = (f) => { const j = fases.findIndex((x) => x.f === f); return j < 0 ? null : local - ini(j); };
+      const tN = tem('nuvem'), tS = tem('superficie'), tO = tem('oxigenio'), tI = tem('ignicao'), tP = tem('pressao');
+      const nuvemOn = tN == null ? fases.length > 0 : tN >= 0;   // sem fase 'nuvem', a poeira ja esta' la'
+      const pr = tP != null && tP >= 0 ? U.saida(U.clamp(tP / 1.2, 0, 1)) : 0, bojo = pr * 38 + (pr > 0 ? 6 * Math.sin(t * 30) * (1 - pr) : 0);
+      // o comodo em corte (paredes que estufam com a pressao)
+      c.save(); c.lineWidth = 12; c.strokeStyle = '#DDE6EE'; c.fillStyle = 'rgba(255,255,255,0.05)';
+      c.beginPath(); c.moveTo(RQ.x0, RQ.y0); c.quadraticCurveTo((RQ.x0 + RQ.x1) / 2, RQ.y0 - bojo, RQ.x1, RQ.y0); c.quadraticCurveTo(RQ.x1 + bojo, (RQ.y0 + RQ.y1) / 2, RQ.x1, RQ.y1);
+      c.lineTo(RQ.x0, RQ.y1); c.quadraticCurveTo(RQ.x0 - bojo, (RQ.y0 + RQ.y1) / 2, RQ.x0, RQ.y0); c.closePath(); c.fill(); c.stroke();
+      // fogao com a chama
+      c.fillStyle = '#5A6470'; c.fillRect(FOGAO.x - 90, FOGAO.y, 180, 60); c.fillStyle = '#2B3138'; c.fillRect(FOGAO.x - 90, FOGAO.y - 10, 180, 12);
+      const ch = 1 + 0.15 * Math.sin(t * 17); c.save(); c.translate(FOGAO.x, FOGAO.y - 12); c.scale(34 * ch, 34 * ch); c.fillStyle = '#FF7A2A'; ICONES_ESQ.fogo(c); c.restore();
+      // a poeira: entra com a fase 'nuvem', flutua; a frente de chama avanca particula a particula
+      const frente = tI != null && tI >= 0 ? U.clamp(tI / 1.6, 0, 1) * 1150 : -1;
+      let ardendo = 0;
+      if (nuvemOn) PART.forEach((p, k) => {
+        const aparece = tN == null ? 1 : U.clamp((tN - (k / PART.length) * 0.6) / 0.3, 0, 1); if (aparece <= 0) return;
+        const x = p.x + Math.sin(t * 0.7 + p.f) * 10 + (p.x - (RQ.x0 + RQ.x1) / 2) * pr * 0.05, y = p.y + Math.cos(t * 0.5 + p.f) * 8;
+        const d = Math.hypot(x - FOGAO.x, y - FOGAO.y), q = frente < 0 ? -1 : (frente - d) / 160;
+        c.globalAlpha = aparece;
+        if (q > 0) { ardendo++; const brilho = U.clamp(1 - q * 0.6, 0, 1); c.fillStyle = q < 0.4 ? '#FFF2B0' : q < 1.2 ? '#FF8A2A' : 'rgba(120,120,120,0.6)';
+          c.beginPath(); c.arc(x, y, p.s * (1 + brilho * 1.6), 0, Math.PI * 2); c.fill();
+          if (q < 1.2) { c.globalAlpha = aparece * 0.35 * brilho; c.fillStyle = '#FFB13B'; c.beginPath(); c.arc(x, y, p.s * 4, 0, Math.PI * 2); c.fill(); } }
+        else { c.fillStyle = e.particula || '#E8D9B5'; c.beginPath(); c.arc(x, y, p.s, 0, Math.PI * 2); c.fill(); }
+        if (tO != null && tO >= 0 && q <= 0 && k % 3 === 0) { c.globalAlpha = aparece * U.clamp(tO / 0.4, 0, 1); c.fillStyle = '#4FA8FF'; for (let m = 0; m < 3; m++) { const a = t * 1.5 + m * 2.1 + p.f; c.beginPath(); c.arc(x + Math.cos(a) * 16, y + Math.sin(a) * 16, 3.5, 0, Math.PI * 2); c.fill(); } }
+      });
+      c.globalAlpha = 1;
+      // lupa: uma particula de perto (superficie exposta + oxigenio em volta)
+      if ((tS != null && tS >= 0) || (tO != null && tO >= 0)) {
+        const s0 = U.mola(Math.max(tS == null ? -1 : tS, tO == null ? -1 : tO), 10), cx = 770, cy = 640, R = 150;
+        c.save(); c.translate(cx, cy); c.scale(s0, s0); c.beginPath(); c.arc(0, 0, R, 0, Math.PI * 2); c.fillStyle = '#0B1A2A'; c.fill(); c.lineWidth = 10; c.strokeStyle = '#FFFFFF'; c.stroke();
+        c.save(); c.clip(); c.fillStyle = e.particula || '#E8D9B5'; c.beginPath(); for (let a = 0; a <= Math.PI * 2 + 0.01; a += 0.25) { const rr2 = 62 + 10 * Math.sin(a * 5) + 6 * Math.sin(a * 11); c.lineTo(Math.cos(a) * rr2, Math.sin(a) * rr2); } c.fill();
+        c.lineWidth = 6; c.strokeStyle = '#FFD23F'; c.setLineDash([10, 8]); c.stroke(); c.setLineDash([]);
+        if (tO != null && tO >= 0) { c.fillStyle = '#4FA8FF'; for (let m = 0; m < 16; m++) { const a = m / 16 * Math.PI * 2 + t * 0.6, rr2 = 95 + 18 * Math.sin(m * 3 + t * 2); c.beginPath(); c.arc(Math.cos(a) * rr2, Math.sin(a) * rr2, 9, 0, Math.PI * 2); c.fill(); } }
+        c.restore(); c.restore();
+        c.save(); c.translate(cx - R * 0.7, cy + R * 0.7); c.rotate(0.8); c.fillStyle = '#FFFFFF'; c.fillRect(-12, 0, 24, 90 * s0); c.restore();
+      }
+      // pressao: setas saindo das paredes + medidor
+      if (pr > 0) {
+        c.save(); c.fillStyle = '#FF5A3C'; [[(RQ.x0 + RQ.x1) / 2, RQ.y0 - bojo - 30, 0], [RQ.x1 + bojo + 30, (RQ.y0 + RQ.y1) / 2, Math.PI / 2], [RQ.x0 - bojo - 30, (RQ.y0 + RQ.y1) / 2, -Math.PI / 2]].forEach(([x, y, a]) => {
+          c.save(); c.translate(x, y); c.rotate(a); c.scale(pr, pr); c.beginPath(); c.moveTo(0, -40); c.lineTo(30, 0); c.lineTo(10, 0); c.lineTo(10, 30); c.lineTo(-10, 30); c.lineTo(-10, 0); c.lineTo(-30, 0); c.closePath(); c.fill(); c.restore(); });
+        if (pr > 0.95) { c.globalAlpha = U.clamp((tP - 1.2) / 0.1, 0, 1) * U.clamp(1 - (tP - 1.3) / 0.5, 0, 1); c.fillStyle = '#FFF6D0'; c.fillRect(0, 0, W, H); }
+        c.restore();
+      }
+      // a frase de cada fase (no alto) + contador de particulas em chamas
+      let atual = -1; fases.forEach((f, j) => { if (local >= ini(j)) atual = j; });
+      if (atual >= 0) { const f = fases[atual], q = local - ini(atual), s = U.mola(q, 10);
+        c.save(); c.translate(W / 2, 360); c.scale(s, s); c.font = '58px "Lilita One", sans-serif'; c.textAlign = 'center'; c.textBaseline = 'middle';
+        const ls = U.linhas(c, String(f.texto || '').toUpperCase(), 900).slice(0, 2), w = Math.max(...ls.map((l) => c.measureText(l).width)) + 70, h = ls.length * 66 + 30;
+        U.rr(c, -w / 2, -h / 2, w, h, 30); c.fillStyle = '#FFD23F'; c.fill(); c.fillStyle = '#111'; ls.forEach((l, k) => c.fillText(l, 0, -h / 2 + 48 + k * 66)); c.restore(); }
+      if (frente >= 0) { c.save(); c.font = '46px "Lilita One", sans-serif'; c.textAlign = 'left'; c.fillStyle = '#FFB13B'; c.fillText((/^pt/i.test(spec.idioma || '') ? 'EM CHAMAS: ' : /^es/i.test(spec.idioma || '') ? 'EN LLAMAS: ' : 'ON FIRE: ') + ardendo + ' / ' + PART.length, RQ.x0, RQ.y1 + 70); c.restore(); }
+    }
     function esquema(cn, t) {
       const e = cn.esquema; if (!e || typeof e !== 'object') return false;
       const local = t - cn.ini, D = cn.fim - cn.ini;
@@ -1212,6 +1300,7 @@
       const itens = (Array.isArray(e.itens) ? e.itens : []).slice(0, 4);
       const tj = (j) => local - ESQ_T0 - j * ESQ_DT;
       const fonte = (px) => { c.font = px + 'px "Lilita One", sans-serif'; c.textAlign = 'center'; c.textBaseline = 'middle'; };
+      if (e.tipo === 'reacao') { reacao(e, local, D, t); return true; }
       if (e.tipo === 'corpo') {
         silhueta(c);
         const acesos = new Set(itens.filter((it, j) => tj(j) >= 0).map((it) => it.alvo));

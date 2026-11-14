@@ -141,7 +141,8 @@ CTA_QUIZ_S = 2.6
 # 14/11 (dono: "aumente o tempo de 2 a 3 s por secao"): +2,5 s em cada nivel
 PISO_QUIZ_S = (8.5, 9.5, 10.5, 11.5)
 CPS_LEITURA = 14.0      # caracteres por segundo que alguem le no celular
-PAUSA_NARRADO = 0.22    # respiro entre cenas narradas (a voz nao emenda)
+PAUSA_NARRADO = 0.22
+MIN_TROCA_S = {"escala": 3.8, "lowpoly": 3.0}    # respiro entre cenas narradas (a voz nao emenda)
 
 
 def _formato(estilo):
@@ -234,8 +235,11 @@ def linha_do_tempo(spec, tmp, modo_tts):
                 _silencio(wav, dur)
             for m in marcas or []:
                 palavras.append({"palavra": m.get("palavra", ""), "ini": round(t + float(m["inicio_s"]), 3), "fim": round(t + float(m["fim_s"]), 3)})
-            c["ini"], c["fim"] = round(t, 3), round(t + dur + PAUSA_NARRADO, 3)
-            t = c["fim"]; faixas.append(wav); respiros.append(PAUSA_NARRADO)
+            # 14/11 (dono: "temos que ter um limite minimo de tempo de troca -- no video de Jupiter as trocas foram tao
+            # rapidas que nao deu para compreender"): cena curta ganha respiro ate' o minimo do estilo (silencio de verdade)
+            resp = max(PAUSA_NARRADO, MIN_TROCA_S.get(spec.get("estilo"), 0) - dur)
+            c["ini"], c["fim"] = round(t, 3), round(t + dur + resp, 3)
+            t = c["fim"]; faixas.append(wav); respiros.append(resp)
         voz = juntar_com_respiro(faixas, respiros, os.path.join(tmp, "voz.wav"), tmp)
     else:
         if spec.get("estilo") == "quiz" and cenas:
@@ -360,6 +364,15 @@ def eventos_sonoros(spec):
                         ev.append({"nome": "pop", "t": round(t_ + 0.12, 3), "ganho": 0.45})   # a etiqueta que entra
             if esq.get("balanco") and itens:
                 ev.append({"nome": "plim", "t": round(c["ini"] + 0.35 + min(4, len(itens)) * 0.55 + 0.4, 3), "ganho": 0.6})
+            if esq.get("tipo") == "reacao":   # uma entrada sonora por FASE, no tempo em que o motor desenha
+                fases = [f for f in (esq.get("fases") or []) if isinstance(f, dict)][:4]; D = c["fim"] - c["ini"]; n = max(1, len(fases))
+                SOM = {"nuvem": [("whoosh", 0, 0.6)], "superficie": [("pop", 0, 0.65)], "oxigenio": [("pop", 0, 0.55), ("pop", 0.25, 0.45)],
+                       "ignicao": [("whoosh", 0, 0.7), ("thud", 1.5, 0.8)], "pressao": [("tremido", 0, 0.8), ("thud", 1.25, 1.0)]}
+                for j, f in enumerate(fases):
+                    t0 = c["ini"] + 0.25 + j * max(0.9, (D - 0.6) / n)
+                    for nome, dt, g in SOM.get(f.get("f"), [("pop", 0, 0.6)]):
+                        if t0 + dt < c["fim"]:
+                            ev.append({"nome": nome, "t": round(t0 + dt, 3), "ganho": g})
             if esq.get("tipo") in ("corpo", "passos", "barras", "medidor"):
                 ev.append({"nome": "whoosh", "t": round(c["ini"] + 0.02, 3), "ganho": 0.55})          # a tela de infografico entra
             if esq.get("tipo") == "barras" and itens:

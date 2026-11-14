@@ -262,6 +262,73 @@
           const m = new T.Mesh(geo, new T.MeshStandardMaterial({ vertexColors: true, roughness: 0.95, flatShading: true })); m.position.y = 0.5; g.add(m);
           [[0.38, 0.12, 0.62, 0.55], [-0.36, -0.1, 0.5, 0.48]].forEach(([x, z, h, r2]) => { const c3 = m.clone(); c3.scale.set(r2, h, r2); c3.position.set(x, h / 2, z); g.add(c3); });
           break; }
+        case 'montanha_russa': {   // comprimento = 1: trilho com loop e subida, pilares, 3 carrinhos com assentos
+          const vermelho = cor || '#E8473C', aco = '#C9D3DC';
+          const pts = []; for (let k = 0; k <= 80; k++) { const u = k / 80, x = -0.5 + u, y = 0.12 + 0.55 * Math.exp(-Math.pow((u - 0.25) / 0.12, 2)) + 0.28 * Math.exp(-Math.pow((u - 0.7) / 0.08, 2)); pts.push(new T.Vector3(x, y, 0)); }
+          const curva = new T.CatmullRomCurve3(pts); [-0.03, 0.03].forEach((z) => { const tr = new T.Mesh(new T.TubeGeometry(curva, 160, 0.006, 6), M(vermelho, 'metal')); tr.position.z = z; g.add(tr); });
+          const lp = new T.Mesh(new T.TorusGeometry(0.11, 0.007, 6, 48), M(vermelho, 'metal')); lp.position.set(0.48 - 0.5 + 0.0, 0.25, 0); lp.position.x = 0.0; lp.position.set(-0.02, 0.24, 0); g.add(lp);
+          for (let k = 0; k <= 16; k++) { const v = curva.getPoint(k / 16); add('cilindro', aco, [v.x, v.y / 2, 0], [0.01, v.y, 0.01], null, 'metal'); }
+          for (let k = 0; k < 3; k++) { const v = curva.getPoint(0.08 + k * 0.035), carro = new T.Group();
+            const cx2 = new T.Mesh(F.caixa(), M(['#FFD23F', '#3E7CB1', '#5DAA5A'][k], 'plastico')); cx2.scale.set(0.03, 0.016, 0.07); carro.add(cx2);
+            [-0.017, 0.017].forEach((z) => { const as = new T.Mesh(F.caixa(), M('#1B1B1B', 'borracha')); as.scale.set(0.012, 0.02, 0.022); as.position.set(0, 0.016, z); carro.add(as); });
+            carro.position.set(v.x, v.y + 0.012, 0); g.add(carro); }
+          break; }
+        case 'vitoria_regia': {   // folha redonda gigante com borda virada, nervuras radiais e flor
+          const verde = '#3E8A3A';
+          add('disco', verde, [0, 0.02, 0], [1, 0.02, 1]); add('toro', '#A23A3A', [0, 0.045, 0], [0.98, 0.98, 0.15], [90, 0, 0]);
+          for (let k = 0; k < 18; k++) { const a = (k / 18) * 360; add('caixa', '#2E6E2C', [Math.cos(a * Math.PI / 180) * 0.24, 0.032, Math.sin(a * Math.PI / 180) * 0.24], [0.48, 0.004, 0.012], [0, -a, 0]); }
+          for (let k = 0; k < 8; k++) { const a = k / 8 * Math.PI * 2; add('esfera', k % 2 ? '#F4F4F4' : '#F2A7C3', [0.3 + Math.cos(a) * 0.04, 0.07, 0.25 + Math.sin(a) * 0.04], [0.04, 0.02, 0.07], [0, -k * 45, 20]); }
+          add('esfera', '#FFD23F', [0.3, 0.08, 0.25], [0.025, 0.02, 0.025]); break; }
+        case 'folha': {   // comprimento = 1: peciolo, lamina com nervura central e laterais
+          const v2 = cor || '#4E9A3E';
+          add('cilindro', '#6E8A3A', [-0.42, 0.01, 0], [0.012, 0.18, 0.012], [0, 0, 90]);
+          for (let k = 0; k < 14; k++) { const u = k / 13, w = Math.sin(Math.PI * Math.min(1, u * 1.05)) * 0.16 + 0.01; add('esfera', v2, [-0.32 + u * 0.8, 0.01, 0], [0.06, 0.006, w]); }
+          add('cilindro', '#B9D88A', [0.08, 0.016, 0], [0.006, 0.8, 0.006], [0, 0, 90]);
+          for (let k = 0; k < 10; k++) { const x = -0.26 + k * 0.07; [-1, 1].forEach((sg) => add('caixa', '#B9D88A', [x + 0.03, 0.016, sg * 0.05], [0.004, 0.003, 0.12], [0, sg * 35, 0])); }
+          break; }
+        case 'tubarao': {   // comprimento = 1
+          const az = cor || '#6E8394';
+          add('capsula', az, [0, 0.12, 0], [0.18, 0.95, 0.17], [0, 0, 90]); add('capsula', '#E6E9EC', [0.04, 0.085, 0], [0.13, 0.7, 0.13], [0, 0, 90]);
+          add('cone', az, [-0.04, 0.27, 0], [0.12, 0.16, 0.03], [0, 0, -15]); add('cone', az, [-0.56, 0.2, 0], [0.08, 0.2, 0.025], [0, 0, 55]); add('cone', az, [-0.54, 0.06, 0], [0.06, 0.14, 0.025], [0, 0, 130]);
+          [-1, 1].forEach((sg) => { add('cone', az, [0.12, 0.05, sg * 0.1], [0.05, 0.16, 0.02], [sg * 60, 0, 120]); for (let k = 0; k < 5; k++) add('caixa', '#3E4A55', [0.26 - k * 0.025, 0.12, sg * 0.082], [0.004, 0.06, 0.003]); });
+          add('esfera', '#111111', [0.38, 0.14, 0.07], [0.015, 0.015, 0.008]); add('esfera', '#111111', [0.38, 0.14, -0.07], [0.015, 0.015, 0.008]);
+          add('caixa', '#F4F4F4', [0.41, 0.085, 0], [0.05, 0.008, 0.08]); break; }
+        case 'dinossauro': {   // T-rex em pe; altura = 1
+          const vd = cor || '#5E8A4A';
+          add('capsula', vd, [0, 0.55, 0], [0.24, 0.5, 0.2], [0, 0, 60]); add('capsula', vd, [-0.38, 0.45, 0], [0.09, 0.5, 0.08], [0, 0, 70]);
+          add('capsula', vd, [0.24, 0.82, 0], [0.12, 0.26, 0.11], [0, 0, -30]); add('caixa', vd, [0.36, 0.95, 0], [0.22, 0.12, 0.12]);
+          add('caixa', '#F4F4F4', [0.42, 0.89, 0], [0.12, 0.012, 0.1]); add('esfera', '#111', [0.33, 0.99, 0.05], [0.015, 0.015, 0.01]);
+          [-1, 1].forEach((sg) => { add('capsula', vd, [0.02, 0.28, sg * 0.08], [0.09, 0.3, 0.09], [0, 0, -15]); add('caixa', '#3E5A30', [0.06, 0.02, sg * 0.08], [0.12, 0.03, 0.06]); add('capsula', vd, [0.2, 0.62, sg * 0.08], [0.025, 0.08, 0.025], [0, 0, -60]); });
+          for (let k = 0; k < 6; k++) add('cone', '#3E5A30', [0.1 - k * 0.09, 0.72 - k * 0.04, 0], [0.03, 0.05, 0.02]); break; }
+        case 'trem': {   // comprimento = 1: locomotiva + 2 vagoes com janelas e rodas
+          [[0.33, '#E8473C'], [0, '#3E7CB1'], [-0.33, '#3E7CB1']].forEach(([x, c2], j) => {
+            add('caixa', c2, [x, 0.07, 0], [0.31, 0.09, 0.08], null, 'metal'); add('caixa', '#DDE2E6', [x, 0.12, 0], [0.31, 0.012, 0.082], null, 'metal');
+            for (let k = 0; k < 6; k++) [-1, 1].forEach((sg) => add('caixa', '#2A3A4A', [x - 0.12 + k * 0.048, 0.085, sg * 0.041], [0.03, 0.03, 0.002], null, 'vidro'));
+            for (let k = 0; k < 4; k++) [-1, 1].forEach((sg) => add('cilindro', '#1B1B1B', [x - 0.11 + k * 0.073, 0.02, sg * 0.04], [0.03, 0.01, 0.03], [90, 0, 0], 'borracha')); });
+          add('caixa', '#2A3A4A', [0.48, 0.09, 0], [0.01, 0.05, 0.07], null, 'vidro'); add('caixa', '#8A8A8A', [0, 0.004, 0], [1.05, 0.008, 0.12]); break; }
+        case 'piramide': {
+          const pedra = cor || '#D9B26F';
+          for (let k = 0; k < 12; k++) { const f = 1 - k / 12; add('caixa', k % 2 ? pedra : '#CBA463', [0, k / 12 + 1 / 24, 0], [1.55 * f, 1 / 12, 1.55 * f]); }
+          add('caixa', '#1B1B1B', [0, 0.12, 0.78], [0.08, 0.1, 0.01]); break; }
+        case 'estadio': {   // comprimento = 1: gramado com linhas, arquibancadas, refletores
+          add('caixa', '#3E8A3A', [0, 0.005, 0], [0.7, 0.01, 0.45]);
+          for (let k = 0; k < 8; k++) add('caixa', k % 2 ? '#4E9A4A' : '#3E8A3A', [-0.35 + 0.04375 + k * 0.0875, 0.011, 0], [0.0875, 0.002, 0.45]);
+          add('caixa', '#FFFFFF', [0, 0.013, 0], [0.004, 0.002, 0.45]); add('toro', '#FFFFFF', [0, 0.013, 0], [0.06, 0.06, 0.02], [90, 0, 0]);
+          [[0, 0.3, 0.86, 0.12], [0, -0.3, 0.86, 0.12]].forEach(([x, z, w, d]) => { for (let k = 0; k < 5; k++) add('caixa', k % 2 ? '#C0392B' : '#9AA5B1', [x, 0.02 + k * 0.02, z + Math.sign(z) * k * 0.02], [w, 0.02, d * 0.3]); });
+          [[-0.45, 0.32], [0.45, 0.32], [-0.45, -0.32], [0.45, -0.32]].forEach(([x, z]) => { add('cilindro', '#B9C0C6', [x, 0.12, z], [0.008, 0.24, 0.008], null, 'metal'); add('caixa', '#FFF6C8', [x, 0.25, z], [0.06, 0.03, 0.02]); }); break; }
+        case 'caminhao': {   // comprimento = 1: cabine, cacamba, rodas enormes, escada
+          const am = cor || '#F2B705';
+          add('caixa', am, [-0.1, 0.42, 0], [0.75, 0.22, 0.55], [0, 0, 6], 'metal'); add('caixa', am, [0.35, 0.36, 0.12], [0.22, 0.2, 0.25], null, 'metal');
+          add('caixa', '#2A3A4A', [0.46, 0.38, 0.12], [0.005, 0.1, 0.2], null, 'vidro'); add('caixa', '#1B1B1B', [0.2, 0.25, 0], [0.9, 0.06, 0.5], null, 'metal');
+          [[-0.3, 1], [-0.3, -1], [0.3, 1], [0.3, -1]].forEach(([x, sg]) => { add('cilindro', '#1B1B1B', [x, 0.16, sg * 0.25], [0.32, 0.12, 0.32], [90, 0, 0], 'borracha'); add('cilindro', '#8A8A8A', [x, 0.16, sg * 0.31], [0.12, 0.01, 0.12], [90, 0, 0], 'metal'); });
+          for (let k = 0; k < 5; k++) add('caixa', '#C9D3DC', [0.42, 0.06 + k * 0.05, 0.27], [0.06, 0.006, 0.006], null, 'metal'); break; }
+        case 'arvore_gigante': {
+          add('cilindro', '#7A4E2E', [0, 0.35, 0], [0.06, 0.7, 0.06], null, 'madeira');
+          for (let k = 0; k < 7; k++) add('cone', k % 2 ? '#2E6E3A' : '#3E7E44', [0, 0.45 + k * 0.08, 0], [0.22 - k * 0.025, 0.16, 0.22 - k * 0.025]); break; }
+        case 'sino': {
+          add('cilindro', cor || '#B08D57', [0, 0.45, 0], [0.62, 0.62, 0.62], null, 'metal'); add('meia_esfera', cor || '#B08D57', [0, 0.76, 0], [0.62, 0.3, 0.62], null, 'metal');
+          add('toro', '#8E6E3F', [0, 0.16, 0], [0.66, 0.66, 0.1], [90, 0, 0], 'metal'); add('caixa', '#8E6E3F', [0.2, 0.05, 0.3], [0.3, 0.1, 0.2], [0, 30, 20], 'metal');
+          add('toro', '#8E6E3F', [0, 0.92, 0], [0.1, 0.1, 0.03], null, 'metal'); break; }
         case 'casa': {
           add('caixa', '#F2E3C6', [0, 0.3, 0], [0.9, 0.6, 0.7], null, 'ceramica');
           add('piramide', '#B5523A', [0, 0.78, 0], [1.1, 0.36, 0.95], [0, 45, 0]);
@@ -280,7 +347,11 @@
       }
       return g;
     }
-    const PELO_NOME_V7 = [[/saturno\s*v\b|saturn\s*v\b/i, 'saturno5'], [/burj/i, 'burj'], [/eiffel/i, 'eiffel'], [/empire state/i, 'empire'],
+    const PELO_NOME_V7 = [[/monta[nñ]a\s*rusa|montanha[- ]russa|roller\s*coaster|kingda\s*ka/i, 'montanha_russa'], [/victoria\s+(boliviana|amaz)|vit[oó]ria[- ]r[eé]gia|water\s*lily|nen[uú]far/i, 'vitoria_regia'],
+      [/\bhoja\b|\bfolha\b|\bleaf\b/i, 'folha'], [/tibur[oó]n|tubar[aã]o|shark|megalod/i, 'tubarao'], [/dinosaur|dinossauro|t-?rex|tyrannosaur|braqui|brachio/i, 'dinossauro'],
+      [/\btren\b|\btrem\b|\btrain\b|\bmetr[oô]\b/i, 'trem'], [/pir[aá]mide|pyramid/i, 'piramide'], [/estadio|est[aá]dio|stadium|cancha|campo de f[uú]tbol|football field|soccer field/i, 'estadio'],
+      [/cami[oó]n|caminh[aã]o|\btruck\b/i, 'caminhao'], [/redwood|sequoia|secuoya|hyperion/i, 'arvore_gigante'], [/campana|\bsino\b|\bbell\b/i, 'sino'],
+[/saturno\s*v\b|saturn\s*v\b/i, 'saturno5'], [/burj/i, 'burj'], [/eiffel/i, 'eiffel'], [/empire state/i, 'empire'],
       [/\b(tierra|terra|earth|planeta tierra)\b/i, 'p_terra'], [/\b(sol|sun|el sol)\b/i, 'p_sol'], [/j[uú]piter/i, 'p_jupiter'], [/netuno|neptuno|neptune/i, 'p_netuno'],
       [/\b(luna|lua|moon)\b/i, 'p_lua'], [/merc[uú]rio|mercury/i, 'p_mercurio'], [/\bmarte\b|\bmars\b/i, 'p_marte'], [/\bsaturno\b|\bsaturn\b/i, 'p_saturno'],
       [/ballena|baleia|whale/i, 'baleia'], [/titanic|seawise|crucero|transatl|cruise ship|ocean liner/i, 'titanic'], [/boeing|\b747\b|stratolaunch|avi[oó]n de pasajeros|jumbo/i, 'b747'],
@@ -295,14 +366,15 @@
       const tam = num(it.tamanho_m != null ? it.tamanho_m : it.altura_m, 0.001, 2e12, 1), cor = corOk(it.cor, null);   // 14/11: teto ate' o Sol (era 2e7 = 20.000 km)
       let g;
       const v7 = modeloV7PeloNome(it.nome), v7g = v7 ? modeloV7(v7, cor) : null;
-      const pronto = v7g ? null : (it.modelo ? null : modeloPeloNome(it.nome));
+      const pronto = v7g ? null : modeloPeloNome(it.nome);   // 14/11: o nome manda sobre o `modelo` do roteiro
       if (v7g) g = v7g;
       else if (pronto) g = pecaPronta(pronto, cor);
       else if (Array.isArray(it.partes) && it.partes.length) {
         g = new T.Group();
-        it.partes.slice(0, 24).forEach((p) => { const m = new T.Mesh((F[p.forma] || F.caixa)(), M(corOk(p.cor, cor || '#B8C4D0'), p.material));
+        it.partes.slice(0, 48).forEach((p) => { const m = new T.Mesh((F[p.forma] || F.caixa)(), M(corOk(p.cor, cor || '#B8C4D0'), p.material));
           m.position.set(...vet(p.pos, -5, 5, [0, 0.5, 0])); m.scale.set(...vet(p.tam, 0.001, 5, [1, 1, 1])); m.rotation.set(...vet(p.giro, -360, 360, [0, 0, 0]).map((a) => (a * Math.PI) / 180)); g.add(m); });
       } else g = pecaPronta(String(it.modelo || 'cilindro'), cor);
+      if (!v7g && !pronto && Array.isArray(it.partes) && it.partes.length) g.traverse((m) => { if (m.isMesh && m.geometry) { const ln = new T.LineSegments(new T.EdgesGeometry(m.geometry, 32), new T.LineBasicMaterial({ color: '#1B1B1B', transparent: true, opacity: 0.45 })); m.add(ln); } });
       // normaliza: a MAIOR dimensao vira `tamanho_m` (a baleia mede 30 m de
       // comprimento, nao de altura; a torre, 330 m de altura)
       // v3 (13/11): item CHATO (folha, espelho, pista, pegada) deitado no chao vira uma linha invisivel -- a comparacao
@@ -457,6 +529,33 @@
       }
       cam.lookAt(cx, miraY, 0);
       U3.render(R, sc, cam, spec, t); c.drawImage(gl, 0, 0, W, H);
+      // 14/11 (dono: "nos objetos de grandeza o objeto anterior sempre deve ficar a mostra junto com o atual"): quando o
+      // anterior ocupa < 170 px de altura, uma LUPA mostra ele de perto (mesma luz), com o nome e uma linha ate' onde ele esta.
+      if (a > 0 && itens[a - 1] && !teaser && local > 0.5) {
+        const pv = itens[a - 1], ptp = new T.Vector3(pv.x, pv.alt, 0).project(cam), pbp = new T.Vector3(pv.x, 0, 0).project(cam), hp = Math.abs(ptp.y - pbp.y) * 0.5 * H;
+        if (hp < 60) {
+          const sx = (pbp.x * 0.5 + 0.5) * W, sy = (-pbp.y * 0.5 + 0.5) * H;
+          const P0 = cam.position.clone(), Q0 = cam.quaternion.clone(), n0 = cam.near, f0 = cam.far;
+          const est = [chao.position.clone(), chao.scale.x, grade.position.clone(), grade.scale.x, horizonte.position.clone(), horizonte.scale.x, tufos.position.clone(), tufos.scale.x, nevoa.near, nevoa.far];
+          const vf = (cam.fov * Math.PI) / 180, d2 = Math.max(pv.alt, pv.larg * 0.8) * 1.25 / Math.tan(vf / 2);
+          cam.position.set(pv.x + d2 * 0.3, pv.alt * 0.55 + d2 * 0.12, d2); cam.near = d2 / 5000; cam.far = d2 * 2000; cam.updateProjectionMatrix(); cam.lookAt(pv.x, pv.alt * 0.5, 0);
+          chao.position.set(pv.x, 0, 0); chao.scale.setScalar(d2 * 600); grade.position.set(pv.x, d2 * 0.0004, 0); grade.scale.setScalar(d2 * 6);
+          horizonte.position.set(cam.position.x, 0, cam.position.z); horizonte.scale.setScalar(d2); tufos.position.set(pv.x, 0, 0); tufos.scale.setScalar(d2 * 0.5); nevoa.near = d2 * 25; nevoa.far = d2 * 160;
+          U3.render(R, sc, cam, spec, t);
+          const ent = U.mola(local - 0.5, 9), R2 = 165 * Math.min(1, Math.max(0, ent)), cx = 210, cy = 1090;
+          if (R2 > 2) {
+            c.save(); c.strokeStyle = '#FFFFFF'; c.lineWidth = 5; c.setLineDash([]); c.beginPath(); c.moveTo(cx + R2 * 0.7, cy - R2 * 0.7); c.lineTo(sx, sy); c.stroke();
+            c.beginPath(); c.arc(sx, sy, 10, 0, Math.PI * 2); c.fillStyle = '#FFFFFF'; c.fill();
+            c.beginPath(); c.arc(cx, cy, R2, 0, Math.PI * 2); c.save(); c.clip(); c.drawImage(gl, W / 2 - 360, H / 2 - 360, 720, 720, cx - R2, cy - R2, 2 * R2, 2 * R2); c.restore();
+            c.lineWidth = 10; c.strokeStyle = '#FFD23F'; c.stroke();
+            c.font = '40px "Lilita One", sans-serif'; c.textAlign = 'center'; c.textBaseline = 'middle'; const nm = pv.nome.toUpperCase(), w = Math.min(380, c.measureText(nm).width + 40);
+            U.rr(c, cx - w / 2, cy + R2 - 10, w, 54, 27); c.fillStyle = '#FFD23F'; c.fill(); c.fillStyle = '#1B1B1B'; c.fillText(nm, cx, cy + R2 + 17, w - 24); c.restore();
+          }
+          cam.position.copy(P0); cam.quaternion.copy(Q0); cam.near = n0; cam.far = f0; cam.updateProjectionMatrix(); cam.updateMatrixWorld();
+          chao.position.copy(est[0]); chao.scale.setScalar(est[1]); grade.position.copy(est[2]); grade.scale.setScalar(est[3]); horizonte.position.copy(est[4]); horizonte.scale.setScalar(est[5]);
+          tufos.position.copy(est[6]); tufos.scale.setScalar(est[7]); nevoa.near = est[8]; nevoa.far = est[9];
+        }
+      }
       // v4: LINHAS DE VELOCIDADE quando o salto de tamanho e' grande (a camera recua por ordens de grandeza)
       if (a !== ant && salto > 0.7 && voo > 0.05) {
         const rv = U.rng('vel' + i), forca = voo * U.clamp(salto / 3, 0.3, 1);

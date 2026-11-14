@@ -79,7 +79,10 @@
         c.font = '54px "Lilita One", sans-serif'; c.fillStyle = cor; c.fillText(txt, x + (ic ? 30 : 0), y + 3, w - 110); if (ic) ic(x - w / 2 + 62, y); };
       const cor = (x, y, r) => { c.save(); c.translate(x, y); c.scale(r, r); c.beginPath(); c.moveTo(0, 0.85); c.bezierCurveTo(-1.2, 0, -0.75, -1, 0, -0.4); c.bezierCurveTo(0.75, -1, 1.2, 0, 0, 0.85); c.fillStyle = '#E2373C'; c.fill(); c.restore(); };
       let p = pop(0);
-      if (p > 0) { const b = 1 + 0.08 * Math.max(0, Math.sin(u * 8)); c.save(); c.translate(W * 0.28, 1560); c.scale(p, p); bt(0, 0, 420, 120, '#FFF', TX.like, '#111', (x, y) => cor(x, y, 30 * b)); c.restore(); }
+      if (p > 0) { c.save(); c.translate(W * 0.28, 1560); c.scale(p, p); bt(0, 0, 420, 120, '#FFF', TX.like, '#111', (x, y) => cor(x, y, 30)); c.restore(); }
+      // 14/11 (dono: "a mensagem inteira pulsando fica estranho; so' as setas que apontam pulsam"): 2 setas descendo
+      if (u > 0.4) { const dy = 16 * Math.abs(Math.sin(u * 6)); c.save(); c.fillStyle = '#FFD23F'; c.strokeStyle = '#111'; c.lineWidth = 6;
+        [W * 0.28, W * 0.72].forEach((x) => { const y = 1440 + dy; c.beginPath(); c.moveTo(x, y + 30); c.lineTo(x - 38, y - 18); c.lineTo(x + 38, y - 18); c.closePath(); c.fill(); c.stroke(); }); c.restore(); }
       p = pop(1);
       if (p > 0) { const ap = u - 1.2, feito = ap > 0, s = feito && ap < 0.15 ? 0.92 : 1; c.save(); c.translate(W * 0.72, 1560); c.scale(p * s, p * s);
         bt(0, 0, 440, 120, feito ? '#3A3A44' : '#E2373C', feito ? TX.ok : TX.ins, '#FFF'); c.restore();

@@ -317,11 +317,9 @@
       c.save();
       c.beginPath(); U.rr(c, GX0, GY0, GX1 - GX0, GY1 - GY0, 34);
       c.moveTo(p.x + raio * q, p.y); c.arc(p.x, p.y, Math.max(1, raio * q), 0, TAU, true);
-      if (rv > 1) { c.moveTo(pv.x + rv, pv.y); c.arc(pv.x, pv.y, rv, 0, TAU, true); }
       c.fillStyle = 'rgba(17,17,27,' + (0.66 * ent) + ')'; c.fill('evenodd');
       const pul = 1 + 0.05 * Math.sin(depois * 14);
       c.lineWidth = 12; c.strokeStyle = '#E2373C'; c.beginPath(); c.arc(p.x, p.y, Math.max(1, raio * q * pul), 0, TAU); c.stroke();
-      if (rv > 1) { c.lineWidth = 7; c.setLineDash([16, 10]); c.strokeStyle = '#FFF'; c.beginPath(); c.arc(pv.x, pv.y, rv, 0, TAU); c.stroke(); c.setLineDash([]); }
       c.restore();
     }
 
@@ -354,7 +352,7 @@
         contornado(T.placar.toUpperCase(), CX, 560, 74, 880, '#FFF');
         const n = N + 1, bw = Math.min(150, (GX1 - GX0 - 20 * (n - 1)) / n), x0 = CX - ((n - 1) * (bw + 20)) / 2;
         for (let k = 0; k < n; k++) {
-          const x = x0 + k * (bw + 20), destaque = k === N, pulso = destaque ? 1 + 0.06 * Math.sin(u * 9) : 1;
+          const x = x0 + k * (bw + 20), destaque = k === N, pulso = 1;   // 14/11: so' as setas pulsam
           c.save(); c.translate(x, 700); c.scale(pulso, pulso);
           c.beginPath(); c.arc(0, 0, bw / 2, 0, TAU); c.fillStyle = destaque ? '#FFD23F' : '#FFF'; c.fill(); c.lineWidth = 6; c.strokeStyle = '#111'; c.stroke();
           c.font = Math.round(bw * 0.55) + 'px ' + FONTE; c.fillStyle = '#111'; c.fillText(String(k), 0, 4); c.restore();
@@ -383,9 +381,11 @@
         c.font = '66px ' + FONTE; c.fillStyle = '#FFF'; c.textAlign = 'left';
         c.fillText((apertado ? T.inscrito : T.inscr).toUpperCase(), CX - 230, 1184, 540);
         c.restore();
+        { const dx = 18 * Math.abs(Math.sin(u * 6)); c.save(); c.fillStyle = '#FFD23F'; c.strokeStyle = '#111'; c.lineWidth = 6;
+          [[935 + dx, 990], [935 + dx, 1180]].forEach(([x, y]) => { c.beginPath(); c.moveTo(x, y); c.lineTo(x + 70, y - 40); c.lineTo(x + 70, y + 40); c.closePath(); c.fill(); c.stroke(); }); c.restore(); }
         c.save(); c.textAlign = 'center'; contornado(T.sub.toUpperCase(), CX, 1310, 52, 860, '#FFF');
         // 14/11: o @ do canal no encerramento (spec.perfil), quicando -- o nome que a pessoa procura depois
-        if (spec.perfil) { const b = 1 + 0.05 * Math.sin(u * 8); c.save(); c.translate(CX, 1420); c.scale(b, b); U.rr(c, -300, -52, 600, 104, 52); c.fillStyle = '#FFD23F'; c.fill();
+        if (spec.perfil) { c.save(); c.translate(CX, 1420); U.rr(c, -300, -52, 600, 104, 52); c.fillStyle = '#FFD23F'; c.fill();
           c.lineWidth = 6; c.strokeStyle = '#111'; c.stroke(); c.font = '62px ' + FONTE; c.fillStyle = '#111'; c.textAlign = 'center'; c.fillText(String(spec.perfil).slice(0, 22), 0, 4, 560); c.restore(); }
         c.restore();
         // dedo que aperta (um circulo branco com sombra, como o toque na tela)
