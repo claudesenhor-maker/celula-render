@@ -214,6 +214,36 @@
         for (let j = 0; j < 3; j++) { const f = new T.Mesh(new T.ConeGeometry(0.035, 0.16 + rt() * 0.1, 4), mT[j % 2]); f.position.set((j - 1) * 0.04, 0.08, 0); f.rotation.z = (j - 1) * 0.35; tf.add(f); }
         if (rt() < 0.3) { const fl = new T.Mesh(new T.SphereGeometry(0.035, 8, 6), mF[k % 3]); fl.position.y = 0.2; tf.add(fl); }
         tufos.add(tf); } }
+    // v5 (14/11, dono: "tente fazer alguma coisa interessante no cenario do fundo"): o FUNDO CONTA A ESCALA.
+    //   ~1 m a 30 m: morros e nuvens; 30 m a 5 km: SKYLINE de cidade no horizonte (predios com janelas);
+    //   > 20 km: o ceu escurece ate' o ESPACO, com estrelas e a curva azul da atmosfera no horizonte.
+    const cidade = new T.Group(); horizonte.add(cidade);
+    { const rc = U.rng('cidade'), cores = ['#7F95AD', '#8DA2B8', '#6F86A0', '#9AAEC2'];
+      const mats = cores.map((h) => new T.MeshBasicMaterial(corPura(h, { transparent: true, opacity: 0 })));
+      const tj = janelas('#7F95AD'); const mJan = new T.MeshBasicMaterial(Object.assign(corPura('#FFFFFF', { transparent: true, opacity: 0 }), { map: tj }));
+      for (let k = 0; k < 90; k++) { const a = (k / 90) * Math.PI * 2 + rc() * 0.03, r0 = 118 + rc() * 10, h = 3 + Math.pow(rc(), 2) * 16, w = 2.5 + rc() * 3.5;
+        const m = new T.Mesh(new T.BoxGeometry(w, h, w), k % 5 === 0 ? mJan : mats[k % mats.length]); m.position.set(Math.cos(a) * r0, h / 2 - 0.3, Math.sin(a) * r0); m.lookAt(0, h / 2, 0); cidade.add(m);
+        if (rc() < 0.18) { const an = new T.Mesh(new T.CylinderGeometry(0.08, 0.08, h * 0.35, 4), mats[0]); an.position.set(m.position.x, h + h * 0.17, m.position.z); cidade.add(an); } }
+      cidade.userData.mats = mats.concat([mJan]); }
+    const espaco = new T.Mesh(new T.SphereGeometry(900, 32, 16), new T.MeshBasicMaterial(corPura('#050B1E', { transparent: true, opacity: 0, side: T.BackSide, depthWrite: false })));
+    espaco.renderOrder = -2; horizonte.add(espaco);
+    const estrelas = (() => { const rs = U.rng('estrelas'), n = 700, pos = new Float32Array(n * 3);
+      for (let k = 0; k < n; k++) { const a = rs() * Math.PI * 2, b = Math.acos(rs() * 0.95), R0 = 850; pos[k * 3] = Math.sin(b) * Math.cos(a) * R0; pos[k * 3 + 1] = Math.cos(b) * R0; pos[k * 3 + 2] = Math.sin(b) * Math.sin(a) * R0; }
+      const g = new T.BufferGeometry(); g.setAttribute('position', new T.BufferAttribute(pos, 3));
+      const m = new T.Points(g, new T.PointsMaterial({ color: '#FFFFFF', size: 2.2, sizeAttenuation: false, transparent: true, opacity: 0, fog: false, toneMapped: false, depthWrite: false })); m.renderOrder = -1; return m; })();
+    horizonte.add(estrelas);
+    const brilhoAtm = new T.Mesh(new T.TorusGeometry(300, 18, 8, 96), new T.MeshBasicMaterial(corPura('#7FC8FF', { transparent: true, opacity: 0, depthWrite: false })));
+    brilhoAtm.rotation.x = Math.PI / 2; brilhoAtm.position.y = -6; horizonte.add(brilhoAtm);
+    const fundoDaEscala = (d) => {
+      const L = Math.log10(Math.max(1e-3, d));
+      const cid = U.clamp((L - 1.2) / 0.5, 0, 1) * (1 - U.clamp((L - 3.4) / 0.5, 0, 1));
+      cidade.userData.mats.forEach((m) => { m.opacity = cid; }); cidade.visible = cid > 0.01;
+      const esp = U.clamp((L - 4.0) / 1.2, 0, 1);
+      espaco.material.opacity = esp * 0.97; estrelas.material.opacity = U.clamp((esp - 0.3) / 0.5, 0, 1); brilhoAtm.material.opacity = esp * 0.6;
+      espaco.visible = esp > 0.01; estrelas.visible = esp > 0.3; brilhoAtm.visible = esp > 0.01;
+      // nuvens somem no espaco
+      horizonte.children.forEach((n) => { if (n.userData.v) n.visible = esp < 0.6; });
+    };
     const poeira = new T.Mesh(new T.RingGeometry(0.62, 1, 48), new T.MeshBasicMaterial({ color: '#E9DFC8', transparent: true, opacity: 0, depthWrite: false, side: T.DoubleSide }));
     poeira.rotation.x = -Math.PI / 2; sc.add(poeira);
     const idxAlvo = (cn, i) => {
@@ -272,7 +302,7 @@
       cam.position.set(cx + Math.sin(ang) * d * Math.cos(elev) + Math.sin(t * 61) * treme * d, cy * 0.55 + d * Math.sin(elev) + Math.cos(t * 53) * treme * d, Math.cos(ang) * d * Math.cos(elev));
       horizonte.position.set(cam.position.x, 0, cam.position.z); horizonte.scale.setScalar(d);
       horizonte.children.forEach((n) => { if (n.userData.v) n.rotation.z = 0; });
-      horizonte.rotation.y = t * 0.012; tufos.position.set(cx, 0, 0); tufos.scale.setScalar(d * 0.5);
+      horizonte.rotation.y = t * 0.012; fundoDaEscala(d); tufos.position.set(cx, 0, 0); tufos.scale.setScalar(d * 0.5);
       if (itens[a]) { const it = itens[a], qp = U.clamp((entra - 0.5) / 0.5, 0, 1);
         poeira.visible = a !== ant && qp > 0 && qp < 1; poeira.position.set(it.x, Math.max(1e-4, d * 0.0006), 0);
         poeira.scale.setScalar(Math.max(it.larg * 0.6, it.alt * 0.3) * (0.55 + qp * 0.8)); poeira.material.opacity = 0.45 * (1 - qp) * (1 - qp); } cam.near = d / 5000; cam.far = d * 2000; cam.updateProjectionMatrix();
@@ -298,8 +328,9 @@
       // numa ja posta some (antes "1 BARCO" cobria "KHALIFA"); nunca sai pela
       // borda (conta a largura real) nem sobe para baixo do selo do alto.
       const comHud = !!(cn.hud && typeof cn.hud !== 'object');
-      const yMin = spec.titulo && t < 3.4 ? 620 : comHud ? 540 : 330, postas = [];   // v4: o titulo vem antes do HUD
-      const ordem = itens.map((it, j) => j).filter((j) => j <= a).sort((x, y) => (y === a) - (x === a));
+      const yMin = spec.titulo && t < 3.4 ? 620 : comHud ? 590 : 330, postas = [];   // v4: o titulo vem antes do HUD
+      // v5 (14/11, dono: "muitos detalhes um em cima do outro"): so' a etiqueta do item da vez e a do anterior
+      const ordem = [a, a - 1].filter((j) => j >= 0 && j < itens.length);
       ordem.forEach((j) => {
         const it = itens[j];
         const p = new T.Vector3(it.x, it.alt, 0).project(cam); if (p.z > 1) return;
@@ -359,7 +390,7 @@
       }
       // v3: o HUD aparecia atras do cartaz do titulo -- so' entra depois dele
       if (cn.hud && typeof cn.hud !== 'object' && local > 0.3 && !(spec.titulo && t < 3.3)) { const s = U.mola(local - 0.3, 10); c.save(); c.translate(W / 2, 300); c.scale(s, s); c.font = '120px "Lilita One", sans-serif'; c.textAlign = 'center'; c.textBaseline = 'middle';
-        const txt = U.hud(c, cn.hud, c.canvas.width * 0.84 - 70, 22), w = c.measureText(txt).width + 70; U.rr(c, -w / 2, -78, w, 156, 34); c.fillStyle = '#1B1B1B'; c.fill(); c.fillStyle = '#FFD23F'; c.fillText(txt, 0, 6); c.restore(); }
+        const txt = U.hud(c, cn.hud, c.canvas.width * 0.84 - 70, 44), w = c.measureText(txt).width + 70; U.rr(c, -w / 2, -78, w, 156, 34); c.fillStyle = '#1B1B1B'; c.fill(); c.fillStyle = '#FFD23F'; c.fillText(txt, 0, 6); c.restore(); }
       U.cartaz(c, spec, t, { fonte: '84px "Lilita One", sans-serif', y: 170, fundo: '#FFD23F', borda: '#1B1B1B', cor: '#1B1B1B', altura_linha: 100, dur: 3.0 });
       U.legenda(c, spec, t, { fonte: '100px "Lilita One", sans-serif', y: H * 0.70, cor: '#FFFFFF', cor_ativa: '#FFD23F', contorno: 18, caixa: true, por_vez: 3 });
     }

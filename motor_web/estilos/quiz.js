@@ -203,22 +203,25 @@
       const e = tam / 2.1, d = nv.nivelDif;
       g.save(); g.translate(cx, cy);
       let cor = nv.tinta;
-      if (nv.tipo === 'cores' && d >= 4 && !odd) cor = clarear(nv.tinta, (nv.pos[k].tom - 0.5) * 0.05);
+      // 14/11 (dono: "peixes iguais, chaves iguais, isso vai irritar; pode ser sutil mas tem que ter diferenca"): no nivel 5
+      // o diferente era 5% menor (~4 px), girado 6 graus ou 7% mais claro -- com o tremor, invisivel. Agora ha um PISO:
+      // sutil, mas achavel em ~7 s. O ruido de cor dos iguais caiu pela metade (nao pode imitar o diferente).
+      if (nv.tipo === 'cores' && d >= 4 && !odd) cor = clarear(nv.tinta, (nv.pos[k].tom - 0.5) * 0.025);
       let v = null;
       if (odd) {
         const m = nv.tipo === 'cores' ? 'cor' : nv.dif;
-        if (m === 'girado') g.rotate(((6 + 34 * (5 - d) / 4) * Math.PI) / 180);   // 40 graus facil, 6 graus dificil
+        if (m === 'girado') g.rotate(((18 + 24 * (5 - d) / 4) * Math.PI) / 180);   // 42 graus facil, 18 dificil (era 6: invisivel)
         else if (m === 'espelhado') g.scale(-1, 1);
-        else if (m === 'maior') g.scale(1 + 0.26 / d, 1 + 0.26 / d);
-        else if (m === 'menor') g.scale(1 - 0.24 / d, 1 - 0.24 / d);
-        else if (m === 'cor') cor = clarear(nv.tinta, 0.36 / d);
+        else if (m === 'maior') { const f = 1 + Math.max(0.14, 0.32 / d); g.scale(f, f); }   // >= 14% (era 5%)
+        else if (m === 'menor') { const f = 1 - Math.max(0.15, 0.3 / d); g.scale(f, f); }   // >= 15% (era 5%)
+        else if (m === 'cor') cor = clarear(nv.tinta, Math.max(0.16, 0.4 / d));   // >= 16% (era 7%)
         else if (m === 'hora') v = { hora: 3 + Math.max(1, 6 - d) };
       }
       g.fillStyle = g.strokeStyle = cor;
       g.scale(e, e);
       nv.desenho(g, v);
       if (odd && nv.dif === 'sem_pedaco' && nv.tipo !== 'cores') {   // corte em cunha pintado com o papel (E1)
-        furo(g, () => { g.beginPath(); g.moveTo(0, 0); g.arc(0, 0, 1.2, -0.25 * (6 - d) / 5 - 0.12, 0.25 * (6 - d) / 5 + 0.12); g.closePath(); g.fill(); });
+        furo(g, () => { g.beginPath(); g.moveTo(0, 0); g.arc(0, 0, 1.2, -0.25 * (6 - d) / 5 - 0.2, 0.25 * (6 - d) / 5 + 0.2); g.closePath(); g.fill(); });
       }
       g.restore();
     }

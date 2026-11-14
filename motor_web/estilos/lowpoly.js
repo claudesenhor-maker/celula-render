@@ -586,6 +586,27 @@
       g.userData = { alt: () => 0, bocas, interior: true };
       return g;
     }
+    function enfeitar(cen, r, sobre, o) {
+      const pedra = (s0) => { const m = new T.Mesh(new T.DodecahedronGeometry(0.22 * s0, 0), M(['#9A958C', '#8A847A', '#B0A99E'][Math.floor(r() * 3)])); m.rotation.set(r() * 3, r() * 3, r() * 3); m.scale.y = 0.7; return m; };
+      const arbusto = () => { const g = new T.Group(), cor = ['#5E9E55', '#4E8C48', '#6DAA5E'][Math.floor(r() * 3)]; for (let j = 0; j < 3; j++) { const b = new T.Mesh(new T.IcosahedronGeometry(0.28 + r() * 0.12, 0), M(cor)); b.position.set((j - 1) * 0.25, 0.22, (r() - 0.5) * 0.2); g.add(b); } return g; };
+      const flor = () => { const g = new T.Group(), h = new T.Mesh(new T.CylinderGeometry(0.015, 0.015, 0.3, 4), M('#4E8C48')); h.position.y = 0.15; g.add(h); const f = new T.Mesh(new T.IcosahedronGeometry(0.07, 0), M(['#FFFFFF', '#FFD23F', '#F27DA3', '#B07CFF'][Math.floor(r() * 4)])); f.position.y = 0.32; g.add(f); return g; };
+      const cerca = () => { const g = new T.Group(), mad = M('#B98A5A'); for (let j = 0; j < 3; j++) { const p0 = new T.Mesh(caixaGeo(0.08, 0.6, 0.08), mad); p0.position.set(j * 0.5 - 0.5, 0.3, 0); g.add(p0); } [0.2, 0.45].forEach((y) => { const tb = new T.Mesh(caixaGeo(1.15, 0.07, 0.05), mad); tb.position.set(0, y, 0); g.add(tb); }); g.rotation.y = r() * 3; return g; };
+      const poste = () => { const g = new T.Group(); const h = new T.Mesh(new T.CylinderGeometry(0.04, 0.05, 2.2, 6), M('#4A4F57')); h.position.y = 1.1; g.add(h); const l = new T.Mesh(new T.IcosahedronGeometry(0.14, 1), M('#FFF2C4', { emis: '#C9A64A' })); l.position.y = 2.25; g.add(l); return g; };
+      const cone = () => { const g = new T.Group(); const c0 = new T.Mesh(new T.ConeGeometry(0.16, 0.42, 8), M('#F27A2A')); c0.position.y = 0.21; g.add(c0); const f = new T.Mesh(new T.CylinderGeometry(0.105, 0.125, 0.07, 8), M('#FFFFFF')); f.position.y = 0.22; g.add(f); return g; };
+      const caixote = () => { const m = new T.Mesh(caixaGeo(0.45, 0.45, 0.45), M('#C49A5E')); m.position.y = 0.22; m.rotation.y = r() * 3; const g = new T.Group(); g.add(m); return g; };
+      const placa = () => { const g = new T.Group(); const h = new T.Mesh(caixaGeo(0.06, 0.9, 0.06), M('#6E6E6E')); h.position.y = 0.45; g.add(h); const pl = new T.Mesh(caixaGeo(0.5, 0.5, 0.04), M('#FFD23F')); pl.position.y = 0.95; pl.rotation.z = Math.PI / 4; g.add(pl); const x = new T.Mesh(caixaGeo(0.06, 0.28, 0.05), M('#1B1B1B')); x.position.set(0, 0.97, 0.03); g.add(x); return g; };
+      const osso = () => { const g = new T.Group(), b = M('#EFE8D8'); const h = new T.Mesh(new T.CylinderGeometry(0.03, 0.03, 0.4, 5), b); h.rotation.z = Math.PI / 2; h.position.y = 0.05; g.add(h); [-0.2, 0.2].forEach((x) => { const e = new T.Mesh(new T.IcosahedronGeometry(0.06, 0), b); e.position.set(x, 0.05, 0); g.add(e); }); g.rotation.y = r() * 3; return g; };
+      const tabelas = { deserto: [pedra, pedra, osso, arbusto, placa], areia_movedica: [pedra, osso, placa, arbusto, pedra], polo: [pedra, pedra, placa], vulcao: [pedra, pedra, pedra, placa, osso],
+        floresta: [arbusto, arbusto, flor, flor, pedra, cerca], campo: [flor, flor, arbusto, cerca, pedra, caixote], cidade: [poste, cone, caixote, placa, arbusto, pedra], praia: [pedra, arbusto, pedra],
+        montanha: [pedra, pedra, arbusto, flor, cerca], lua: [pedra, pedra, pedra] };
+      const lista = tabelas[cen] || [pedra, arbusto, flor, cerca, caixote];
+      const n = 30 + Math.floor(r() * 10);
+      for (let k = 0; k < n; k++) {
+        const a = r() * Math.PI * 2, d = 3.4 + Math.pow(r(), 0.8) * 4.3, x = Math.cos(a) * d, z = Math.sin(a) * d;
+        if (z > 2.2 && Math.abs(x) < 2.2) continue;   // nunca entre a camera e o protagonista
+        const m = lista[k % lista.length](0.7 + r() * 0.9); if (m.isMesh) { const g = new T.Group(); g.add(m); m.position.y = 0.08; sobre(g, x, z); } else sobre(m, x, z);
+      }
+    }
     // AREIA MOVEDICA: a poca escura com aneis que ondulam em volta de quem afunda
     function poca() {
       const g = new T.Group();
@@ -683,6 +704,10 @@
             const b = new T.Group(); const casco = new T.Mesh(caixaGeo(1.4, 0.35, 0.6), M('#C8553D')); b.add(casco); const v2 = new T.Mesh(new T.ConeGeometry(0.45, 1.1, 3), M('#FFFFFF')); v2.position.y = 0.7; b.add(v2); sombra(b); sc.add(b); o.barco = b;
           }
         }
+        // v5 (14/11, dono: "melhorar o 3D, deixar ainda mais detalhista"): o diorama tinha chao, 2-3 arvores e gente.
+        // Agora 30-40 detalhes pelo tipo de cenario (pedra, arbusto, flor, cerca, poste, placa, cone, caixote, osso...),
+        // num anel que nao invade a praca central de quem atua.
+        if (!o.interior && !globo) enfeitar(cen, r, sobre, o);
         for (let k = 0; k < (o.interior ? 0 : 4); k++) { const n = nuvem(r, hora === 'tempestade' || hora === 'cinza' ? '#9AA3B0' : '#FFFFFF'); n.userData = { a: r() * 6.28, h: 7 + r() * 3, d: 5 + r() * 4 }; sc.add(n); o.nuvens.push(n); }
         // gente: 1 protagonista no centro + figurantes; multidao = 14
         // v3: 'corre' fazia 12 bonecos tapando a acao; e quando a IA ja cria a pessoa (cn.criar), o protagonista
@@ -764,13 +789,23 @@
       // ---- camera
       const vo503 = U.lerp(-0.02, 0.06, U.suave(U.clamp((t - 3.0) / 0.5, 0, 1)));
       cam.setViewOffset(W, H, 0, Math.round(H * vo503), W, H);
-      const cam0 = cn.camera || (o.globo ? 'orbita' : 'orbita');
+      // v5 (14/11, dono: "mais ritmo, mais mudanca"): sem camera do roteiro, cada cena tem um PLANO diferente em rodizio
+      // e cena com mais de 3,2 s ganha um CORTE no meio (vai para o rosto, ou do rosto para o aberto): a imagem muda a
+      // cada ~1,5-2,5 s, como nos canais de referencia.
+      const PLANOS = ['orbita', 'perto', 'baixo', 'cima', 'lateral', 'zoom_in'];
+      const iCena = Math.max(0, spec.cenas.indexOf(cn));
+      let cam0 = cn.camera || (o.globo ? 'orbita' : PLANOS[iCena % PLANOS.length]);
+      if (!o.globo && !o.interior && D > 3.2 && local > D * 0.52) cam0 = cam0 === 'perto' ? 'orbita' : 'perto';
+      if (!o.globo && o.interior && D > 3.2 && local > D * 0.52) cam0 = cam0 === 'perto' ? 'lateral' : 'perto';
       // v3: a camera ficava a 19 m -- gente com 15% da altura do quadro e metade de ceu/mar vazio. Agora ~14 m (25%).
       let ang = 0.5 * Math.sin(t * 0.21) + k * 0.55, dist = o.globo ? 15.5 : 14.5, alt = o.globo ? 2 : 6.2, alvoY = o.globo ? 0 : 1.5;
       if (cam0 === 'orbita') ang += k * 0.9;
       if (cam0 === 'zoom_in') dist *= U.lerp(1.12, 0.62, U.suave(k));
       if (cam0 === 'zoom_out') dist *= U.lerp(0.62, 0.95, U.suave(k));
       if (cam0 === 'sobrevoo') { alt = o.globo ? 9 : 16; dist *= 0.72; }
+      if (cam0 === 'baixo') { dist *= 0.62; alt = 0.7; alvoY = 2.3; ang = 0.35 * Math.sin(t * 0.25) - 0.3; }   // contra-plongee: a ameaca fica grande
+      if (cam0 === 'cima') { dist *= 0.5; alt = 12.5; alvoY = 0.6; ang = 0.2 + k * 0.5; }                      // de cima: mostra o espaco todo
+      if (cam0 === 'lateral') { ang = 1.15 - k * 0.45; dist *= 0.78; alt *= 0.6; }                             // travelling lateral
       if (cam0 === 'perto') { dist *= o.globo ? 0.7 : 0.55; alt *= o.globo ? 1 : 0.42; alvoY = o.globo ? 0 : 1.7; ang = 0.25 * Math.sin(t * 0.3); }
       if (!o.globo && (acao === 'cresce') ) alvoY += U.saida(k) * 2.5;
       if (!o.globo && (acao === 'noite_eterna' || acao === 'aurora' || acao === 'lua_perto' || acao === 'impacto' || acao === 'chuva_meteoros' || acao === 'sol_cresce')) { alt *= 0.55; alvoY = 4 + 2 * U.suave(k); }
@@ -941,6 +976,26 @@
       // vinheta (todo quadro): segura o olho no centro
       c.drawImage(VINHETA, 0, 0);
     }
+    // v5 (14/11, dono: "mais informacao para prender"): NIVEL DE PERIGO que sobe a cada cena (1..5 marcas), com a cor
+    // indo do verde ao vermelho; no fim do video, borda vermelha pulsando. A luz da cena esquenta junto.
+    const ROT_PERIGO = /^es/i.test(spec.idioma || '') ? 'PELIGRO' : /^pt/i.test(spec.idioma || '') ? 'PERIGO' : 'DANGER';
+    function perigo(i, t, local) {
+      if (spec.titulo && t < 3.3) return;
+      const N = spec.cenas.length, nivel = Math.min(5, 1 + Math.floor((i / Math.max(1, N - 1)) * 4.999)), ant = i > 0 ? Math.min(5, 1 + Math.floor(((i - 1) / Math.max(1, N - 1)) * 4.999)) : nivel;
+      const cores = ['#5DBB63', '#B6D93A', '#FFD23F', '#FF9A3C', '#E8473C'];
+      const sobe = nivel > ant ? U.mola(local - 0.1, 10) : 1;
+      c.save(); c.translate(W / 2, 1490);
+      const L = 520, h = 34, x0 = -L / 2;
+      c.font = '40px "Lilita One", sans-serif'; c.textAlign = 'center'; c.textBaseline = 'bottom'; c.lineWidth = 8; c.strokeStyle = '#1B1B1B'; c.strokeText(ROT_PERIGO, 0, -12); c.fillStyle = '#FFFFFF'; c.fillText(ROT_PERIGO, 0, -12);
+      for (let j = 0; j < 5; j++) {
+        const x = x0 + j * (L / 5) + 6, w = L / 5 - 12, on = j < nivel - 1 || (j === nivel - 1);
+        U.rr(c, x, 0, w, h, 10); c.fillStyle = 'rgba(0,0,0,0.45)'; c.fill();
+        if (on) { const sc2 = j === nivel - 1 ? sobe : 1; c.save(); c.translate(x + w / 2, h / 2); c.scale(sc2, sc2); U.rr(c, -w / 2, -h / 2, w, h, 10); c.fillStyle = cores[j]; c.fill(); c.restore(); }
+      }
+      c.restore();
+      if (nivel >= 5) { const a = 0.18 + 0.12 * Math.sin(t * 6); const g = c.createRadialGradient(W / 2, H / 2, H * 0.32, W / 2, H / 2, H * 0.7); g.addColorStop(0, 'rgba(232,71,60,0)'); g.addColorStop(1, 'rgba(232,71,60,' + a.toFixed(3) + ')'); c.fillStyle = g; c.fillRect(0, 0, W, H); }
+      else if (nivel >= 3) { c.fillStyle = 'rgba(255,120,40,' + (0.035 * (nivel - 2)).toFixed(3) + ')'; c.fillRect(0, 0, W, H); }
+    }
     // O CARTAO DO NUMERO: conta de 0 ate o valor em 0,7 s, com mola na entrada.
     function cartaoNumero(cn, t) {
       const txt = cn.hudV2; if (!txt) return;
@@ -979,6 +1034,7 @@
         c.globalAlpha = 1 - U.suave(local / PASSA); c.drawImage(gl, 0, 0, W, H); c.globalAlpha = 1;
       }
       tinta(cenas[i], k);
+      perigo(i, t, local);
       seloTempo(cn, t);
       cartaoNumero(cn, t);
       U.cartaz(c, spec, t, { fonte: '84px "Lilita One", sans-serif', y: 170, fundo: '#FFD23F', borda: '#1B1B1B', cor: '#1B1B1B', altura_linha: 100, dur: 3.0 });
