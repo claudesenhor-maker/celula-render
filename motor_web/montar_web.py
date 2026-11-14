@@ -138,7 +138,8 @@ def camas_de_ambiente(spec):
 # inscritos. A ultima cena ganha CTA_QUIZ_S segundos de ENCERRAMENTO (placar nos comentarios, like, inscrever);
 # o motor desenha (`spec.cta_s`) e o cronometro/"plim" do ultimo nivel recuam o mesmo tanto.
 CTA_QUIZ_S = 2.6
-PISO_QUIZ_S = (6.0, 7.0, 8.0, 9.0)
+# 14/11 (dono: "aumente o tempo de 2 a 3 s por secao"): +2,5 s em cada nivel
+PISO_QUIZ_S = (8.5, 9.5, 10.5, 11.5)
 CPS_LEITURA = 14.0      # caracteres por segundo que alguem le no celular
 PAUSA_NARRADO = 0.22    # respiro entre cenas narradas (a voz nao emenda)
 
@@ -349,10 +350,18 @@ def eventos_sonoros(spec):
             itens = esq.get("itens") if isinstance(esq.get("itens"), list) else []
             if esq.get("tipo") == "medidor":
                 ev.append({"nome": "whoosh", "t": c["ini"] + 0.35, "ganho": 0.5}); ev.append({"nome": "plim", "t": c["ini"] + 1.35, "ganho": 0.6})
-            for j, _ in enumerate(itens[:3]):
+            for j, it in enumerate(itens[:4]):
                 t_ = c["ini"] + 0.35 + j * 0.55
+                fl = (it or {}).get("fluxo") if isinstance(it, dict) else None
+                nome = "gole" if fl == "entra" else "whoosh" if (fl == "sai" or esq.get("tipo") == "barras") else "pop"
                 if t_ < c["fim"] - 0.2:
-                    ev.append({"nome": "pop" if esq.get("tipo") != "barras" else "whoosh", "t": round(t_, 3), "ganho": 0.65})
+                    ev.append({"nome": nome, "t": round(t_, 3), "ganho": 0.65})
+                    if esq.get("tipo") == "corpo":
+                        ev.append({"nome": "pop", "t": round(t_ + 0.12, 3), "ganho": 0.45})   # a etiqueta que entra
+            if esq.get("balanco") and itens:
+                ev.append({"nome": "plim", "t": round(c["ini"] + 0.35 + min(4, len(itens)) * 0.55 + 0.4, 3), "ganho": 0.6})
+            if esq.get("tipo") in ("corpo", "passos", "barras", "medidor"):
+                ev.append({"nome": "whoosh", "t": round(c["ini"] + 0.02, 3), "ganho": 0.55})          # a tela de infografico entra
             if esq.get("tipo") == "barras" and itens:
                 ev.append({"nome": "plim", "t": round(c["ini"] + 0.35 + (min(3, len(itens)) - 1) * 0.55 + 0.6, 3), "ganho": 0.55})
         elif spec.get("estilo") == "lowpoly" and (c.get("hud") or re.search(r"\d", str(c.get("texto") or ""))):

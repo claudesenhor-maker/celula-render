@@ -120,7 +120,7 @@
     cabelo: ['#3A2A22', '#1E1A18', '#B5652E', '#E8C46A'], calca: '#3B4A63',
   };
   const CEU = { // [topo, horizonte] por hora
-    dia: ['#5FB3F0', '#CFEFFF'], entardecer: ['#3D3B7A', '#FF9E6B'], aurora: ['#6D7FD1', '#FFD3A8'], noite: ['#05081C', '#1C2A55'],
+    dia: ['#2C7DD6', '#73BCF3', '#CFEFFF', '#FFF2D6'],   // v6: 4 tons (zenite, ceu, horizonte, brilho quente) entardecer: ['#3D3B7A', '#FF9E6B'], aurora: ['#6D7FD1', '#FFD3A8'], noite: ['#05081C', '#1C2A55'],
     tempestade: ['#3E4655', '#8A94A3'], quente: ['#E4572E', '#FFD27A'], frio: ['#9CC9E8', '#F2FAFF'], cinza: ['#7C7C7C', '#C9C2B4'],
     espaco: ['#02030C', '#0B1030'],
   };
@@ -191,7 +191,7 @@
     const fbm = (x, y, z) => ruido(x, y, z) * 0.6 + ruido(x * 2.1, y * 2.1, z * 2.1) * 0.28 + ruido(x * 4.3, y * 4.3, z * 4.3) * 0.12;
     function texturaGradiente(cores) {
       const cv = document.createElement('canvas'); cv.width = 4; cv.height = 256; const g = cv.getContext('2d');
-      const gr = g.createLinearGradient(0, 0, 0, 256); gr.addColorStop(0, cores[0]); gr.addColorStop(0.62, cores[1]); gr.addColorStop(1, cores[1]);
+      const gr = g.createLinearGradient(0, 0, 0, 256); if (cores.length >= 4) { gr.addColorStop(0, cores[0]); gr.addColorStop(0.35, cores[1]); gr.addColorStop(0.62, cores[2]); gr.addColorStop(0.78, cores[3]); gr.addColorStop(1, cores[2]); } else { gr.addColorStop(0, cores[0]); gr.addColorStop(0.62, cores[1]); gr.addColorStop(1, cores[1]); }
       g.fillStyle = gr; g.fillRect(0, 0, 4, 256); const tx = new T.CanvasTexture(cv); return tx;
     }
     function texturaBrilho(cor) {
@@ -343,7 +343,7 @@
       const calota = mesh(esfera(0.398, 0, Math.PI * (estilo === 1 ? 0.6 : 0.48)), mCab, 0, 0.05, -0.03, cabeca); calota.rotation.x = -0.55;
       for (let j = 0; j < 5; j++) { const m = mesh(capsula(0.06, 0.12), mCab, -0.2 + j * 0.1, 0.29 - Math.abs(j - 2) * 0.02, 0.25 - Math.abs(j - 2) * 0.03, cabeca); m.rotation.set(1.2, 0, (j - 2) * 0.25); }
       [-1, 1].forEach((s) => { const m = mesh(esfera(0.12), mCab, s * 0.33, 0.12, -0.05, cabeca); m.scale.set(0.6, 1.1, 1); });
-      if (estilo === 1) { const nuca = mesh(esfera(0.39, Math.PI * 0.3, Math.PI * 0.45), mCab, 0, -0.02, -0.06, cabeca); nuca.scale.set(1.05, 1.15, 1); }
+      if (estilo === 1) { const nuca = mesh(new T.SphereGeometry(0.39, 24, 16, Math.PI * 1.05, Math.PI * 0.9, Math.PI * 0.3, Math.PI * 0.45), mCab, 0, -0.02, -0.06, cabeca); nuca.scale.set(1.05, 1.15, 1); }   // so' ATRAS (dava a volta e cobria o rosto: a 'barba')
       if (estilo === 2) { mesh(esfera(0.15), mCab, 0, 0.36, -0.22, cabeca); mesh(new T.TorusGeometry(0.1, 0.025, 6, 16), MP('#E8473C'), 0, 0.3, -0.2, cabeca).rotation.x = 1; }
       if (estilo === 3) for (let j = 0; j < 9; j++) { const a = (j / 9) * Math.PI * 2; mesh(esfera(0.11), mCab, Math.cos(a) * 0.3, 0.2 + Math.sin(j * 1.7) * 0.05, Math.sin(a) * 0.3 - 0.05, cabeca); }
       // olhos com palpebra: [grupoEsq, brilhoEsq, grupoDir, brilhoDir]
@@ -653,6 +653,74 @@
         const m = lista[k % lista.length](0.7 + r() * 0.9); if (m.isMesh) { const g = new T.Group(); g.add(m); m.position.y = 0.08; sobre(g, x, z); } else sobre(m, x, z);
       }
     }
+    // ---------------------------------------------------------------- praia v6
+    // 14/11 (dono: "no estilo da agua salgada melhore bruscamente a qualidade do cenario de fundo, o chao, o ceu, o
+    // conteudo"). Antes: um cilindro azul liso cortando o disco de areia, ceu de 2 cores, um pier e um barquinho.
+    // Agora: OCEANO ate' o horizonte com ondas e cor por profundidade, espuma na beira, areia com grao e faixa molhada,
+    // coqueiros, guarda-sois, toalhas, bola, castelo, prancha, posto de salva-vidas, ilhas, veleiros e gaivotas.
+    function oceanoGrande() {
+      const geo = new T.PlaneGeometry(260, 260, 90, 90); geo.rotateX(-Math.PI / 2);
+      const p = geo.attributes.position, cols = [], base = new Float32Array(p.count * 2);
+      const raso = new T.Color('#43D3CF'), medio = new T.Color('#1E9BD7'), fundo = new T.Color('#0B5BA6');
+      for (let i = 0; i < p.count; i++) { const x = p.getX(i), z = p.getZ(i), d = Math.hypot(x, z); base[i * 2] = x; base[i * 2 + 1] = z;
+        const q1 = U.clamp((d - RAIO + 1) / 6, 0, 1), q2 = U.clamp((d - RAIO - 6) / 40, 0, 1);
+        const cc = raso.clone().lerp(medio, q1).lerp(fundo, q2); const brilhoV = 0.92 + 0.16 * hash(x * 0.7, 0, z * 0.7); cols.push(cc.r * brilhoV, cc.g * brilhoV, cc.b * brilhoV); }
+      geo.setAttribute('color', new T.Float32BufferAttribute(cols, 3));
+      const m = new T.Mesh(geo, new T.MeshLambertMaterial({ vertexColors: true, transparent: true, opacity: 0.94 }));
+      m.userData.ondas = (t, nivel) => { for (let i = 0; i < p.count; i++) { const x = base[i * 2], z = base[i * 2 + 1], d = Math.hypot(x, z); if (d > 60) continue;
+        p.setY(i, 0.09 * Math.sin(x * 0.55 + t * 1.6) + 0.07 * Math.sin(z * 0.8 - t * 1.2) + 0.04 * Math.sin((x + z) * 1.7 + t * 2.4)); }
+        p.needsUpdate = true; geo.computeVertexNormals(); m.position.y = nivel; };
+      return m;
+    }
+    function espuma() {
+      const cv = document.createElement('canvas'); cv.width = 256; cv.height = 16; const g = cv.getContext('2d'), rr2 = U.rng('espuma');
+      for (let k = 0; k < 90; k++) { g.fillStyle = 'rgba(255,255,255,' + (0.4 + rr2() * 0.6).toFixed(2) + ')'; g.beginPath(); g.ellipse(rr2() * 256, 8 + (rr2() - 0.5) * 8, 4 + rr2() * 10, 2 + rr2() * 3, 0, 0, Math.PI * 2); g.fill(); }
+      const tx = new T.CanvasTexture(cv); tx.wrapS = T.RepeatWrapping; tx.repeat.set(6, 1);
+      const m = new T.Mesh(new T.RingGeometry(RAIO - 0.6, RAIO + 0.7, 96, 1), new T.MeshBasicMaterial({ map: tx, transparent: true, opacity: 0.8, depthWrite: false }));
+      m.rotation.x = -Math.PI / 2; m.userData.tx = tx; return m;
+    }
+    function coqueiro(r) {
+      const g = new T.Group(), tronco = M('#9B7149'), folha = M('#3E9E4A'), folha2 = M('#2F8A3E');
+      let x = 0, y = 0; const curva = 0.35 + r() * 0.25;
+      for (let k = 0; k < 7; k++) { const s = new T.Mesh(new T.CylinderGeometry(0.13 - k * 0.01, 0.16 - k * 0.01, 0.55, 7), tronco); s.position.set(x, y + 0.27, 0); s.rotation.z = -curva * k / 7; g.add(s);
+        x += Math.sin(curva * k / 7) * 0.55; y += Math.cos(curva * k / 7) * 0.52; }
+      for (let k = 0; k < 7; k++) { const f = new T.Mesh(new T.ConeGeometry(0.22, 1.9, 4, 1), k % 2 ? folha : folha2); f.position.set(x, y + 0.1, 0); f.rotation.set(0, (k / 7) * Math.PI * 2, 1.25); f.translateY(0.85); g.add(f); }
+      for (let k = 0; k < 3; k++) { const c0 = new T.Mesh(new T.IcosahedronGeometry(0.11, 0), M('#6B4A2B')); c0.position.set(x + Math.cos(k * 2.1) * 0.15, y - 0.08, Math.sin(k * 2.1) * 0.15); g.add(c0); }
+      g.userData.copa = g.children.filter((m) => m.geometry && m.geometry.type === 'ConeGeometry').map((m) => { m.material = m.material.clone(); return m; });
+      return sombra(g);
+    }
+    function guardaSol(r) {
+      const g = new T.Group(), cores = [['#E8473C', '#FFFFFF'], ['#3E7CB1', '#FFD23F'], ['#5DAA5A', '#FFFFFF']][Math.floor(r() * 3)];
+      const h = new T.Mesh(new T.CylinderGeometry(0.035, 0.035, 2.0, 6), M('#EDEDED')); h.position.y = 1.0; h.rotation.z = 0.12; g.add(h);
+      for (let k = 0; k < 8; k++) { const fatia = new T.Mesh(new T.ConeGeometry(1.15, 0.45, 3, 1, true, (k / 8) * Math.PI * 2, Math.PI / 4), M(cores[k % 2])); fatia.material.side = T.DoubleSide; fatia.position.set(0.12, 2.05, 0); g.add(fatia); }
+      const toalha = new T.Mesh(caixaGeo(0.9, 0.03, 1.7), M(cores[0])); toalha.position.set(0.9, 0.03, 0.4); toalha.rotation.y = 0.3; g.add(toalha);
+      const listra = new T.Mesh(caixaGeo(0.9, 0.035, 0.25), M(cores[1])); listra.position.set(0.9, 0.035, 0.4); listra.rotation.y = 0.3; g.add(listra);
+      return sombra(g);
+    }
+    function propsPraia(r, sobre, livreFundo, o) {
+      const pos = (ok) => { for (let k = 0; k < 40; k++) { const a = r() * Math.PI * 2, d = 3.2 + r() * (RAIO - 4.4), x = Math.cos(a) * d, z = Math.sin(a) * d; if (ok(x, z)) return [x, z]; } return null; };
+      for (let k = 0; k < 4; k++) { const p = pos(livreFundo); if (p) { const cq = sobre(coqueiro(r), p[0], p[1]); cq.rotation.y = r() * 6; cq.scale.setScalar(0.9 + r() * 0.4); o.arvores.push(cq); } }
+      for (let k = 0; k < 2; k++) { const p = pos(livreFundo); if (p) sobre(guardaSol(r), p[0], p[1]).rotation.y = r() * 6; }
+      let p = pos(livreFundo); if (p) { const bola = new T.Group(); ['#E8473C', '#FFFFFF', '#3E7CB1', '#FFD23F'].forEach((cc, j) => { const gm = new T.Mesh(new T.SphereGeometry(0.28, 12, 8, (j / 4) * Math.PI * 2, Math.PI / 2), M(cc)); bola.add(gm); }); bola.position.y = 0.28; const gb = new T.Group(); gb.add(bola); sobre(gb, p[0], p[1]); o.extras.push(gb); }
+      p = pos(livreFundo); if (p) { const cs = new T.Group(), ar = M('#E3C88E'); [[0, 0.3, 0, 0.9, 0.6], [-0.35, 0.75, 0, 0.25, 0.5], [0.35, 0.75, 0, 0.25, 0.5], [0, 0.85, 0, 0.3, 0.7]].forEach(([x, y, z, w, h]) => { const m = new T.Mesh(caixaGeo(w, h, w), ar); m.position.set(x, y, z); cs.add(m); }); sobre(sombra(cs), p[0], p[1]); }
+      p = pos(livreFundo); if (p) { const pr = new T.Mesh(capsula(0.22, 1.5), M('#FF9A3C')); pr.scale.z = 0.25; pr.rotation.z = 0.25; pr.position.y = 0.95; const gp = new T.Group(); gp.add(pr); sobre(sombra(gp), p[0], p[1]); }
+      p = pos(livreFundo); if (p) { const tw = new T.Group(), br = M('#FFFFFF'), vm = M('#E8473C');
+        [[-0.4, -0.4], [0.4, -0.4], [-0.4, 0.4], [0.4, 0.4]].forEach(([x, z]) => { const l = new T.Mesh(caixaGeo(0.08, 1.6, 0.08), br); l.position.set(x, 0.8, z); tw.add(l); });
+        const cab = new T.Mesh(caixaGeo(1.1, 0.7, 1.1), vm); cab.position.y = 1.9; tw.add(cab); const tet = new T.Mesh(new T.ConeGeometry(0.85, 0.5, 4), br); tet.position.y = 2.5; tet.rotation.y = Math.PI / 4; tw.add(tet);
+        const tw2 = sobre(sombra(tw), p[0], p[1]); tw2.rotation.y = Math.atan2(-p[0], -p[1]); }
+      // horizonte: ilhas, veleiros e gaivotas
+      for (let k = 0; k < 3; k++) { const a = -2.4 + k * 0.9 + r() * 0.3, d = 55 + r() * 25, ilha = new T.Group(); const mo = new T.Mesh(new T.ConeGeometry(4 + r() * 4, 3 + r() * 3, 8), M('#4E8A55')); mo.position.y = 1; ilha.add(mo); const pr2 = new T.Mesh(new T.CylinderGeometry(5.5, 6.5, 0.6, 10), M('#E3CF98')); ilha.add(pr2); ilha.position.set(Math.sin(a) * d, 0, -Math.cos(a) * d); o.extras.push(ilha); ilha.userData.fixo = true; }
+      o.veleiros = []; for (let k = 0; k < 3; k++) { const b = new T.Group(); const cs = new T.Mesh(caixaGeo(1.2, 0.3, 0.45), M('#FFFFFF')); b.add(cs); const vl = new T.Mesh(new T.ConeGeometry(0.5, 1.4, 3), M(['#FFFFFF', '#E8473C', '#FFD23F'][k])); vl.position.y = 0.85; b.add(vl); b.userData = { a: r() * 6.28, d: 22 + k * 7 }; o.veleiros.push(b); }
+      o.gaivotas = []; for (let k = 0; k < 5; k++) { const gv = new T.Group(), mb = M('#FFFFFF'); [-1, 1].forEach((s) => { const asa = new T.Mesh(caixaGeo(0.45, 0.03, 0.12), mb); asa.position.x = s * 0.2; asa.userData.lado = s; gv.add(asa); }); gv.userData = { a: r() * 6.28, h: 5.5 + r() * 2.5, d: 4 + r() * 4, v: 0.25 + r() * 0.2 }; o.gaivotas.push(gv); }
+      return [...o.veleiros, ...o.gaivotas, ...o.extras.filter((e) => e.userData.fixo)];
+    }
+    function areiaDetalhe(tr) {   // grao + faixa molhada perto da borda
+      const tp = tr.userData && tr.userData.topo; if (!tp || !tp.geometry.attributes.color) return;
+      const a = tp.geometry.attributes.color, p = tp.geometry.attributes.position;
+      for (let i = 0; i < a.count; i++) { const x = p.getX(i), z = p.getZ(i), d = Math.hypot(x, z) / RAIO, grao = 0.94 + 0.12 * hash(x * 3.1, 0, z * 3.1), molhado = d > 0.82 ? 0.78 : 1;
+        a.setXYZ(i, a.getX(i) * grao * molhado, a.getY(i) * grao * molhado, a.getZ(i) * grao * (molhado < 1 ? 0.9 : 1)); }
+      a.needsUpdate = true;
+    }
     // AREIA MOVEDICA: a poca escura com aneis que ondulam em volta de quem afunda
     function poca() {
       const g = new T.Group();
@@ -735,7 +803,17 @@
         if (cen === 'montanha') espalha(10, (x, z) => o.arvores.push(sobre(arvore('pinheiro'), x, z)));
         if (cen === 'lua') { const terraC = brilho('rgba(110,170,255,1)', 6); terraC.position.set(-6, 14, -18); sc.add(terraC); }
         if (cen === 'vulcao' || acao === 'erupcao') { const v = vulcao(r); v.position.set(0.5, 0, -4.2); if (cen !== 'vulcao') v.scale.setScalar(0.7); sc.add(v); o.vulcao = v; }
-        if (cen === 'oceano' || cen === 'praia' || acao === 'inunda' || acao === 'seca' || acao === 'derrete') {
+        const marAberto = (cen === 'oceano' || cen === 'praia') && acao !== 'inunda' && acao !== 'seca' && acao !== 'derrete';
+        if (cen === 'oceano' || cen === 'praia' || cen === 'deserto' || cen === 'areia_movedica') areiaDetalhe(tr);
+        if (marAberto) {   // v6: oceano ate' o horizonte, espuma, praia viva
+          const og = oceanoGrande(); sc.add(og); o.oceano = og; const es = espuma(); sc.add(es); o.espuma = es;
+          propsPraia(r, sobre, livreFundo, o).forEach((m) => sc.add(m));
+          if (cen === 'oceano') { const pier = new T.Group(); const tabua = M('#A0703F'), tabua2 = M('#8C5F33');
+            for (let k = 0; k < 9; k++) { const tb = new T.Mesh(caixaGeo(4.2, 0.12, 0.34), k % 2 ? tabua : tabua2); tb.position.set(0, 0.42, -0.2 + k * 0.36); pier.add(tb); }
+            [[-1.9, -0.2], [1.9, -0.2], [-1.9, 2.7], [1.9, 2.7]].forEach(([x, z]) => { const st = new T.Mesh(new T.CylinderGeometry(0.1, 0.1, 1.2, 6), tabua2); st.position.set(x, 0.0, z); pier.add(st); });
+            sombra(pier); sc.add(pier); o.pier = pier; }
+        }
+        if (!marAberto && (cen === 'oceano' || cen === 'praia' || acao === 'inunda' || acao === 'seca' || acao === 'derrete')) {
           const nivel0 = cen === 'oceano' || cen === 'praia' || acao === 'seca' ? 0.18 : -0.6;
           const ag = new T.Mesh(new T.CylinderGeometry(RAIO + 0.02, RAIO + 0.02, 4, 48, 1), new T.MeshLambertMaterial({  color: '#3C9BD6', transparent: true, opacity: 0.82 }));
           ag.userData.nivel0 = nivel0; sc.add(ag); o.agua = ag;
@@ -902,6 +980,12 @@
       // ---- v3: poca de areia movedica (aneis que se abrem) e o fogo do fogao tremendo
       if (o.poca) o.poca.userData.aneis.forEach((a, j) => { const q = (t * 0.55 + j / 3) % 1; a.scale.setScalar(1 + q * 2.6); a.material.opacity = 0.6 * (1 - q); });
       if (o.bocas) o.bocas.forEach((b, j) => { if (b.material.emissive) b.material.emissive.setRGB(1, 0.29 + 0.12 * Math.sin(t * 13 + j), 0); });
+      // ---- mar aberto (v6): ondas, espuma que pulsa e corre, veleiros ao longe, gaivotas batendo asa
+      if (o.oceano) { o.oceano.userData.ondas(t, 0.12);
+        if (o.espuma) { o.espuma.position.y = 0.2 + Math.sin(t * 1.6) * 0.03; o.espuma.material.opacity = 0.55 + 0.25 * Math.sin(t * 1.3); o.espuma.userData.tx.offset.x = t * 0.05; o.espuma.scale.setScalar(1 + 0.012 * Math.sin(t * 1.6)); }
+        (o.veleiros || []).forEach((b) => { const u = b.userData, a = u.a + t * 0.03; b.position.set(Math.cos(a) * u.d, 0.25 + Math.sin(t * 1.5 + u.a) * 0.08, Math.sin(a) * u.d); b.rotation.y = -a; b.rotation.z = Math.sin(t * 1.2 + u.a) * 0.06; });
+        (o.gaivotas || []).forEach((gv) => { const u = gv.userData, a = u.a + t * u.v; gv.position.set(Math.cos(a) * u.d, u.h + Math.sin(t * 0.8 + u.a) * 0.3, Math.sin(a) * u.d - 1); gv.rotation.y = -a;
+          gv.children.forEach((asa) => { asa.rotation.z = asa.userData.lado * 0.5 * Math.sin(t * 9 + u.a); }); }); }
       // ---- agua
       if (o.agua) {
         const n0 = o.agua.userData.nivel0;
@@ -1043,12 +1127,14 @@
       else if (nivel >= 3) { c.fillStyle = 'rgba(255,120,40,' + (0.035 * (nivel - 2)).toFixed(3) + ')'; c.fillRect(0, 0, W, H); }
     }
     // ---------------------------------------------------------------- esquema
-    // 14/11 (dono: "na agua salgada ainda temos muito do mesmo; crie esquemas para explicar o que ele esta falando de
-    // forma visual, e cada entrada de informacao tem efeito sonoro"). `cena.esquema` (do roteiro):
-    //   {tipo:'passos', itens:[{icone, texto}]}      2-3 icones ligados por setas (causa -> efeito)
-    //   {tipo:'barras', itens:[{texto, valor}], unidade?, sem_valor?}   comparacao que cresce
-    //   {tipo:'medidor', texto, valor, max?, unidade?}                    ponteiro que sobe
-    // Cada item entra em ini + 0,35 + j*0,55 s (o som de cada entrada sai em montar_web.eventos_sonoros, mesmo tempo).
+    // v2 (14/11, dono: "na explicacao com imagem voce entendeu errado: ficou so' uma box a mais poluindo a tela; faca
+    // aparecer ocupando a TELA INTEIRA explicando o que acontece -- a pessoa ingerindo agua salgada e gastando agua para
+    // limpar -- e a entrada de cada elemento com efeito sonoro"). O esquema agora e' uma CENA DE INFOGRAFICO em tela cheia
+    // (o 3D sai durante ela). `cena.esquema`:
+    //   {tipo:'corpo', itens:[{alvo:'boca|estomago|sangue|rins|bexiga|pele|cerebro|coracao|pulmao', texto, fluxo?:'entra'|'sai', icone?}],
+    //    balanco?:{entra:'BEBISTE', sai:'PIERDES', razao:1.3}}
+    //   {tipo:'passos', itens:[{icone, texto}]}   {tipo:'barras', itens:[{texto, valor}], unidade?, sem_valor?}   {tipo:'medidor', texto, valor, max?, unidade?}
+    // Cada item entra em ini + 0,35 + j*0,55 s (o som sai em montar_web.eventos_sonoros no mesmo tempo).
     const ESQ_T0 = 0.35, ESQ_DT = 0.55;
     const ICONES_ESQ = {
       gota: (g) => { g.beginPath(); g.moveTo(0, -0.85); g.bezierCurveTo(0.55, -0.15, 0.62, 0.2, 0.55, 0.38); g.arc(0, 0.32, 0.56, 0.1, Math.PI - 0.1); g.bezierCurveTo(-0.62, 0.2, -0.55, -0.15, 0, -0.85); g.fill(); },
@@ -1070,60 +1156,104 @@
       casa: (g) => { g.beginPath(); g.moveTo(0, -0.8); g.lineTo(0.8, -0.1); g.lineTo(0.6, -0.1); g.lineTo(0.6, 0.75); g.lineTo(-0.6, 0.75); g.lineTo(-0.6, -0.1); g.lineTo(-0.8, -0.1); g.closePath(); g.fill(); g.fillStyle = '#FFFFFF'; g.fillRect(-0.15, 0.25, 0.3, 0.5); },
       raio: (g) => { g.beginPath(); g.moveTo(0.2, -0.9); g.lineTo(-0.45, 0.1); g.lineTo(-0.02, 0.1); g.lineTo(-0.2, 0.9); g.lineTo(0.5, -0.15); g.lineTo(0.05, -0.15); g.closePath(); g.fill(); },
     };
-    const COR_ICONE = { gota: '#2E86DE', sal: '#9AA5B1', copo: '#2E86DE', rim: '#C0392B', sol: '#F39C12', fogo: '#E8473C', nuvem: '#95A5A6', pessoa: '#3E7CB1', alerta: '#E8473C',
-      relogio: '#1B1B1B', check: '#27AE60', x: '#E8473C', seta_cima: '#27AE60', seta_baixo: '#E8473C', onda: '#2E86DE', graos: '#C49A5E', casa: '#8E6CCF', raio: '#F2B705' };
+    const COR_ICONE = { gota: '#4FA8FF', sal: '#E8EDF2', copo: '#4FA8FF', rim: '#FF6B6B', sol: '#FFB13B', fogo: '#FF5A3C', nuvem: '#C9D3DC', pessoa: '#7FB2FF', alerta: '#FF5A3C',
+      relogio: '#FFFFFF', check: '#3DDC84', x: '#FF5A3C', seta_cima: '#3DDC84', seta_baixo: '#FF5A3C', onda: '#4FA8FF', graos: '#E8C07A', casa: '#B99CFF', raio: '#FFD23F' };
+    // fundo de infografico: azul-noite, grade fina, vinheta (pre-desenhado uma vez)
+    const FUNDO_ESQ = U.camada(W, H, (g) => {
+      const gr = g.createLinearGradient(0, 0, 0, H); gr.addColorStop(0, '#0E2236'); gr.addColorStop(1, '#14324F'); g.fillStyle = gr; g.fillRect(0, 0, W, H);
+      g.strokeStyle = 'rgba(255,255,255,0.05)'; g.lineWidth = 2; for (let x = 0; x < W; x += 60) { g.beginPath(); g.moveTo(x, 0); g.lineTo(x, H); g.stroke(); } for (let y = 0; y < H; y += 60) { g.beginPath(); g.moveTo(0, y); g.lineTo(W, y); g.stroke(); }
+      const v = g.createRadialGradient(W / 2, H * 0.45, H * 0.2, W / 2, H * 0.5, H * 0.75); v.addColorStop(0, 'rgba(0,0,0,0)'); v.addColorStop(1, 'rgba(0,0,0,0.45)'); g.fillStyle = v; g.fillRect(0, 0, W, H);
+    });
+    // ORGAOS na silhueta (centro x, y do corpo de 1000 px de altura comecando em y=330)
+    const CX_C = W / 2 - 110, Y_C = 330;
+    const ORG = { boca: [0, 120], cerebro: [0, 45], estomago: [30, 400], sangue: [-70, 330], coracao: [-30, 300], pulmao: [40, 290], rins: [0, 470], bexiga: [0, 600], pele: [-140, 420] };
+    function silhueta(g) {
+      g.save(); g.translate(CX_C, Y_C); g.fillStyle = 'rgba(127,178,255,0.16)'; g.strokeStyle = '#7FB2FF'; g.lineWidth = 6;
+      g.beginPath(); g.ellipse(0, 70, 78, 92, 0, 0, Math.PI * 2); g.fill(); g.stroke();                                   // cabeca
+      g.beginPath(); g.moveTo(-34, 160); g.lineTo(34, 160); g.lineTo(40, 195); g.lineTo(150, 225); g.quadraticCurveTo(185, 240, 190, 300);
+      g.lineTo(205, 560); g.lineTo(165, 565); g.lineTo(140, 330); g.lineTo(125, 600); g.lineTo(110, 990); g.lineTo(30, 990); g.lineTo(5, 650);
+      g.lineTo(-5, 650); g.lineTo(-30, 990); g.lineTo(-110, 990); g.lineTo(-125, 600); g.lineTo(-140, 330); g.lineTo(-165, 565); g.lineTo(-205, 560);
+      g.lineTo(-190, 300); g.quadraticCurveTo(-185, 240, -150, 225); g.lineTo(-40, 195); g.closePath(); g.fill(); g.stroke();
+      // esofago/caminho (tracejado) e orgaos em contorno
+      g.setLineDash([10, 10]); g.lineWidth = 4; g.strokeStyle = 'rgba(255,255,255,0.35)'; g.beginPath(); g.moveTo(0, 125); g.lineTo(0, 380); g.stroke(); g.setLineDash([]);
+      g.restore();
+    }
+    function orgao(g, nome, aceso, t) {
+      const [ox, oy] = ORG[nome] || ORG.estomago, x = CX_C + ox, y = Y_C + oy, pul = aceso ? 1 + 0.06 * Math.sin(t * 9) : 1;
+      g.save(); g.translate(x, y); g.scale(pul, pul); g.lineWidth = 5; g.strokeStyle = aceso ? '#FFFFFF' : 'rgba(255,255,255,0.35)';
+      const fill = (c2) => { g.fillStyle = aceso ? c2 : 'rgba(255,255,255,0.08)'; g.fill(); g.stroke(); };
+      if (nome === 'estomago') { g.beginPath(); g.ellipse(0, 0, 60, 42, -0.5, 0, Math.PI * 2); fill('#FF9F45'); }
+      else if (nome === 'rins') { [-1, 1].forEach((s) => { g.beginPath(); g.ellipse(s * 55, 0, 26, 42, s * 0.2, 0, Math.PI * 2); fill('#FF6B6B'); }); }
+      else if (nome === 'bexiga') { g.beginPath(); g.ellipse(0, 0, 40, 34, 0, 0, Math.PI * 2); fill('#FFD23F'); }
+      else if (nome === 'coracao') { g.beginPath(); g.moveTo(0, 30); g.bezierCurveTo(-55, -5, -30, -45, 0, -18); g.bezierCurveTo(30, -45, 55, -5, 0, 30); fill('#FF5A6E'); }
+      else if (nome === 'pulmao') { [-1, 1].forEach((s) => { g.beginPath(); g.ellipse(s * 45 - 40, 0, 34, 62, 0, 0, Math.PI * 2); fill('#FF9FB0'); }); }
+      else if (nome === 'cerebro') { g.beginPath(); g.ellipse(0, 0, 55, 38, 0, 0, Math.PI * 2); fill('#FFB3C7'); }
+      else if (nome === 'boca') { g.beginPath(); g.ellipse(0, 0, 26, 12, 0, 0, Math.PI * 2); fill('#FF6B6B'); }
+      else if (nome === 'sangue') { g.lineWidth = aceso ? 9 : 5; g.strokeStyle = aceso ? '#FF4A5A' : 'rgba(255,255,255,0.3)'; g.beginPath(); g.moveTo(0, -60); g.bezierCurveTo(40, 0, -40, 60, 0, 160); g.stroke(); g.beginPath(); g.moveTo(140, -40); g.bezierCurveTo(120, 60, 160, 120, 130, 200); g.stroke(); }
+      else if (nome === 'pele') { g.lineWidth = aceso ? 10 : 4; g.strokeStyle = aceso ? '#4FA8FF' : 'rgba(255,255,255,0.25)'; g.beginPath(); g.arc(140, -40, 90, Math.PI * 0.6, Math.PI * 1.4); g.stroke(); }
+      g.restore(); return [x, y];
+    }
+    function particulas(g, de, ate, local, tipo, n) {   // fluxo animado (posicoes calculadas de t, sem estado)
+      for (let k = 0; k < n; k++) { const q = ((local * 0.9 + k / n) % 1), x = U.lerp(de[0], ate[0], q) + Math.sin(q * 9 + k) * 12, y = U.lerp(de[1], ate[1], q);
+        g.save(); g.translate(x, y); g.scale(14, 14); g.globalAlpha = Math.sin(q * Math.PI); g.fillStyle = tipo === 'sal' ? '#F2F5F8' : '#4FA8FF'; (ICONES_ESQ[tipo] || ICONES_ESQ.gota)(g); g.restore(); }
+    }
+    function etiqueta(g, txt, x, y, ax, ay, s, cor) {
+      g.save(); g.lineWidth = 5; g.strokeStyle = '#FFFFFF'; g.beginPath(); g.moveTo(ax, ay); g.lineTo(x - 20, y); g.stroke(); g.beginPath(); g.arc(ax, ay, 9, 0, Math.PI * 2); g.fillStyle = '#FFF'; g.fill();
+      g.translate(x, y); g.scale(s, s); g.font = '52px "Lilita One", sans-serif'; g.textAlign = 'left'; g.textBaseline = 'middle';
+      const ls = U.linhas(g, String(txt || '').toUpperCase(), 330).slice(0, 3), w = Math.max(...ls.map((l) => g.measureText(l).width)) + 50, h = ls.length * 58 + 34;
+      U.rr(g, -10, -h / 2, w, h, 26); g.fillStyle = cor || '#FFD23F'; g.fill(); g.fillStyle = '#111'; ls.forEach((l, q) => g.fillText(l, 15, -h / 2 + 46 + q * 58)); g.restore();
+    }
     function esquema(cn, t) {
       const e = cn.esquema; if (!e || typeof e !== 'object') return false;
-      const local = t - cn.ini, D = cn.fim - cn.ini; if (local < ESQ_T0 - 0.05) return true;
-      const sai = U.clamp((local - (D - 0.25)) / 0.25, 0, 1);
-      const y0 = (spec.titulo && t < 3.3) ? 640 : 400;
-      c.save(); c.globalAlpha = 1 - sai;
-      const itens = (Array.isArray(e.itens) ? e.itens : []).slice(0, 3);
-      const caixa = (w, h) => { U.rr(c, W / 2 - w / 2, y0 - h / 2, w, h, 34); c.fillStyle = 'rgba(255,255,255,0.93)'; c.fill(); c.lineWidth = 6; c.strokeStyle = '#1B1B1B'; c.stroke(); };
+      const local = t - cn.ini, D = cn.fim - cn.ini;
+      const ent = U.saida(U.clamp(local / 0.25, 0, 1)), sai = U.clamp((local - (D - 0.2)) / 0.2, 0, 1);
+      c.save(); c.globalAlpha = ent * (1 - sai * 0.0); c.drawImage(FUNDO_ESQ, 0, 0); c.restore();
+      if (ent < 0.98) return true;
+      const itens = (Array.isArray(e.itens) ? e.itens : []).slice(0, 4);
+      const tj = (j) => local - ESQ_T0 - j * ESQ_DT;
       const fonte = (px) => { c.font = px + 'px "Lilita One", sans-serif'; c.textAlign = 'center'; c.textBaseline = 'middle'; };
-      if (e.tipo === 'barras' && itens.length) {
-        const h = 70 + itens.length * 92; caixa(W * 0.84, h);
-        const vmax = Math.max(...itens.map((it) => Math.abs(Number(it.valor) || 0)), 1e-9);
-        itens.forEach((it, j) => {
-          const q = U.saida(U.clamp((local - ESQ_T0 - j * ESQ_DT) / 0.6, 0, 1)); if (q <= 0) return;
-          const y = y0 - h / 2 + 62 + j * 92, x0 = W / 2 - W * 0.84 / 2 + 40, Lmax = W * 0.84 - 80;
-          fonte(40); c.textAlign = 'left'; c.fillStyle = '#1B1B1B'; c.fillText(String(it.texto || '').toUpperCase().slice(0, 30), x0, y - 22, Lmax);
-          const L = Math.max(8, Lmax * (Math.abs(Number(it.valor) || 0) / vmax) * q);
-          U.rr(c, x0, y, Lmax, 30, 15); c.fillStyle = 'rgba(0,0,0,0.12)'; c.fill();
-          U.rr(c, x0, y, L, 30, 15); c.fillStyle = j === 0 ? '#E8473C' : '#2E86DE'; c.fill();
-          if (!e.sem_valor) { const v = (Number(it.valor) || 0) * q; fonte(36); c.textAlign = 'right'; c.fillStyle = '#1B1B1B';
-            c.fillText((Math.abs(v) >= 10 ? Math.round(v) : v.toFixed(1)).toString().replace('.', ',') + (e.unidade ? ' ' + e.unidade : ''), x0 + Lmax, y - 22); }
-        });
+      if (e.tipo === 'corpo') {
+        silhueta(c);
+        const acesos = new Set(itens.filter((it, j) => tj(j) >= 0).map((it) => it.alvo));
+        Object.keys(ORG).forEach((o) => { if (o !== 'pele' && o !== 'sangue') orgao(c, o, acesos.has(o), t); });
+        ['sangue', 'pele'].forEach((o) => { if (acesos.has(o)) orgao(c, o, true, t); });
+        itens.forEach((it, j) => { const q = tj(j); if (q < 0) return;
+          const [ox, oy] = ORG[it.alvo] || ORG.estomago, x = CX_C + ox, y = Y_C + oy, s = U.mola(q, 10);
+          if (it.fluxo === 'entra') particulas(c, [x + 260, y - 160], [CX_C, Y_C + 125], local, it.icone === 'sal' ? 'sal' : 'gota', 7);
+          if (it.fluxo === 'entra' && it.icone !== 'sal') particulas(c, [x + 300, y - 120], [CX_C, Y_C + 125], local + 0.5, 'sal', 4);
+          if (it.fluxo === 'sai') particulas(c, [x, y + 20], [x - 60, Y_C + 1020], local, 'gota', 8);
+          if (it.alvo === 'estomago' || it.alvo === 'sangue') particulas(c, [CX_C, Y_C + 160], [x, y], local, 'sal', 5);
+          etiqueta(c, it.texto, W - 400, Y_C + 60 + j * 230, x + (ox > 0 ? 60 : 30), y, s, it.fluxo === 'sai' ? '#7FD0FF' : '#FFD23F'); });
+        if (e.balanco) { const q = tj(itens.length); if (q > 0) { const s = U.saida(U.clamp(q / 0.6, 0, 1)), r2 = Number(e.balanco.razao) || 1.3, L = 360;
+          c.save(); c.translate(W - 410, 1210); fonte(40); c.textAlign = 'left';
+          [[e.balanco.entra || 'ENTRA', 1 / r2, '#3DDC84'], [e.balanco.sai || 'SAI', 1, '#FF5A3C']].forEach(([txt, f, cor], k) => {
+            c.fillStyle = '#FFF'; c.fillText(String(txt).toUpperCase(), 0, k * 80 - 22); U.rr(c, 0, k * 80, L, 30, 15); c.fillStyle = 'rgba(255,255,255,0.15)'; c.fill();
+            U.rr(c, 0, k * 80, Math.max(10, L * f * s), 30, 15); c.fillStyle = cor; c.fill(); }); c.restore(); } }
+      } else if (e.tipo === 'barras' && itens.length) {
+        const vmax = Math.max(...itens.map((it) => Math.abs(Number(it.valor) || 0)), 1e-9), L = W - 200;
+        itens.forEach((it, j) => { const q = U.saida(U.clamp(tj(j) / 0.7, 0, 1)); if (q <= 0) return; const y = 560 + j * 230, x0 = 100;
+          fonte(64); c.textAlign = 'left'; c.fillStyle = '#FFF'; c.fillText(String(it.texto || '').toUpperCase().slice(0, 26), x0, y - 50, L);
+          U.rr(c, x0, y, L, 80, 40); c.fillStyle = 'rgba(255,255,255,0.12)'; c.fill(); U.rr(c, x0, y, Math.max(20, L * (Math.abs(Number(it.valor) || 0) / vmax) * q), 80, 40); c.fillStyle = j === 0 ? '#FF5A3C' : '#4FA8FF'; c.fill();
+          if (!e.sem_valor) { const v = (Number(it.valor) || 0) * q; fonte(60); c.textAlign = 'right'; c.fillStyle = '#FFF'; c.fillText((Math.abs(v) >= 10 ? Math.round(v) : v.toFixed(1)).toString().replace('.', ',') + (e.unidade ? ' ' + e.unidade : ''), x0 + L, y - 50); } });
       } else if (e.tipo === 'medidor') {
-        caixa(W * 0.62, 250);
-        const q = U.saida(U.clamp((local - ESQ_T0) / 1.0, 0, 1)), vmax = Number(e.max) || 100, v = U.clamp((Number(e.valor) || 0) / vmax, 0, 1) * q;
-        const cx = W / 2, cy = y0 + 22, R = 100;
-        c.lineWidth = 34; c.lineCap = 'round';
-        c.beginPath(); c.arc(cx, cy, R, Math.PI, 2 * Math.PI); c.strokeStyle = 'rgba(0,0,0,0.12)'; c.stroke();
-        const gr = c.createLinearGradient(cx - R, 0, cx + R, 0); gr.addColorStop(0, '#5DBB63'); gr.addColorStop(0.5, '#FFD23F'); gr.addColorStop(1, '#E8473C');
+        const q = U.saida(U.clamp(tj(0) / 1.0, 0, 1)), vmax = Number(e.max) || 100, v = U.clamp((Number(e.valor) || 0) / vmax, 0, 1) * q, cx = W / 2, cy = 900, R = 300;
+        fonte(72); c.fillStyle = '#FFF'; c.fillText(String(e.texto || '').toUpperCase().slice(0, 26), cx, 480, W - 100);
+        c.lineWidth = 80; c.lineCap = 'round'; c.beginPath(); c.arc(cx, cy, R, Math.PI, 2 * Math.PI); c.strokeStyle = 'rgba(255,255,255,0.12)'; c.stroke();
+        const gr = c.createLinearGradient(cx - R, 0, cx + R, 0); gr.addColorStop(0, '#3DDC84'); gr.addColorStop(0.5, '#FFD23F'); gr.addColorStop(1, '#FF5A3C');
         c.beginPath(); c.arc(cx, cy, R, Math.PI, Math.PI + Math.PI * Math.max(0.001, v)); c.strokeStyle = gr; c.stroke();
-        const a = Math.PI + Math.PI * v; c.lineWidth = 8; c.strokeStyle = '#1B1B1B'; c.beginPath(); c.moveTo(cx, cy); c.lineTo(cx + Math.cos(a) * (R - 10), cy + Math.sin(a) * (R - 10)); c.stroke();
-        c.beginPath(); c.arc(cx, cy, 14, 0, Math.PI * 2); c.fillStyle = '#1B1B1B'; c.fill();
-        fonte(42); c.fillStyle = '#1B1B1B'; c.fillText(String(e.texto || '').toUpperCase().slice(0, 28), cx, y0 - 100, W * 0.56);
-        fonte(50); c.fillText(Math.round((Number(e.valor) || 0) * q) + (e.unidade ? ' ' + e.unidade : '%'), cx, cy + 62);
-      } else if (itens.length) {
-        const n = itens.length, w = W * 0.86, h = 250, passo = w / n; caixa(w, h);
-        itens.forEach((it, j) => {
-          const tj = local - ESQ_T0 - j * ESQ_DT; if (tj < 0) return;
-          const s = U.mola(tj, 10), cx = W / 2 - w / 2 + passo * (j + 0.5), cy = y0 - 30;
-          if (j > 0) { const ax = cx - passo / 2, q = U.saida(U.clamp(tj / 0.25, 0, 1)); c.save(); c.translate(ax - 26 + 10 * q, cy); c.fillStyle = '#1B1B1B';
-            c.beginPath(); c.moveTo(-14, -16); c.lineTo(14, 0); c.lineTo(-14, 16); c.closePath(); c.globalAlpha *= q; c.fill(); c.restore(); }
-          c.save(); c.translate(cx, cy); c.scale(s, s);
-          c.beginPath(); c.arc(0, 0, 70, 0, Math.PI * 2); c.fillStyle = '#F3F5F8'; c.fill(); c.lineWidth = 5; c.strokeStyle = '#1B1B1B'; c.stroke();
-          const ic = ICONES_ESQ[it.icone] || ICONES_ESQ.alerta, cor = COR_ICONE[it.icone] || '#1B1B1B';
-          c.save(); c.scale(46, 46); c.fillStyle = c.strokeStyle = cor; c.lineWidth = 0.15; ic(c); c.restore();
-          c.restore();
-          c.save(); c.globalAlpha *= U.clamp(tj / 0.2, 0, 1); fonte(n > 2 ? 34 : 40); c.fillStyle = '#1B1B1B';
-          const linhas = U.linhas(c, String(it.texto || '').toUpperCase().slice(0, 34), passo - 24).slice(0, 2);
-          linhas.forEach((l, q) => c.fillText(l, cx, y0 + 70 + q * 36 - (linhas.length - 1) * 10, passo - 20)); c.restore();
-        });
+        const a = Math.PI + Math.PI * v; c.lineWidth = 16; c.strokeStyle = '#FFF'; c.beginPath(); c.moveTo(cx, cy); c.lineTo(cx + Math.cos(a) * (R - 30), cy + Math.sin(a) * (R - 30)); c.stroke();
+        c.beginPath(); c.arc(cx, cy, 30, 0, Math.PI * 2); c.fillStyle = '#FFF'; c.fill();
+        fonte(120); c.fillStyle = '#FFD23F'; c.fillText(Math.round((Number(e.valor) || 0) * q) + (e.unidade ? ' ' + e.unidade : '%'), cx, cy + 130);
+      } else if (itens.length) {   // passos: linhas grandes com icone, texto e seta para baixo
+        const n = itens.length, passo = Math.min(300, 880 / n), y0 = 640 - (n - 1) * passo / 2 + 150;
+        itens.forEach((it, j) => { const q = tj(j); if (q < 0) return; const s = U.mola(q, 10), y = y0 + j * passo;
+          if (j > 0) { const k = U.saida(U.clamp(q / 0.25, 0, 1)); c.save(); c.globalAlpha = k; c.fillStyle = '#FFFFFF'; c.beginPath(); const ya = y - passo / 2 + 10 * k;
+            c.moveTo(250 - 28, ya - 22); c.lineTo(250 + 28, ya - 22); c.lineTo(250, ya + 18); c.closePath(); c.fill(); c.restore(); }
+          c.save(); c.translate(250, y); c.scale(s, s); c.beginPath(); c.arc(0, 0, 105, 0, Math.PI * 2); c.fillStyle = 'rgba(255,255,255,0.1)'; c.fill(); c.lineWidth = 8; c.strokeStyle = COR_ICONE[it.icone] || '#FFF'; c.stroke();
+          c.save(); c.scale(70, 70); c.fillStyle = c.strokeStyle = COR_ICONE[it.icone] || '#FFF'; c.lineWidth = 0.15; (ICONES_ESQ[it.icone] || ICONES_ESQ.alerta)(c); c.restore(); c.restore();
+          c.save(); c.globalAlpha = U.clamp(q / 0.25, 0, 1); c.font = '70px "Lilita One", sans-serif'; c.textAlign = 'left'; c.textBaseline = 'middle'; c.fillStyle = '#FFF';
+          const ls = U.linhas(c, String(it.texto || '').toUpperCase(), 560).slice(0, 2); ls.forEach((l, k) => c.fillText(l, 400, y + (k - (ls.length - 1) / 2) * 76)); c.restore(); });
       }
-      c.restore();
       return true;
     }
     // O CARTAO DO NUMERO: conta de 0 ate o valor em 0,7 s, com mola na entrada.
@@ -1164,10 +1294,12 @@
         c.globalAlpha = 1 - U.suave(local / PASSA); c.drawImage(gl, 0, 0, W, H); c.globalAlpha = 1;
       }
       tinta(cenas[i], k);
-      perigo(i, t, local);
+      const ctaOn = t > (Number(spec.dur_s) || 0) - 2.8;
+      if (!ctaOn) perigo(i, t, local);
       seloTempo(cn, t);
       if (!esquema(cn, t)) cartaoNumero(cn, t);   // com esquema, o numero ja esta nele
       U.cartaz(c, spec, t, { fonte: '84px "Lilita One", sans-serif', y: 170, fundo: '#FFD23F', borda: '#1B1B1B', cor: '#1B1B1B', altura_linha: 100, dur: 3.0 });
+      U.ctaFinal(c, spec, t);
       U.legenda(c, spec, t, { fonte: '104px "Lilita One", sans-serif', y: H * 0.70, cor: '#FFFFFF', cor_ativa: '#FFD23F', contorno: 18, caixa: true, por_vez: 3 });
     }
     return { quadro, dispose: () => { cenas.forEach(o => U3.liberarCena(o.sc)); R.dispose(); R.forceContextLoss(); } };

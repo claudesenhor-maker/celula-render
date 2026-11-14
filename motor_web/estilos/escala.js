@@ -152,16 +152,152 @@
       }
       return g;
     }
+    // ---------- MODELOS DETALHADOS v7 (14/11, dono: "nos objetos grandes trabalhe mais nos detalhes de cada objeto, o maximo
+    // possivel"). Os itens mais usados pelo canal (Burj Khalifa, Torre Eiffel, planetas, 747, Everest, baleia, Titanic,
+    // Empire State, Saturno V, casa, estatuas) ganham modelo proprio, escolhido pelo NOME (antes `modelo: esfera/torre`
+    // do roteiro ganhava: a Terra era uma bola lisa, a Eiffel um palito). Unidade: altura (ou comprimento) = 1.
+    function texturaPlaneta(tipo) {
+      const cv = document.createElement('canvas'); cv.width = 512; cv.height = 256; const g = cv.getContext('2d'), r = U.rng('pl:' + tipo);
+      const ruido = (n, f) => { for (let k = 0; k < n; k++) f(r() * 512, r() * 256, r()); };
+      if (tipo === 'terra') {
+        g.fillStyle = '#1E5FA8'; g.fillRect(0, 0, 512, 256);
+        ruido(46, (x, y, q) => { const gr = g.createRadialGradient(x, y, 0, x, y, 18 + q * 46); gr.addColorStop(0, q > 0.6 ? '#C9A85C' : '#4E9A3E'); gr.addColorStop(0.7, '#3E8A36'); gr.addColorStop(1, 'rgba(62,138,54,0)'); g.fillStyle = gr; g.beginPath(); g.ellipse(x, y, 20 + q * 50, 12 + q * 26, q * 3, 0, Math.PI * 2); g.fill(); });
+        g.fillStyle = '#F4F8FB'; g.fillRect(0, 0, 512, 16); g.fillRect(0, 240, 512, 16);
+        g.globalAlpha = 0.55; ruido(70, (x, y, q) => { g.fillStyle = '#FFFFFF'; g.beginPath(); g.ellipse(x, y, 14 + q * 30, 3 + q * 5, 0, 0, Math.PI * 2); g.fill(); });
+      } else if (tipo === 'sol') {
+        const gr = g.createLinearGradient(0, 0, 0, 256); gr.addColorStop(0, '#FFB43A'); gr.addColorStop(0.5, '#FFD86A'); gr.addColorStop(1, '#FF9A2A'); g.fillStyle = gr; g.fillRect(0, 0, 512, 256);
+        g.globalAlpha = 0.35; ruido(500, (x, y, q) => { g.fillStyle = q > 0.5 ? '#FFF2B0' : '#E8741C'; g.beginPath(); g.arc(x, y, 2 + q * 6, 0, Math.PI * 2); g.fill(); });
+      } else if (tipo === 'jupiter' || tipo === 'saturno' || tipo === 'netuno') {
+        const cores = { jupiter: ['#D9B48A', '#B07A52', '#EAD7B8', '#9C6A48', '#E8C9A0'], saturno: ['#E8D3A2', '#CDB27A', '#F2E3BC', '#BFA068'], netuno: ['#3B6FD8', '#2E58B8', '#5B8AE8', '#2A4C9E'] }[tipo];
+        let y = 0; while (y < 256) { const h = 8 + r() * 22; g.fillStyle = cores[Math.floor(r() * cores.length)]; g.fillRect(0, y, 512, h + 1); y += h; }
+        g.globalAlpha = 0.25; for (let k = 0; k < 60; k++) { g.fillStyle = '#FFFFFF'; g.fillRect(r() * 512, r() * 256, 30 + r() * 80, 2); }
+        if (tipo === 'jupiter') { g.globalAlpha = 1; g.fillStyle = '#B5523A'; g.beginPath(); g.ellipse(330, 165, 30, 14, 0, 0, Math.PI * 2); g.fill(); }
+      } else {   // rochosos com cratera: lua, mercurio, marte, asteroide
+        const base = { lua: '#B9B5AC', mercurio: '#9D958A', marte: '#C1643C', asteroide: '#7E756A' }[tipo] || '#A8A29A';
+        g.fillStyle = base; g.fillRect(0, 0, 512, 256);
+        g.globalAlpha = 0.5; ruido(300, (x, y, q) => { g.fillStyle = q > 0.5 ? 'rgba(255,255,255,0.4)' : 'rgba(0,0,0,0.25)'; g.beginPath(); g.arc(x, y, 3 + q * 12, 0, Math.PI * 2); g.fill(); });
+        g.globalAlpha = 0.6; ruido(40, (x, y, q) => { const rr2 = 5 + q * 16; g.strokeStyle = 'rgba(0,0,0,0.35)'; g.lineWidth = 2; g.beginPath(); g.arc(x, y, rr2, 0, Math.PI * 2); g.stroke(); g.fillStyle = 'rgba(0,0,0,0.15)'; g.fill(); });
+        if (tipo === 'marte') { g.globalAlpha = 1; g.fillStyle = '#F2EEE8'; g.fillRect(0, 0, 512, 10); }
+      }
+      const t = new T.CanvasTexture(cv); if (T3) t.encoding = T.sRGBEncoding; return t;
+    }
+    function modeloV7(nome, cor) {
+      const g = new T.Group();
+      const add = (forma, c2, p, sz, giro, mat) => { const m = new T.Mesh((F[forma] || F.caixa)(), M(c2, mat)); m.position.set(...p); m.scale.set(...sz);
+        if (giro) m.rotation.set(...giro.map((a) => (a * Math.PI) / 180)); g.add(m); return m; };
+      const viga = (a, b, esp, c2) => { const d = new T.Vector3().subVectors(b, a), L = d.length(), m = new T.Mesh(F.caixa(), M(c2, 'metal')); m.scale.set(esp, L, esp);
+        m.position.copy(a).add(b).multiplyScalar(0.5); m.quaternion.setFromUnitVectors(new T.Vector3(0, 1, 0), d.normalize()); g.add(m); return m; };
+      const P = (x, y, z) => new T.Vector3(x, y, z);
+      switch (nome) {
+        case 'p_terra': case 'p_sol': case 'p_jupiter': case 'p_netuno': case 'p_lua': case 'p_mercurio': case 'p_marte': case 'p_saturno': {
+          const tipo = nome.slice(2), map = texturaPlaneta(tipo);
+          const mat = tipo === 'sol' ? new T.MeshBasicMaterial({ map, toneMapped: false }) : new T.MeshStandardMaterial({ map, roughness: 0.85, metalness: 0 });
+          const esf = new T.Mesh(new T.SphereGeometry(0.5, 64, 40), mat); esf.position.y = 0.5; esf.rotation.z = 0.41; g.add(esf); g.userData.gira = esf;
+          if (tipo === 'terra') { const atm = new T.Mesh(new T.SphereGeometry(0.515, 48, 32), new T.MeshBasicMaterial({ color: '#7FC8FF', transparent: true, opacity: 0.22, side: T.BackSide })); atm.position.y = 0.5; g.add(atm); }
+          if (tipo === 'sol') { const halo = new T.Mesh(new T.SphereGeometry(0.58, 48, 32), new T.MeshBasicMaterial({ color: '#FFC24A', transparent: true, opacity: 0.25, toneMapped: false })); halo.position.y = 0.5; g.add(halo); }
+          if (tipo === 'saturno') { const an = new T.Mesh(new T.RingGeometry(0.62, 1.0, 96), new T.MeshStandardMaterial({ color: '#D9C49A', side: T.DoubleSide, transparent: true, opacity: 0.85 })); an.rotation.x = Math.PI / 2 - 0.45; an.position.y = 0.5; g.add(an); }
+          break; }
+        case 'burj': {   // planta em Y que afina em degraus, faixas de vidro e agulha
+          const aco = '#C9D3DC', vidro = '#7FA8C8';
+          for (let k = 0; k < 14; k++) { const h0 = k * 0.055, f = 1 - k / 15, w = 0.16 * f + 0.02;
+            [0, 120, 240].forEach((ang, j) => { if (k > 9 && j !== k % 3) return; const a = (ang * Math.PI) / 180;
+              add('caixa_viva', k % 2 ? vidro : aco, [Math.sin(a) * w * 0.55, h0 + 0.028, Math.cos(a) * w * 0.55], [w * 0.55, 0.056, w * 1.1], [0, ang, 0], 'vidro'); }); }
+          add('cilindro', aco, [0, 0.4, 0], [0.05, 0.8, 0.05], null, 'metal');
+          add('cilindro', aco, [0, 0.86, 0], [0.018, 0.28, 0.018], null, 'metal'); add('cone', aco, [0, 1.0, 0], [0.012, 0.02, 0.012], null, 'metal');
+          add('cilindro', '#8C8C8C', [0, 0.005, 0], [0.4, 0.01, 0.4], null, 'concreto'); break; }
+        case 'eiffel': {   // 4 pernas curvas em trelica, 3 plataformas, arcos, antena
+          const bronze = '#7A5A3C', alturas = [0, 0.18, 0.38, 0.62, 0.9];
+          const larg = (y) => 0.22 * Math.pow(1 - y, 1.9) + 0.012;
+          for (const [sx, sz] of [[1, 1], [-1, 1], [1, -1], [-1, -1]]) {
+            for (let k = 0; k < 12; k++) { const y0 = k / 12 * 0.9, y1 = (k + 1) / 12 * 0.9, a = P(sx * larg(y0), y0, sz * larg(y0)), b = P(sx * larg(y1), y1, sz * larg(y1));
+              viga(a, b, 0.012 * (1 - y0 * 0.7), bronze);
+              if (k % 2 === 0) { viga(a, P(-sx * larg(y1), y1, sz * larg(y1)), 0.004, bronze); viga(a, P(sx * larg(y1), y1, -sz * larg(y1)), 0.004, bronze); } } }
+          [0.18, 0.38, 0.62].forEach((y, j) => add('caixa', bronze, [0, y, 0], [larg(y) * 2.3, 0.012, larg(y) * 2.3], null, 'metal'));
+          add('caixa', '#9A7A5A', [0, 0.92, 0], [0.04, 0.03, 0.04], null, 'metal'); add('cilindro', bronze, [0, 0.97, 0], [0.006, 0.07, 0.006], null, 'metal');
+          [[1, 0], [0, 1]].forEach(([ax, az]) => add('toro', bronze, [0, 0.1, 0], [0.2, 0.16, 0.05], [0, ax ? 0 : 90, 0], 'metal'));
+          break; }
+        case 'empire': {   // recuos art deco, faixas de janela e mastro
+          const pedra = '#CFC6B4';
+          [[0, 0.32, 0.36], [0.32, 0.18, 0.26], [0.5, 0.18, 0.2], [0.68, 0.08, 0.14], [0.76, 0.06, 0.1]].forEach(([y, h, w]) => {
+            add('caixa', pedra, [0, y + h / 2, 0], [w, h, w * 0.8], null, 'ceramica');
+            for (let k = 0; k < 6; k++) add('caixa', '#5E7A96', [-w / 2 + (k + 0.5) * w / 6, y + h / 2, w * 0.4 + 0.002], [w / 14, h * 0.9, 0.004], null, 'vidro'); });
+          add('cilindro', '#B8B8B8', [0, 0.88, 0], [0.03, 0.08, 0.03], null, 'metal'); add('cilindro', '#B8B8B8', [0, 0.96, 0], [0.008, 0.1, 0.008], null, 'metal'); break; }
+        case 'baleia': {   // comprimento = 1 (eixo x): corpo, cabeca, nadadeiras, cauda, sulcos, olho
+          const azul = cor || '#5B7A99', ventre = '#C9D3DA';
+          add('capsula', azul, [0, 0.12, 0], [0.24, 0.98, 0.2], [0, 0, 90]); add('capsula', ventre, [0.05, 0.075, 0], [0.18, 0.7, 0.16], [0, 0, 90]);
+          for (let k = 0; k < 7; k++) add('caixa', '#A8B6C2', [0.18 - k * 0.04, 0.035, 0], [0.012, 0.004, 0.12], null);
+          add('cone', azul, [-0.48, 0.13, 0], [0.08, 0.16, 0.06], [0, 0, 90]);
+          [-1, 1].forEach((s) => { add('esfera', azul, [-0.56, 0.13, s * 0.09], [0.08, 0.02, 0.12], [0, s * 25, 0]); add('esfera', azul, [0.18, 0.06, s * 0.13], [0.12, 0.015, 0.05], [0, s * 30, -20]); });
+          add('esfera', '#1A1A1A', [0.36, 0.11, 0.095], [0.012, 0.012, 0.006]); add('cone', azul, [-0.2, 0.235, 0], [0.025, 0.04, 0.012]); break; }
+        case 'titanic': {   // casco preto/vermelho, superestrutura branca, 4 chamines, conves, botes
+          add('caixa', '#1C1C1C', [0, 0.11, 0], [1, 0.12, 0.11], null, 'metal'); add('caixa', '#A3302A', [0, 0.04, 0], [0.98, 0.05, 0.105], null, 'metal');
+          add('cone', '#1C1C1C', [0.52, 0.11, 0], [0.055, 0.04, 0.12], [0, 0, -90], 'metal');
+          add('caixa', '#F2F2F2', [-0.02, 0.2, 0], [0.62, 0.06, 0.1], null, 'ceramica'); add('caixa', '#F2F2F2', [-0.02, 0.245, 0], [0.42, 0.03, 0.085], null, 'ceramica');
+          for (let k = 0; k < 4; k++) { add('cilindro', '#E8B83A', [-0.22 + k * 0.13, 0.33, 0], [0.032, 0.14, 0.032], [0, 0, 6], 'metal'); add('cilindro', '#1C1C1C', [-0.22 + k * 0.13 + 0.004, 0.395, 0], [0.033, 0.03, 0.033], [0, 0, 6], 'metal'); }
+          for (let k = 0; k < 16; k++) add('caixa', '#DDE4EA', [-0.3 + k * 0.04, 0.16, 0.056], [0.02, 0.008, 0.004], null, 'vidro');
+          for (let k = 0; k < 8; k++) [-1, 1].forEach((s) => add('capsula', '#FFFFFF', [-0.25 + k * 0.07, 0.235, s * 0.052], [0.012, 0.035, 0.012], [0, 0, 90]));
+          add('cilindro', '#8A6A4A', [0.3, 0.38, 0], [0.004, 0.36, 0.004]); add('cilindro', '#8A6A4A', [-0.38, 0.38, 0], [0.004, 0.36, 0.004]); break; }
+        case 'b747': {   // comprimento = 1: fuselagem com corcova, asas enflechadas, 4 motores, deriva, janelas
+          add('capsula', '#F4F6F8', [0, 0.09, 0], [0.085, 1, 0.085], [0, 0, 90], 'metal'); add('capsula', '#F4F6F8', [0.25, 0.125, 0], [0.065, 0.3, 0.06], [0, 0, 90], 'metal');
+          add('caixa', '#2E5EA8', [0, 0.072, 0.043], [0.92, 0.012, 0.002]); add('caixa', '#2E5EA8', [0, 0.072, -0.043], [0.92, 0.012, 0.002]);
+          for (let k = 0; k < 24; k++) [-1, 1].forEach((s) => add('caixa', '#2A3A4A', [-0.36 + k * 0.03, 0.105, s * 0.043], [0.01, 0.01, 0.002], null, 'vidro'));
+          [-1, 1].forEach((s) => { add('caixa', '#DDE2E6', [0, 0.07, s * 0.24], [0.2, 0.012, 0.42], [0, s * 28, 0], 'metal');
+            [0.14, 0.3].forEach((d, j) => add('cilindro', '#B9C0C6', [0.06 - j * 0.04, 0.05, s * d], [0.028, 0.08, 0.028], [0, 0, 90], 'metal'));
+            add('caixa', '#DDE2E6', [-0.44, 0.1, s * 0.08], [0.08, 0.008, 0.16], [0, s * 30, 0], 'metal'); });
+          add('caixa', '#2E5EA8', [-0.44, 0.19, 0], [0.12, 0.17, 0.008], [0, 0, -20], 'metal'); add('esfera', '#2A3A4A', [0.47, 0.11, 0], [0.03, 0.02, 0.05], null, 'vidro'); break; }
+        case 'saturno5': {   // pilha branca com faixas pretas, 5 motores, aletas, torre de escape
+          [[0, 0.42, 0.1], [0.42, 0.25, 0.1], [0.67, 0.12, 0.068], [0.79, 0.07, 0.068]].forEach(([y, h, r2], j) => {
+            add('cilindro', '#F2F2F2', [0, y + h / 2, 0], [r2 * 2, h, r2 * 2], null, 'ceramica');
+            for (let k = 0; k < 4; k++) add('caixa', '#1C1C1C', [Math.cos(k * Math.PI / 2) * r2 * 0.98, y + h * (j ? 0.5 : 0.15), Math.sin(k * Math.PI / 2) * r2 * 0.98], [0.02, h * (j ? 0.25 : 0.2), 0.02], [0, -k * 90, 0]); });
+          add('caixa', '#1C1C1C', [0, 0.41, 0], [0.205, 0.02, 0.205]); add('cone', '#F2F2F2', [0, 0.9, 0], [0.13, 0.1, 0.13], null, 'ceramica');
+          add('cilindro', '#C0392B', [0, 0.975, 0], [0.012, 0.06, 0.012]);
+          for (let k = 0; k < 4; k++) { const a = k * Math.PI / 2 + Math.PI / 4; add('caixa', '#1C1C1C', [Math.cos(a) * 0.11, 0.04, Math.sin(a) * 0.11], [0.05, 0.08, 0.008], [0, -k * 90 - 45, 0]); add('cone', '#3A3A3A', [Math.cos(a) * 0.05, -0.015, Math.sin(a) * 0.05], [0.04, 0.04, 0.04], [180, 0, 0], 'metal'); }
+          add('cone', '#3A3A3A', [0, -0.015, 0], [0.04, 0.04, 0.04], [180, 0, 0], 'metal'); break; }
+        case 'everest': {   // macico com varios picos, rocha + neve por altura (cor por vertice)
+          const geo = new T.ConeGeometry(0.62, 1, 48, 24), pos = geo.attributes.position, cols = [], rg = U.rng('everest');
+          for (let i = 0; i < pos.count; i++) { const x = pos.getX(i), y = pos.getY(i) + 0.5, z = pos.getZ(i), a = Math.atan2(z, x);
+            const bump = 1 + 0.18 * Math.sin(a * 5 + y * 7) + 0.1 * Math.sin(a * 13) + (rg() - 0.5) * 0.06; pos.setX(i, x * bump); pos.setZ(i, z * bump);
+            const neve = y > 0.62 + 0.08 * Math.sin(a * 7), c2 = new T.Color(neve ? '#F4F7FA' : y > 0.35 ? '#7D736A' : '#5E7A4A').convertSRGBToLinear(); cols.push(c2.r, c2.g, c2.b); }
+          geo.setAttribute('color', new T.Float32BufferAttribute(cols, 3)); geo.computeVertexNormals();
+          const m = new T.Mesh(geo, new T.MeshStandardMaterial({ vertexColors: true, roughness: 0.95, flatShading: true })); m.position.y = 0.5; g.add(m);
+          [[0.38, 0.12, 0.62, 0.55], [-0.36, -0.1, 0.5, 0.48]].forEach(([x, z, h, r2]) => { const c3 = m.clone(); c3.scale.set(r2, h, r2); c3.position.set(x, h / 2, z); g.add(c3); });
+          break; }
+        case 'casa': {
+          add('caixa', '#F2E3C6', [0, 0.3, 0], [0.9, 0.6, 0.7], null, 'ceramica');
+          add('piramide', '#B5523A', [0, 0.78, 0], [1.1, 0.36, 0.95], [0, 45, 0]);
+          add('caixa', '#7A4E2E', [0, 0.17, 0.351], [0.16, 0.34, 0.01], null, 'madeira'); add('esfera', '#C9A64A', [0.05, 0.17, 0.36], [0.015, 0.015, 0.015], null, 'metal');
+          [-0.28, 0.28].forEach((x) => { add('caixa', '#9CC8E8', [x, 0.36, 0.351], [0.18, 0.16, 0.01], null, 'vidro'); add('caixa', '#FFFFFF', [x, 0.36, 0.355], [0.2, 0.02, 0.012]); add('caixa', '#FFFFFF', [x, 0.36, 0.355], [0.02, 0.18, 0.012]); });
+          add('caixa', '#8A5A44', [0.28, 0.9, -0.1], [0.1, 0.25, 0.1], null, 'ceramica'); add('caixa', '#6E9E5A', [0, 0.01, 0.55], [1.3, 0.02, 0.35]); break; }
+        case 'estatua': {   // pedestal + figura de manto com bracos abertos (Cristo) / estatua generica
+          const pedra = cor || '#D8D2C4';
+          add('caixa', '#B8B0A0', [0, 0.08, 0], [0.22, 0.16, 0.22], null, 'concreto'); add('caixa', '#C8C0B0', [0, 0.18, 0], [0.18, 0.04, 0.18], null, 'concreto');
+          add('cone', pedra, [0, 0.44, 0], [0.16, 0.5, 0.12], null, 'concreto'); add('capsula', pedra, [0, 0.66, 0], [0.11, 0.2, 0.08], null, 'concreto');
+          add('capsula', pedra, [0, 0.72, 0], [0.62, 0.05, 0.05], [0, 0, 90], 'concreto');
+          [-1, 1].forEach((s) => add('esfera', pedra, [s * 0.31, 0.72, 0], [0.03, 0.035, 0.03], null, 'concreto'));
+          add('esfera', pedra, [0, 0.83, 0], [0.065, 0.075, 0.065], null, 'concreto');
+          for (let k = 0; k < 6; k++) add('caixa', '#C2BBAA', [-0.06 + k * 0.024, 0.32, 0.07], [0.006, 0.3, 0.01], [0, 0, (k - 2.5) * 2], 'concreto'); break; }
+        default: return null;
+      }
+      return g;
+    }
+    const PELO_NOME_V7 = [[/saturno\s*v\b|saturn\s*v\b/i, 'saturno5'], [/burj/i, 'burj'], [/eiffel/i, 'eiffel'], [/empire state/i, 'empire'],
+      [/\b(tierra|terra|earth|planeta tierra)\b/i, 'p_terra'], [/\b(sol|sun|el sol)\b/i, 'p_sol'], [/j[uú]piter/i, 'p_jupiter'], [/netuno|neptuno|neptune/i, 'p_netuno'],
+      [/\b(luna|lua|moon)\b/i, 'p_lua'], [/merc[uú]rio|mercury/i, 'p_mercurio'], [/\bmarte\b|\bmars\b/i, 'p_marte'], [/\bsaturno\b|\bsaturn\b/i, 'p_saturno'],
+      [/ballena|baleia|whale/i, 'baleia'], [/titanic|seawise|crucero|transatl|cruise ship|ocean liner/i, 'titanic'], [/boeing|\b747\b|stratolaunch|avi[oó]n de pasajeros|jumbo/i, 'b747'],
+      [/everest|olympus mons|ojos del salado|popocat|\bmonte\b|\bmount\b|kilimanjaro|aconcagua/i, 'everest'], [/cristo|estatua|statue|buda|estátua/i, 'estatua'], [/\bcasa\b|\bhouse\b|\bhome\b/i, 'casa']];
+    const modeloV7PeloNome = (n) => { for (const [re, m] of PELO_NOME_V7) if (re.test(String(n || ''))) return m; return null; };
     // v3 (13/11): o roteiro descreve o onibus em 2 caixas e o motor tem um modelo pronto bem melhor -- o NOME decide.
     const PELO_NOME = [[/autob[uú]s|\bbus(es)?\b|[oô]nibus/i, 'onibus'], [/\bpersona|\bperson\b|pessoa|humano|human\b/i, 'pessoa'],
       [/\bcoche|\bcarro|\bcar\b|\bauto\b/i, 'carro'], [/avi[oó]n|avi[aã]o|airplane|\bplane\b|jet\b/i, 'aviao'], [/\bbarco|navio|\bship\b|buque|crucero/i, 'navio'],
       [/cohete|foguete|rocket/i, 'foguete'], [/espejo|espelho|mirror|\bdisco\b|\bdisc\b|\bplato\b|\bprato\b|moneda|moeda|\bcoin\b/i, 'disco'], [/edificio|pr[eé]dio|building|rascacielos|skyscraper/i, 'predio'], [/noria|ferris|roda[- ]gigante|london eye|high roller|ain d[uú]b[aá]i|ain dubai|observation wheel|\brueda\b/i, 'roda_gigante'], [/[aá]rbol|[aá]rvore|\btree\b/i, 'arvore'], [/\bcasa\b|\bhouse\b/i, 'casa']];
     const modeloPeloNome = (n) => { for (const [re, m] of PELO_NOME) if (re.test(String(n || ''))) return m; return null; };
     const itens = (Array.isArray(spec.itens) ? spec.itens.slice(0, 12) : []).map((it, i) => {
-      const tam = num(it.tamanho_m != null ? it.tamanho_m : it.altura_m, 0.001, 2e7, 1), cor = corOk(it.cor, null);
+      const tam = num(it.tamanho_m != null ? it.tamanho_m : it.altura_m, 0.001, 2e12, 1)   // 14/11: ate' o Sol (era 2e7 = 20.000 km), cor = corOk(it.cor, null);
       let g;
-      const pronto = it.modelo ? null : modeloPeloNome(it.nome);
-      if (pronto) g = pecaPronta(pronto, cor);
+      const v7 = modeloV7PeloNome(it.nome), v7g = v7 ? modeloV7(v7, cor) : null;
+      const pronto = v7g ? null : (it.modelo ? null : modeloPeloNome(it.nome));
+      if (v7g) g = v7g;
+      else if (pronto) g = pecaPronta(pronto, cor);
       else if (Array.isArray(it.partes) && it.partes.length) {
         g = new T.Group();
         it.partes.slice(0, 24).forEach((p) => { const m = new T.Mesh((F[p.forma] || F.caixa)(), M(corOk(p.cor, cor || '#B8C4D0'), p.material));
@@ -297,6 +433,7 @@
       itens.forEach((it, j) => { const sEnt = j === a && entra < 1 ? Math.max(0.001, U.mola(entra * 1.4, 9)) : 1;
         it.g.scale.copy(it.s0).multiplyScalar(sEnt); it.g.position.y = it.y0 * sEnt + (j === a && entra < 1 ? it.alt * 1.6 * Math.pow(1 - U.clamp(entra * 2.2, 0, 1), 2) : 0); });
       // 14/11 (dono: "bonecos estaticos"): a pessoa de referencia respira, troca o peso e gira o corpo devagar
+      itens.forEach((it) => { const gi = it.g.userData.gira || (it.g.children[0] && it.g.children[0].userData && it.g.children[0].userData.gira); if (gi) gi.rotation.y = t * 0.35; });   // planeta gira
       itens.forEach((it, j) => { if (!it.vivo) return; it.g.scale.y *= 1 + 0.015 * Math.sin(t * 2.2 + j); it.g.rotation.y = 0.22 * Math.sin(t * 0.7 + j); it.g.rotation.z = 0.025 * Math.sin(t * 0.8 + j); });
       const pouso = U.clamp((entra - 0.45) / 0.4, 0, 1), treme = a !== ant && pouso > 0 && pouso < 1 ? (1 - pouso) * 0.012 : 0;
       // v2 05/11: item chato e largo (avião, pista, zona) visto do chão vira uma linha;
@@ -388,7 +525,7 @@
         }
       }
       // v4: SELO "xN" -- quantas vezes o item da vez e' maior (ou menor) que o anterior; gira e assenta com mola
-      if (a > 0 && itens[a] && itens[a - 1] && local > 0.55 && !(spec.titulo && t < 3.3)) {
+      if (a > 0 && itens[a] && itens[a - 1] && local > 0.55 && !(spec.titulo && t < 3.3) && t < (Number(spec.dur_s) || 1e9) - 2.8) {
         const rz = itens[a].tam / itens[a - 1].tam, maior = rz >= 1, x = maior ? rz : 1 / rz;
         if (x >= 1.5) {
           const fmt = x >= 1e6 ? (x / 1e6).toLocaleString('en-US', { maximumFractionDigits: 1 }) + 'M' : x >= 1e4 ? Math.round(x / 1e3) + 'K' : x >= 10 ? Math.round(x).toLocaleString('en-US') : x.toFixed(1).replace(/\.0$/, '');
@@ -404,6 +541,7 @@
       if (cn.hud && typeof cn.hud !== 'object' && local > 0.3 && !(spec.titulo && t < 3.3)) { const s = U.mola(local - 0.3, 10); c.save(); c.translate(W / 2, 300); c.scale(s, s); c.font = '120px "Lilita One", sans-serif'; c.textAlign = 'center'; c.textBaseline = 'middle';
         const txt = U.hud(c, cn.hud, c.canvas.width * 0.84 - 70, 44), w = c.measureText(txt).width + 70; U.rr(c, -w / 2, -78, w, 156, 34); c.fillStyle = '#1B1B1B'; c.fill(); c.fillStyle = '#FFD23F'; c.fillText(txt, 0, 6); c.restore(); }
       U.cartaz(c, spec, t, { fonte: '84px "Lilita One", sans-serif', y: 170, fundo: '#FFD23F', borda: '#1B1B1B', cor: '#1B1B1B', altura_linha: 100, dur: 3.0 });
+      U.ctaFinal(c, spec, t);
       U.legenda(c, spec, t, { fonte: '100px "Lilita One", sans-serif', y: H * 0.70, cor: '#FFFFFF', cor_ativa: '#FFD23F', contorno: 18, caixa: true, por_vez: 3 });
     }
     return { quadro, dispose: () => U3.liberar(R, sc) };

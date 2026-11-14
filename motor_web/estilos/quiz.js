@@ -308,22 +308,20 @@
       c.restore();
     }
     function revelar(nv, depois) {
-      // holofote: o cartao escurece menos num circulo em volta do diferente; anel; o diferente ampliado (E4)
-      const p = nv.pos[nv.alvo], q = U.mola(depois, 9), r0 = Math.max(nv.cw, nv.ch) * 0.75, amp = Math.max(2.2, 150 / nv.tam);
-      const raio = Math.max(r0, (nv.tam * amp) / 2 + 26);
-      const ent = U.saida(U.clamp(depois / 0.25, 0, 1));
+      // 14/11 (dono: "elimine o zoom -- quando a diferenca e' tamanho e voce da zoom, mata a diferenca e a pessoa nao entende
+      // por que nao achou"): era o diferente AMPLIADO 2,2x+. Agora nada muda de tamanho: dois holofotes NO LUGAR, o
+      // diferente (anel vermelho) e um vizinho normal (anel branco), lado a lado na mesma escala -- da' para comparar.
+      const p = nv.pos[nv.alvo], q = U.mola(depois, 9), raio = Math.max(nv.cw, nv.ch) * 0.78;
+      const col = nv.col, viz = (nv.alvo % col) < col - 1 ? nv.alvo + 1 : nv.alvo - 1, pv = nv.pos[Math.max(0, Math.min(nv.pos.length - 1, viz))];
+      const ent = U.saida(U.clamp(depois / 0.25, 0, 1)), rv = raio * U.clamp((depois - 0.35) / 0.25, 0, 1);
       c.save();
-      c.beginPath(); U.rr(c, GX0, GY0, GX1 - GX0, GY1 - GY0, 34); c.moveTo(p.x + raio * q, p.y); c.arc(p.x, p.y, Math.max(1, raio * q), 0, TAU, true);
-      c.fillStyle = 'rgba(17,17,27,' + (0.62 * ent) + ')'; c.fill('evenodd');
-      // o diferente grande, sobre um disco de papel (o que nao se achou, de perto)
-      const s = 1 + (amp - 1) * U.clamp(q, 0, 1.15);
-      c.beginPath(); c.arc(p.x, p.y, Math.max(1, (raio - 8) * q), 0, TAU); c.fillStyle = nv.papel; c.fill();
-      PAPEL = nv.papel;
-      c.font = Math.round(nv.tam * s) + 'px ' + FONTE; c.textAlign = 'center'; c.textBaseline = 'middle'; c.fillStyle = nv.tipo === 'letras' ? '#1B1B2F' : nv.tinta;
-      if (nv.tipo === 'letras') c.fillText(nv.dif, p.x, p.y); else desenharItem(c, nv, nv.alvo, p.x, p.y, nv.tam * s, true);
+      c.beginPath(); U.rr(c, GX0, GY0, GX1 - GX0, GY1 - GY0, 34);
+      c.moveTo(p.x + raio * q, p.y); c.arc(p.x, p.y, Math.max(1, raio * q), 0, TAU, true);
+      if (rv > 1) { c.moveTo(pv.x + rv, pv.y); c.arc(pv.x, pv.y, rv, 0, TAU, true); }
+      c.fillStyle = 'rgba(17,17,27,' + (0.66 * ent) + ')'; c.fill('evenodd');
       const pul = 1 + 0.05 * Math.sin(depois * 14);
-      c.lineWidth = 14; c.strokeStyle = '#E2373C'; c.beginPath(); c.arc(p.x, p.y, Math.max(1, raio * q * pul), 0, TAU); c.stroke();
-      c.lineWidth = 5; c.strokeStyle = '#FFF'; c.beginPath(); c.arc(p.x, p.y, Math.max(1, (raio * q * pul) + 10), 0, TAU); c.stroke();
+      c.lineWidth = 12; c.strokeStyle = '#E2373C'; c.beginPath(); c.arc(p.x, p.y, Math.max(1, raio * q * pul), 0, TAU); c.stroke();
+      if (rv > 1) { c.lineWidth = 7; c.setLineDash([16, 10]); c.strokeStyle = '#FFF'; c.beginPath(); c.arc(pv.x, pv.y, rv, 0, TAU); c.stroke(); c.setLineDash([]); }
       c.restore();
     }
 
@@ -385,7 +383,11 @@
         c.font = '66px ' + FONTE; c.fillStyle = '#FFF'; c.textAlign = 'left';
         c.fillText((apertado ? T.inscrito : T.inscr).toUpperCase(), CX - 230, 1184, 540);
         c.restore();
-        c.save(); c.textAlign = 'center'; contornado(T.sub.toUpperCase(), CX, 1310, 52, 860, '#FFF'); c.restore();
+        c.save(); c.textAlign = 'center'; contornado(T.sub.toUpperCase(), CX, 1310, 52, 860, '#FFF');
+        // 14/11: o @ do canal no encerramento (spec.perfil), quicando -- o nome que a pessoa procura depois
+        if (spec.perfil) { const b = 1 + 0.05 * Math.sin(u * 8); c.save(); c.translate(CX, 1420); c.scale(b, b); U.rr(c, -300, -52, 600, 104, 52); c.fillStyle = '#FFD23F'; c.fill();
+          c.lineWidth = 6; c.strokeStyle = '#111'; c.stroke(); c.font = '62px ' + FONTE; c.fillStyle = '#111'; c.textAlign = 'center'; c.fillText(String(spec.perfil).slice(0, 22), 0, 4, 560); c.restore(); }
+        c.restore();
         // dedo que aperta (um circulo branco com sombra, como o toque na tela)
         if (u > 0.8 + 0.35 && u < 0.8 + 1.4) {
           const k = U.clamp((u - 1.15) / 0.35, 0, 1), x = CX + 260 + (1 - U.saida(k)) * 160, y = 1200 + (1 - U.saida(k)) * 180;

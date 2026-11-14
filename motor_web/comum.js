@@ -64,6 +64,33 @@
       quebraCache.set(key, out.slice());
       return out;
     },
+    // 14/11 (dados: likes e inscritos por mil views baixos; dono: "trabalhe no ponto fraco: like, inscrito"): nos
+    // ultimos 2,8 s, LIKE + INSCREVER (apertado, vira INSCRITO) + o @ do canal (spec.perfil), na faixa de baixo.
+    // Devolve true enquanto esta na tela (quem chama esconde o que mora nessa faixa).
+    ctaFinal(c, spec, t) {
+      const D = Number(spec.dur_s) || 0, u = t - (D - 2.8); if (!(D > 6) || u < 0) return false;
+      const W = spec.w, idi = String(spec.idioma || ''), es = /^es/i.test(idi), pt = /^pt/i.test(idi);
+      const TX = es ? { like: 'DALE LIKE', ins: 'SUSCRÍBETE', ok: 'SUSCRITO' } : pt ? { like: 'DEIXA O LIKE', ins: 'INSCREVA-SE', ok: 'INSCRITO' } : { like: 'LIKE', ins: 'SUBSCRIBE', ok: 'SUBSCRIBED' };
+      const pop = (k) => Math.max(0, Math.min(1.15, U.mola(u - 0.05 - 0.3 * k, 11)));
+      c.save(); c.textAlign = 'center'; c.textBaseline = 'middle';
+      const g = c.createLinearGradient(0, 1380, 0, spec.h); g.addColorStop(0, 'rgba(0,0,0,0)'); g.addColorStop(0.3, 'rgba(0,0,0,0.55)'); g.addColorStop(1, 'rgba(0,0,0,0.75)');
+      c.globalAlpha = Math.min(1, u / 0.25); c.fillStyle = g; c.fillRect(0, 1380, W, spec.h - 1380); c.globalAlpha = 1;
+      const bt = (x, y, w, h, fundo, txt, cor, ic) => { U.rr(c, x - w / 2, y - h / 2, w, h, h / 2); c.fillStyle = fundo; c.fill(); c.lineWidth = 6; c.strokeStyle = '#111'; c.stroke();
+        c.font = '54px "Lilita One", sans-serif'; c.fillStyle = cor; c.fillText(txt, x + (ic ? 30 : 0), y + 3, w - 110); if (ic) ic(x - w / 2 + 62, y); };
+      const cor = (x, y, r) => { c.save(); c.translate(x, y); c.scale(r, r); c.beginPath(); c.moveTo(0, 0.85); c.bezierCurveTo(-1.2, 0, -0.75, -1, 0, -0.4); c.bezierCurveTo(0.75, -1, 1.2, 0, 0, 0.85); c.fillStyle = '#E2373C'; c.fill(); c.restore(); };
+      let p = pop(0);
+      if (p > 0) { const b = 1 + 0.08 * Math.max(0, Math.sin(u * 8)); c.save(); c.translate(W * 0.28, 1560); c.scale(p, p); bt(0, 0, 420, 120, '#FFF', TX.like, '#111', (x, y) => cor(x, y, 30 * b)); c.restore(); }
+      p = pop(1);
+      if (p > 0) { const ap = u - 1.2, feito = ap > 0, s = feito && ap < 0.15 ? 0.92 : 1; c.save(); c.translate(W * 0.72, 1560); c.scale(p * s, p * s);
+        bt(0, 0, 440, 120, feito ? '#3A3A44' : '#E2373C', feito ? TX.ok : TX.ins, '#FFF'); c.restore();
+        if (u > 0.85 && u < 1.6) { const k = Math.min(1, (u - 0.85) / 0.35), x = W * 0.72 + 120 + (1 - k) * 120, y = 1590 + (1 - k) * 150;
+          c.save(); c.globalAlpha = 0.9; c.beginPath(); c.arc(x, y, feito && ap < 0.2 ? 28 : 36, 0, Math.PI * 2); c.fillStyle = '#FFF'; c.fill(); c.lineWidth = 6; c.strokeStyle = '#111'; c.stroke(); c.restore(); } }
+      p = pop(2);
+      if (p > 0 && spec.perfil) { c.save(); c.translate(W / 2, 1720); c.scale(p, p); U.rr(c, -330, -55, 660, 110, 55); c.fillStyle = '#FFD23F'; c.fill(); c.lineWidth = 6; c.strokeStyle = '#111'; c.stroke();
+        c.font = '62px "Lilita One", sans-serif'; c.fillStyle = '#111'; c.fillText(String(spec.perfil).slice(0, 22), 0, 4, 610); c.restore(); }
+      c.restore();
+      return true;
+    },
     areaSegura(spec) {
       // 14/11 (dono: legendas e imagens nao centralizadas): era x 3,5%, largura 79%, centro 43% (fugia dos botoes do app); agora simetrico
       return { x: spec.w * 0.07, y: spec.h * 0.078, w: spec.w * 0.86, h: spec.h * 0.66, cx: spec.w * 0.5 };
