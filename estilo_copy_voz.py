@@ -50,15 +50,25 @@ def gerar():
  hum=AJ.get('humores') or [None]*len(falas)
  pau=AJ.get('pausas') or [0]*len(falas)
  if len(hum)!=len(falas) or len(pau)!=len(falas):raise ValueError('humores/pausas: um por fala')
- if any(h is not None and h not in refs for h in hum):raise ValueError('humor sem referencia em refs')
  if any(not 0<=float(x)<=1.5 for x in pau):raise ValueError('pausas 0..1,5 s')
- # trechos de até ~260 caracteres (a entonação corre dentro deles), só juntando falas do MESMO humor e nível de emoção
- trechos=[];atual=[];ea=None;ha=None
+ # MARCAÇÃO (voz_marcacao.py): emocao(trecho), pausa(s), enfase(palavras) dentro da fala. Cada trecho marcado usa a referência
+ # daquela emoção (se a voz tiver), os parâmetros do clonador da emoção e a PROSÓDIA por áudio (tom, ritmo, volume).
+ import voz_marcacao as VM
+ vaos=[]   # (texto limpo, emocao, exaggeration, pausa depois, enfases)
  for fala,e,h,p in zip(falas,emo,hum,pau):
-  e=round(float(e),2)
-  if atual and (sum(len(x[0])+1 for x in atual)+len(fala)>260 or abs(e-ea)>.06 or h!=ha):trechos.append((atual,ea,ha));atual=[]
-  if not atual:ea=e;ha=h
-  atual.append((fala,float(p)))
+  base_emo=VM._MAPA.get(VM._n(h or 'causo'),'causo')
+  ts=VM.interpretar(fala,base_emo)
+  if not ts:raise ValueError('fala vazia depois da marcacao')
+  for k,t in enumerate(ts):
+   ex=round(float(e),2) if t['emocao']==base_emo else VM.EMOCOES[t['emocao']]['exag']
+   vaos.append((t['texto'],t['emocao'],ex,t['pausa_s']+(float(p) if k==len(ts)-1 else 0),t['enfases']))
+ limpo=' '.join(v[0] for v in vaos)
+ # trechos de até ~260 caracteres (a entonação corre dentro deles), só juntando vãos da MESMA emoção e nível
+ trechos=[];atual=[];ea=None;ha=None
+ for v in vaos:
+  if atual and (sum(len(x[0])+1 for x in atual)+len(v[0])>260 or abs(v[2]-ea)>.06 or v[1]!=ha):trechos.append((atual,ea,ha));atual=[]
+  if not atual:ea=v[2];ha=v[1]
+  atual.append(v)
  if atual:trechos.append((atual,ea,ha))
  import numpy as np
  SR=24000
@@ -71,9 +81,12 @@ def gerar():
   return x
  marcas=[];logs=[];saida=[];inicio=0.0
  for i,(itens,e,h) in enumerate(trechos):
-  trecho=' '.join(f for f,_ in itens)
+  trecho=' '.join(f[0] for f in itens)
+  pe=VM.EMOCOES[h];rh=VM.referencia(h,refs)
   cfg=dict(base,exaggeration=e)
-  if h:cfg['ref_url']=refs[h]
+  if AJ.get('cfg_weight') is None:cfg['cfg_weight']=pe['cfg']
+  if AJ.get('temperature') is None:cfg['temperature']=pe['temp']
+  if rh:cfg['ref_url']=refs[rh]
   p=partes/f'{i:02}.wav';mm=_sintetizar_local(trecho,cfg,str(p),motor='chatterbox')
   fim=max((m['fim_s'] for m in mm),default=0)
   if fim<=0:raise ValueError('Trecho sem palavras alinhadas')
@@ -81,11 +94,18 @@ def gerar():
   # respiro natural depois do trecho: maior depois de pergunta/suspense, nunca corte seco
   resp=.38 if trecho.rstrip().endswith(('?','...','…')) else .26
   x=rampa(x[:int(min(len(x)/SR,fim+resp)*SR)])
-  # pausas pedidas DENTRO do trecho: silêncio no meio do vão entre a última palavra da fala e a primeira da seguinte
-  cortes=[];k=0;ok=len(mm)==len(trecho.split())
-  for f,pz in itens[:-1]:
-   k+=len(f.split())
-   if ok and pz>0 and 0<k<len(mm):cortes.append(((mm[k-1]['fim_s']+mm[k]['inicio_s'])/2,pz,k))
+  ok=len(mm)==len(trecho.split())
+  # ênfase nas palavras marcadas + prosódia da emoção (tom, ritmo, volume) no trecho inteiro
+  enf=[];k=0
+  for f in itens:
+   enf+=[k+q for q in f[4]];k+=len(f[0].split())
+  x,mm=VM.aplicar(x,SR,[{'palavra':m['palavra'],'inicio_s':m['inicio_s'],'fim_s':m['fim_s']} for m in mm],h if AJ.get('prosodia',True) else 'neutro',enf if ok else [])
+  x=rampa(x,120,600)
+  # pausas pedidas DENTRO do trecho: silêncio no meio do vão entre a última palavra de um vão e a primeira do seguinte
+  cortes=[];k=0
+  for f in itens[:-1]:
+   k+=len(f[0].split())
+   if ok and f[3]>0 and 0<k<len(mm):cortes.append(((mm[k-1]['fim_s']+mm[k]['inicio_s'])/2,f[3],k))
   pedacos=[];ant=0;desloc=[0.0]*len(mm)
   for t,pz,k in cortes:
    a=int(t*SR)
@@ -93,12 +113,12 @@ def gerar():
    pedacos+=[rampa(x[ant:a],240,720),np.zeros(int(pz*SR),dtype='float32')];ant=a
    for j in range(k,len(mm)):desloc[j]+=pz
   pedacos.append(rampa(x[ant:],240,0) if pedacos else x[ant:])
-  fimp=itens[-1][1]
+  fimp=itens[-1][3]
   if fimp>0:pedacos.append(np.zeros(int(fimp*SR),dtype='float32'))
   y=np.concatenate(pedacos);saida.append(y);ds=len(y)/SR
   marcas.extend({'text':m['palavra'],'offset':round((inicio+m['inicio_s']+desloc[j])/velocidade*10000000),'duration':round((m['fim_s']-m['inicio_s'])/velocidade*10000000)} for j,m in enumerate(mm))
-  logs.append({'trecho':i,'caracteres':len(trecho),'emocao':e,'humor':h,'duracao_s':round(ds,2),'fim_alinhado_s':fim,'pausas_costuradas':len(cortes)});inicio+=ds
-  print('Chatterbox trecho',i+1,'/',len(trechos),'humor',h,'emocao',e,'s',round(ds,2),flush=True)
+  logs.append({'trecho':i,'caracteres':len(trecho),'emocao':h,'exaggeration':e,'referencia':rh or 'base','prosodia':[pe['st'],pe['tempo'],pe['db']],'enfases':len(enf),'duracao_s':round(ds,2),'pausas_costuradas':len(cortes)});inicio+=ds
+  print('Chatterbox trecho',i+1,'/',len(trechos),'emocao',h,'ref',rh or 'base','exag',e,'s',round(ds,2),flush=True)
  bruto=raiz/'bruto.wav'
  import wave
  with wave.open(str(bruto),'w') as w:
@@ -107,7 +127,7 @@ def gerar():
  subprocess.run(['ffmpeg','-v','error','-i',str(bruto),'-af',af,'-c:a','libmp3lame','-b:a','192k','-y',str(raiz/'voz-continua.mp3')],check=True)
  bruto.unlink()
  (raiz/'palavras.json').write_text(json.dumps(marcas,ensure_ascii=False))
- (raiz/'proveniencia.json').write_text(json.dumps({'motor':'chatterbox','idioma':'pt','referencia':REF,'referencias_por_humor':refs,'origem':'Banco de vozes do projeto; clone Chatterbox local, sem custo','texto_sha256':hashlib.sha256(texto.encode()).hexdigest(),'velocidade':velocidade,'cfg_weight':base['cfg_weight'],'temperature':base['temperature'],'metodo':'trechos por humor e nivel de emocao (ate 260 caracteres), uma referencia por humor, pausas costuradas entre palavras','planos':logs},ensure_ascii=False,indent=2))
+ (raiz/'proveniencia.json').write_text(json.dumps({'motor':'chatterbox','idioma':'pt','referencia':REF,'referencias_por_humor':refs,'origem':'Banco de vozes do projeto; clone Chatterbox local, sem custo','texto_sha256':hashlib.sha256(texto.encode()).hexdigest(),'velocidade':velocidade,'cfg_weight':base['cfg_weight'],'temperature':base['temperature'],'metodo':'marcacao emocao(trecho): referencia por emocao + parametros do clonador + prosodia por audio (tom, ritmo, volume), enfase por palavra, pausas costuradas','texto_limpo':limpo,'planos':logs},ensure_ascii=False,indent=2))
  import shutil
  shutil.rmtree(partes)
  print('Narração gerada; palavras:',len(marcas),flush=True)
