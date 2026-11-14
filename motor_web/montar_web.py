@@ -22,6 +22,7 @@ voz sintetica local ou o Edge (`palito_v5`).
 """
 import argparse
 import json
+import re
 import os
 import subprocess
 import sys
@@ -284,6 +285,54 @@ def _notas(eventos, dur_s, destino, sr=SFX.SR):
     return destino
 
 
+def trilha_quiz(spec, tmp, semente):
+    """14/11 (dono: "comece com musica calma e conforme o tempo acabar deixe mais serio, para atiçar a agonia"):
+    duas faixas da biblioteca -- uma CALMA (lofi) e uma de SUSPENSE -- e uma curva de tensao por nivel: comeca calma,
+    a tensao sobe conforme o cronometro acaba (e cada nivel comeca um pouco mais tenso que o anterior), cai na
+    revelacao e no encerramento. Devolve o WAV pronto ou None (ai o mixador usa a trilha normal)."""
+    try:
+        import numpy as np
+        import wave
+        import trilha_biblioteca as TB
+        dur = float(spec["dur_s"]) + 0.5
+        a, _ = TB.faixa_para("lofi", semente, dur, os.path.join(tmp, "q-calma.wav"))
+        b, _ = TB.faixa_para("suspense", semente, dur, os.path.join(tmp, "q-tensa.wav"))
+        if not a or not b:
+            return None
+        ca, sra = SFX._ler_wav(a)
+        cb, srb = SFX._ler_wav(b)
+        if srb != sra:
+            cb = np.interp(np.arange(int(len(cb) * sra / srb)) * (srb / sra), np.arange(len(cb)), cb).astype(np.float32)
+        n = int(dur * sra)
+        ca = np.resize(ca, n).astype(np.float32); cb = np.resize(cb, n).astype(np.float32)
+        tt = np.arange(n) / float(sra)
+        w = np.zeros(n, dtype=np.float32)
+        cenas = spec["cenas"]; N = max(1, len(cenas))
+        for k, c in enumerate(cenas):
+            ultima = k == N - 1
+            fim_rel = c["fim"] - 1.3 - (float(spec.get("cta_s") or 0) if ultima else 0)
+            m = (tt >= c["ini"]) & (tt < fim_rel)
+            x = (tt[m] - c["ini"]) / max(0.5, fim_rel - c["ini"])
+            base = 0.12 * k / max(1, N - 1)
+            w[m] = np.clip(base + (1 - base) * x ** 1.6, 0, 1)
+            r = (tt >= fim_rel) & (tt < c["fim"])          # revelacao: alivio rapido
+            w[r] = np.clip(1 - (tt[r] - fim_rel) / 0.6, 0.1, 1)
+        # suaviza (sem degrau audivel)
+        k = max(1, int(0.25 * sra)); w = np.convolve(w, np.ones(k) / k, mode="same").astype(np.float32)
+        rms = lambda x: float(np.sqrt(np.mean(x ** 2)) + 1e-9)
+        cb *= rms(ca) / rms(cb)                             # mesmo volume percebido nas duas
+        out = ca * (1 - 0.9 * w) + cb * (0.25 + 0.9 * w) * w
+        out *= 0.9 / max(1e-6, float(np.max(np.abs(out))))
+        dst = os.path.join(tmp, "q-trilha.wav")
+        with wave.open(dst, "wb") as f:
+            f.setnchannels(1); f.setsampwidth(2); f.setframerate(sra); f.writeframes((out * 32767).astype("<i2").tobytes())
+        print(f"[musica] quiz: calma -> tensa por nivel ({N} niveis)")
+        return dst
+    except Exception as e:                                   # noqa: BLE001 -- trilha e' melhoria
+        print(f"[musica] quiz: sem curva de tensao ({e})")
+        return None
+
+
 def eventos_sonoros(spec):
     ev = []
     por_acao = EFEITO_DA_ACAO.get(spec.get("estilo"), {})
@@ -293,14 +342,32 @@ def eventos_sonoros(spec):
             ev.append({"nome": nome, "t": c["ini"] + frac * d, "ganho": ganho})
         for nome in (c.get("sfx") or []):
             ev.append({"nome": nome, "t": c["ini"] + 0.05, "ganho": 0.9})
+        # 14/11 (dono: "cada entrada de informacao tem efeito sonoro"): o esquema da cena (lowpoly) -- um som por item que
+        # entra, no MESMO tempo em que o motor desenha (ini + 0,35 + j*0,55); sem esquema, o cartao do numero (0,25 s)
+        esq = c.get("esquema") if isinstance(c.get("esquema"), dict) else None
+        if esq:
+            itens = esq.get("itens") if isinstance(esq.get("itens"), list) else []
+            if esq.get("tipo") == "medidor":
+                ev.append({"nome": "whoosh", "t": c["ini"] + 0.35, "ganho": 0.5}); ev.append({"nome": "plim", "t": c["ini"] + 1.35, "ganho": 0.6})
+            for j, _ in enumerate(itens[:3]):
+                t_ = c["ini"] + 0.35 + j * 0.55
+                if t_ < c["fim"] - 0.2:
+                    ev.append({"nome": "pop" if esq.get("tipo") != "barras" else "whoosh", "t": round(t_, 3), "ganho": 0.65})
+            if esq.get("tipo") == "barras" and itens:
+                ev.append({"nome": "plim", "t": round(c["ini"] + 0.35 + (min(3, len(itens)) - 1) * 0.55 + 0.6, 3), "ganho": 0.55})
+        elif spec.get("estilo") == "lowpoly" and (c.get("hud") or re.search(r"\d", str(c.get("texto") or ""))):
+            ev.append({"nome": "pop", "t": c["ini"] + 0.25, "ganho": 0.6})
         # quiz: um tique por segundo do cronometro e o "plim" da resposta
         if spec.get("estilo") == "quiz":
             ultima = c is spec["cenas"][-1]
             fim_relogio = c["fim"] - 1.3 - (float(spec.get("cta_s") or 0) if ultima else 0)
+            # 14/11: toc de madeira macio (o clique agudo fazia gente pular); nos 3 ultimos segundos ele ACELERA para
+            # 2 por segundo e fica mais grave -- a agonia vem do ritmo, nao do volume
             tt = c["ini"] + 0.35
             while tt < fim_relogio:
-                ev.append({"nome": "clique", "t": tt, "ganho": 0.6, "cadencia": True})
-                tt += 1.0
+                tenso = fim_relogio - tt <= 3.0
+                ev.append({"nome": "tique_tenso" if tenso else "tique", "t": tt, "ganho": 0.55 if tenso else 0.5, "cadencia": True})
+                tt += 0.5 if tenso else 1.0
             ev.append({"nome": "plim", "t": fim_relogio + 0.05, "ganho": 1.0})
             if ultima and spec.get("cta_s"):   # encerramento: um pop por botao (placar, like, inscrever)
                 t_cta = c["fim"] - float(spec["cta_s"])
@@ -386,6 +453,10 @@ def main():
     if fmt.get("sem_trilha"):
         musica = None                       # fisica: as notas das batidas SAO a trilha
     SFX.PERFIL = PERFIL_SFX.get(est, "padrao")
+    if spec.get("estilo") == "quiz" and musica is not None:
+        arq = trilha_quiz(spec, tmp, musica.get("semente", "quiz"))
+        if arq:
+            musica = dict(musica, arquivo=arq)
     mix = SFX.mixar(voz, eventos_sonoros(spec), os.path.join(tmp, "mix.wav"), musica=musica, dur_s=spec["dur_s"],
                     camas=camas_de_ambiente(spec))
     # LOUDNORM (22/10): o motor web saia sem normalizacao nenhuma -- cada video

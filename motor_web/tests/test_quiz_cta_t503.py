@@ -50,7 +50,7 @@ class QuizCTA(unittest.TestCase):
         plims = sorted(e["t"] for e in ev if e["nome"] == "plim")
         ultima = s["cenas"][-1]
         self.assertAlmostEqual(plims[-1], ultima["fim"] - s["cta_s"] - 1.3 + 0.05, places=3)
-        self.assertTrue(all(e["t"] < ultima["fim"] - s["cta_s"] - 1.3 for e in ev if e["nome"] == "clique" and e["t"] > ultima["ini"]))
+        self.assertTrue(all(e["t"] < ultima["fim"] - s["cta_s"] - 1.3 for e in ev if e["nome"] in ("tique", "tique_tenso") and e["t"] > ultima["ini"]))
         pops = [e for e in ev if e["nome"] == "pop" and e["t"] >= ultima["fim"] - s["cta_s"]]
         self.assertEqual(len(pops), 3)
 

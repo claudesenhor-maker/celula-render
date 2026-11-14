@@ -178,7 +178,7 @@
       const b2 = new T.Box3().setFromObject(g), alt = Math.max(1e-6, b2.max.y - b2.min.y), larg = Math.max(alt * 0.2, b2.max.x - b2.min.x);
       g.traverse((o) => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; } });
       sc.add(g);
-      return { nome: String(it.nome || 'item ' + (i + 1)).slice(0, 26), tam, alt, larg, g, s0: g.scale.clone(), y0: g.position.y };
+      return { nome: String(it.nome || 'item ' + (i + 1)).slice(0, 26), tam, alt, larg, g, s0: g.scale.clone(), y0: g.position.y, vivo: (pronto || it.modelo) === 'pessoa' };
     });
     // lado a lado, do menor para a direita, com um respiro proporcional
     let x = 0; itens.forEach((it, i) => { if (i) x += (itens[i - 1].larg + it.larg) * 0.5 + Math.max(itens[i - 1].larg, it.larg) * 0.25; it.x = x; it.g.position.x = x; });
@@ -268,7 +268,10 @@
 
     function quadro(t) {
       const { c: cn, i, k, local } = U.cenaEm(spec, t), a = idxAlvo(cn, i), ant = i > 0 ? idxAlvo(spec.cenas[i - 1], i - 1) : a;
-      const A = quadroDe(ant), B = quadroDe(a), q = U.suave(U.clamp(k * 2.4, 0, 1));
+      // 14/11 (dados: perde gente no comeco): GANCHO -- o video abre 0,6 s no MAIOR item, escondido atras de um "?" gigante,
+      // e voa ate' o primeiro. Abre a pergunta que so' o fim responde.
+      const teaser = i === 0 && itens.length > 2 && t < 1.3, ultimo = itens.length - 1;
+      const A = teaser ? quadroDe(ultimo) : quadroDe(ant), B = quadroDe(a), q = teaser ? U.suave(U.clamp((t - 0.6) / 0.7, 0, 1)) : U.suave(U.clamp(k * 2.4, 0, 1));
       let d = lerpLog(A.d, B.d, q), cx = U.lerp(A.cx, B.cx, q), cy = lerpLog(Math.max(1e-3, A.cy), Math.max(1e-3, B.cy), q);
       // 24/10: enquanto o cartaz do titulo esta' no alto (y 170 a ~430), o item cabe
       // na faixa livre entre ele e a legenda -- antes o cartaz cobria a cabeca da
@@ -293,6 +296,8 @@
       const entra = a !== ant || i === 0 ? U.clamp((local - 0.12) / 0.55, 0, 1) : 1;
       itens.forEach((it, j) => { const sEnt = j === a && entra < 1 ? Math.max(0.001, U.mola(entra * 1.4, 9)) : 1;
         it.g.scale.copy(it.s0).multiplyScalar(sEnt); it.g.position.y = it.y0 * sEnt + (j === a && entra < 1 ? it.alt * 1.6 * Math.pow(1 - U.clamp(entra * 2.2, 0, 1), 2) : 0); });
+      // 14/11 (dono: "bonecos estaticos"): a pessoa de referencia respira, troca o peso e gira o corpo devagar
+      itens.forEach((it, j) => { if (!it.vivo) return; it.g.scale.y *= 1 + 0.015 * Math.sin(t * 2.2 + j); it.g.rotation.y = 0.22 * Math.sin(t * 0.7 + j); it.g.rotation.z = 0.025 * Math.sin(t * 0.8 + j); });
       const pouso = U.clamp((entra - 0.45) / 0.4, 0, 1), treme = a !== ant && pouso > 0 && pouso < 1 ? (1 - pouso) * 0.012 : 0;
       // v2 05/11: item chato e largo (avião, pista, zona) visto do chão vira uma linha;
       // a câmera sobe em ângulo proporcional a largura/altura e mostra a ÁREA.
@@ -330,7 +335,7 @@
       const comHud = !!(cn.hud && typeof cn.hud !== 'object');
       const yMin = spec.titulo && t < 3.4 ? 620 : comHud ? 590 : 330, postas = [];   // v4: o titulo vem antes do HUD
       // v5 (14/11, dono: "muitos detalhes um em cima do outro"): so' a etiqueta do item da vez e a do anterior
-      const ordem = [a, a - 1].filter((j) => j >= 0 && j < itens.length);
+      const ordem = teaser ? [] : [a, a - 1].filter((j) => j >= 0 && j < itens.length);
       ordem.forEach((j) => {
         const it = itens[j];
         const p = new T.Vector3(it.x, it.alt, 0).project(cam); if (p.z > 1) return;
@@ -355,6 +360,13 @@
         else { c.fillText(l1, 0, -hh / 2 + 4, w1 - 30); c.font = (destaque ? '54px' : '36px') + ' "Lilita One", sans-serif'; c.fillText(real, 0, -12, w1 - 30); }
         c.restore();
       });
+      if (teaser && t < 0.95) {
+        const sp = U.mola(t, 10), fora = U.clamp((t - 0.6) / 0.35, 0, 1);
+        const iu = itens[ultimo], pc = new T.Vector3(iu.x, iu.alt * 0.5, 0).project(cam), pt = new T.Vector3(iu.x, iu.alt, 0).project(cam), pb = new T.Vector3(iu.x, 0, 0).project(cam);
+        const qx = U.clamp((pc.x * 0.5 + 0.5) * W, 200, W - 200), qy = U.clamp((-pc.y * 0.5 + 0.5) * H, 500, 1250), hpx = Math.abs(pt.y - pb.y) * 0.5 * H, esc = U.clamp(hpx / 380, 0.55, 1.2);
+        c.save(); c.globalAlpha = 1 - fora; c.translate(qx, qy); c.scale(sp * esc, sp * esc); c.rotate(Math.sin(t * 9) * 0.06);   // o ? fica SOBRE o maior item
+        c.font = '420px "Lilita One", sans-serif'; c.textAlign = 'center'; c.textBaseline = 'middle'; c.lineWidth = 26; c.strokeStyle = '#1B1B1B'; c.strokeText('?', 0, 0); c.fillStyle = '#FFD23F'; c.fillText('?', 0, 0); c.restore();
+      }
       // A COTA (23/10, pedido do dono: o canal "dimensiona as coisas"): uma linha
       // de medida ao lado do item em destaque, que cresce do chao ate o topo com
       // setas nas pontas -- o olho le o tamanho antes de ler o numero.

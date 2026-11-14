@@ -113,6 +113,7 @@
     // SIMETRIA: girar um circulo, girar 90 graus um quadrado ou espelhar um coracao nao muda nada.
     const GIRO_INVISIVEL = { circulo: 1 }, ESPELHO_INVISIVEL = { circulo: 1, quadrado: 1, cruz: 1, hexagono: 1, estrela: 1, coracao: 1, gota: 1, triangulo: 1,
       casa: 1, guarda_chuva: 1, lampada: 1, foguete: 1, maca: 0 };
+    const usados = new Set();
     const niveis = spec.cenas.map((cn, i) => {
       const r = U.rng((spec.semente || 'quiz') + ':' + i);
       const col = Math.max(Math.round(num(cn.colunas, 4, 12, 6)), Math.min(10, 6 + i)), lin = Math.max(Math.round(num(cn.linhas, 5, 16, 9)), Math.min(16, 9 + 2 * i));
@@ -121,6 +122,18 @@
       if (tipo !== 'letras' && !desenho) tipo = 'letras';
       const dif = Math.max(num(cn.dificuldade, 1, 5, 1 + Math.min(4, i)), Math.min(5, 2 + i));
       let modo = String(cn.diferente || (tipo === 'letras' ? 'Q' : 'girado')).slice(0, 14);
+      // 14/11 (dono: "precisamos de mais variacoes dificeis, nao apenas angulo e cor, para variar de um video para o outro"):
+      // novos modos (achatado, esticado, ponto extra) e RODIZIO: o mesmo modo nunca se repete no video, e quando o
+      // roteiro manda girado/cor (os mais comuns), o modo sai de um sorteio pela semente -- cada video tem a sua mistura.
+      if (tipo !== 'letras' && tipo !== 'cores') {
+        const POOL = ['achatado', 'ponto', 'esticado', 'sem_pedaco', 'maior', 'girado', 'menor', 'espelhado'];
+        const valido = (m) => !(m === 'girado' && GIRO_INVISIVEL[cn.base]) && !(m === 'espelhado' && ESPELHO_INVISIVEL[cn.base]) && !usados.has(m);
+        if (usados.has(modo) || modo === 'girado' || !cn.diferente) {
+          const ini = Math.floor(r() * POOL.length);
+          for (let j = 0; j < POOL.length; j++) { const m = POOL[(ini + j) % POOL.length]; if (valido(m)) { modo = m; break; } }
+        }
+        usados.add(modo);
+      }
       if (tipo !== 'letras') {
         if (modo === 'girado' && GIRO_INVISIVEL[cn.base]) modo = 'sem_pedaco';
         if (modo === 'espelhado' && ESPELHO_INVISIVEL[cn.base]) modo = GIRO_INVISIVEL[cn.base] ? 'sem_pedaco' : 'girado';
@@ -215,11 +228,16 @@
         else if (m === 'maior') { const f = 1 + Math.max(0.14, 0.32 / d); g.scale(f, f); }   // >= 14% (era 5%)
         else if (m === 'menor') { const f = 1 - Math.max(0.15, 0.3 / d); g.scale(f, f); }   // >= 15% (era 5%)
         else if (m === 'cor') cor = clarear(nv.tinta, Math.max(0.16, 0.4 / d));   // >= 16% (era 7%)
+        else if (m === 'achatado') g.scale(1, 1 - Math.max(0.17, 0.32 / d));     // 14/11: mais baixo
+        else if (m === 'esticado') g.scale(1 - Math.max(0.17, 0.32 / d), 1);     // 14/11: mais estreito
         else if (m === 'hora') v = { hora: 3 + Math.max(1, 6 - d) };
       }
       g.fillStyle = g.strokeStyle = cor;
       g.scale(e, e);
       nv.desenho(g, v);
+      if (odd && nv.dif === 'ponto' && nv.tipo !== 'cores') {   // 14/11: um pontinho a mais, colado no item
+        g.beginPath(); g.arc(0.78, -0.72, Math.max(0.12, 0.24 / d), 0, Math.PI * 2); g.fill();
+      }
       if (odd && nv.dif === 'sem_pedaco' && nv.tipo !== 'cores') {   // corte em cunha pintado com o papel (E1)
         furo(g, () => { g.beginPath(); g.moveTo(0, 0); g.arc(0, 0, 1.2, -0.25 * (6 - d) / 5 - 0.2, 0.25 * (6 - d) / 5 + 0.2); g.closePath(); g.fill(); });
       }
@@ -406,6 +424,17 @@
       // lampejo branco na troca de nivel (corte com batida)
       if (i > 0 && local < 0.14) { c.save(); c.globalAlpha = 0.45 * (1 - local / 0.14); c.fillStyle = '#FFF'; c.fillRect(0, 0, W, H); c.restore(); }
       if (cta && local >= dur) encerramento(local - dur, nv);
+      // 14/11 (dados: 60% saem no 1o segundo -- o pior "fica" da casa): GANCHO no primeiro 1,6 s -- selo de desafio
+      // pulsando sobre a grade (mostra a aposta antes do primeiro swipe) e a grade entra com soco de zoom
+      if (t < 1.6) {
+        const lg = /^es/i.test(spec.idioma || '') ? ['SOLO EL 1%', 'LO ENCUENTRA'] : /^pt/i.test(spec.idioma || '') ? ['SÓ 1%', 'ACHA'] : ['ONLY 1%', 'CAN FIND IT'];
+        const ent = U.mola(t, 11), sai = U.clamp((t - 1.3) / 0.3, 0, 1), pulso = 1 + 0.05 * Math.sin(t * 14);
+        c.save(); c.globalAlpha = 1 - sai; c.translate(W / 2, 960); c.rotate(-0.06); c.scale(ent * pulso, ent * pulso);
+        c.font = '130px ' + FONTE; c.textAlign = 'center'; c.textBaseline = 'middle';
+        const w = Math.max(c.measureText(lg[0]).width, c.measureText(lg[1]).width) + 110;
+        U.rr(c, -w / 2, -170, w, 340, 50); c.fillStyle = '#E8473C'; c.fill(); c.lineWidth = 12; c.strokeStyle = '#FFF'; c.stroke();
+        c.fillStyle = '#FFF'; c.fillText(lg[0], 0, -62); c.font = '96px ' + FONTE; c.fillText(lg[1], 0, 70); c.restore();
+      }
       U.cartaz(c, spec, t, { fonte: '84px ' + FONTE, y: 100, altura_max: 240, fundo: '#111', borda: '#FFF', cor: '#FFF', altura_linha: 100, dur: 2.2 });
     }
     return { quadro };

@@ -298,20 +298,18 @@
     function gelo() { const m = new T.Mesh(caixaGeo(1.1, 2.9, 1.1), new T.MeshLambertMaterial({  color: '#BFE8FF', transparent: true, opacity: 0.55 })); m.position.y = 1.45; return m; }
 
     // -------------------------------------------------------------- pessoa
-    // v4 (14/11, dono: "personagens 3D desfigurados e de baixa qualidade"): era tronco de cilindro de 7 lados, membros
-    // de 6 lados, cabeca de icosaedro (rosto facetado), olho = bolinha preta, sem maos nem orelhas. Agora: formas LISAS
-    // (capsulas e esferas de 24-32 segmentos, material com brilho suave), proporcao de boneco simpatico (cabeca ~1/3,3),
-    // olho com branco, iris, pupila e brilho, sobrancelha que expressa, nariz, orelhas, bochecha, mao com polegar,
-    // manga e sapato. A interface (userData) e' a mesma: posar() e as cenas nao mudam.
+    // v5 (14/11, dono: "melhore muito a qualidade 3D dos personagens, mais detalhes, menos partes do corpo em conflito,
+    // anime as pessoas; bonecos estaticos"). v4 tinha braco e perna de UMA peca girando no ombro/quadril: toda pose
+    // enfiava a mao no tronco e a perna andava dura. Agora: COTOVELO e JOELHO (cada membro em 2 segmentos), ombro afastado
+    // do tronco, palpebra de verdade (pisca sem achatar o olho), cabelo com volume, cinto, gola, bolso, cadarco.
+    // E o boneco nunca fica parado: respira, troca o peso, olha em volta, gesticula e mexe a boca quando a narracao fala.
     const PM = {};
-    const MP = (cor, o) => {   // material liso de personagem (cache por cor)
+    const MP = (cor, o) => {
       o = o || {}; const k = cor + JSON.stringify(o);
-      if (!PM[k]) PM[k] = new T.MeshLambertMaterial({ color: cor,   // Lambert: ilumina por vertice, barato no SwiftShader
-        emissive: o.emis || '#000000', transparent: !!o.op, opacity: o.op || 1, depthWrite: !o.op });
+      if (!PM[k]) PM[k] = new T.MeshLambertMaterial({ color: cor, emissive: o.emis || '#000000', transparent: !!o.op, opacity: o.op || 1, depthWrite: !o.op });
       return PM[k];
     };
     const GP = {};
-    // three r128 nao tem CapsuleGeometry: capsula = torno (Lathe) de meio-circulo + reta + meio-circulo
     const capsula = (r, l) => { const k = 'c' + r + ':' + l; if (!GP[k]) { const pts = [];
       for (let i = 0; i <= 8; i++) { const a = -Math.PI / 2 + (i / 8) * (Math.PI / 2); pts.push(new T.Vector2(Math.cos(a) * r, Math.sin(a) * r - l / 2)); }
       for (let i = 0; i <= 8; i++) { const a = (i / 8) * (Math.PI / 2); pts.push(new T.Vector2(Math.cos(a) * r, Math.sin(a) * r + l / 2)); }
@@ -321,103 +319,151 @@
     function pessoa(r, idx) {
       const g = new T.Group(), corpo = new T.Group(); g.add(corpo);
       const roupa = COR.roupa[idx % COR.roupa.length], pele = COR.pele[Math.floor(r() * COR.pele.length)], cab = COR.cabelo[Math.floor(r() * COR.cabelo.length)];
-      const cPele = new T.Color(pele), mPele = MP(pele, { emis: cPele.clone().multiplyScalar(0.18).getStyle(), rough: 0.55 });
-      const mRoupa = MP(roupa), mCalca = MP(COR.calca, { rough: 0.8 }), mCab = MP(cab, { rough: 0.45 }), mSapato = MP('#2A2A30', { rough: 0.4 });
-      const escuro = new T.Color(roupa).multiplyScalar(0.72).getStyle();
-      // quadril/bermuda e tronco (capsulas achatadas na profundidade)
-      const quadril = mesh(capsula(0.3, 0.14), mCalca, 0, 0.9, 0, corpo); quadril.rotation.z = Math.PI / 2; quadril.scale.set(1, 1.05, 0.8);
-      const tronco = mesh(capsula(0.34, 0.42), mRoupa, 0, 1.33, 0, corpo); tronco.scale.set(1.02, 1, 0.74);
-      const barra = mesh(new T.TorusGeometry(0.335, 0.035, 8, 28), MP(escuro), 0, 1.02, 0, corpo); barra.rotation.x = Math.PI / 2; barra.scale.set(1.02, 0.74, 1);
-      const gola = mesh(new T.TorusGeometry(0.13, 0.035, 8, 20), MP(escuro), 0, 1.66, 0.02, corpo); gola.rotation.x = Math.PI / 2;
-      mesh(new T.CylinderGeometry(0.1, 0.115, 0.16, 18), mPele, 0, 1.72, 0, corpo);
+      const cPele = new T.Color(pele), mPele = MP(pele, { emis: cPele.clone().multiplyScalar(0.3).getStyle() });   // 0,3: rosto escuro sem 'barba' de sombra
+      const mRoupa = MP(roupa), mCalca = MP(COR.calca), mCab = MP(cab), mSapato = MP('#2A2A30');
+      const escuro = new T.Color(roupa).multiplyScalar(0.72).getStyle(), mEscuro = MP(escuro);
+      // tronco: quadril, barriga, peito -- o tronco e' um grupo que respira e inclina sem mexer nos pes
+      const tronco = new T.Group(); tronco.position.y = 0.9; corpo.add(tronco);
+      const quadril = mesh(capsula(0.29, 0.14), mCalca, 0, 0, 0, tronco); quadril.rotation.z = Math.PI / 2; quadril.scale.set(1, 1.05, 0.8);
+      mesh(new T.TorusGeometry(0.315, 0.03, 8, 32), MP('#3A2A20'), 0, 0.1, 0, tronco).rotation.x = Math.PI / 2;   // cinto
+      mesh(new T.BoxGeometry(0.09, 0.07, 0.02), MP('#C9A64A'), 0, 0.1, 0.24, tronco);                               // fivela
+      const peito = mesh(capsula(0.34, 0.4), mRoupa, 0, 0.44, 0, tronco); peito.scale.set(1.0, 1, 0.72);
+      const barra = mesh(new T.TorusGeometry(0.33, 0.03, 8, 30), mEscuro, 0, 0.15, 0, tronco); barra.rotation.x = Math.PI / 2; barra.scale.set(1.02, 0.74, 1);
+      const gola = mesh(new T.TorusGeometry(0.12, 0.035, 8, 20), mEscuro, 0, 0.77, 0.02, tronco); gola.rotation.x = Math.PI / 2;
+      mesh(new T.BoxGeometry(0.13, 0.11, 0.02), mEscuro, 0.15, 0.55, 0.245, tronco);                                 // bolso
+      mesh(new T.CylinderGeometry(0.095, 0.11, 0.16, 18), mPele, 0, 0.82, 0, tronco);                                // pescoco
       // cabeca
-      const cabeca = new T.Group(); cabeca.position.y = 2.06; corpo.add(cabeca);
+      const cabeca = new T.Group(); cabeca.position.y = 1.16; tronco.add(cabeca);
       const crane = mesh(esfera(0.37), mPele, 0, 0, 0, cabeca); crane.scale.set(1, 1.04, 0.96);
       [-1, 1].forEach((s) => { const o = mesh(esfera(0.085), mPele, s * 0.36, -0.02, 0, cabeca); o.scale.set(0.55, 1, 0.8); });
-      const nariz = mesh(esfera(0.055), MP(cPele.clone().multiplyScalar(0.94).getStyle(), { rough: 0.5 }), 0, -0.05, 0.36, cabeca); nariz.scale.set(1, 0.9, 0.8);
-      [-1, 1].forEach((s) => { const b = mesh(new T.CircleGeometry(0.06, 20), MP('#FF7A8A', { op: 0.35 }), s * 0.2, -0.1, 0.325, cabeca); b.rotation.y = s * 0.45; });
-      // cabelo: 0 curto com franja, 1 chanel (mais longo), 2 coque
-      const estilo = Math.floor(r() * 3);
-      const calota = mesh(esfera(0.395, 0, Math.PI * (estilo === 1 ? 0.6 : 0.47)), mCab, 0, 0.05, -0.03, cabeca); calota.rotation.x = -0.55; calota.scale.set(1, 1.02, 1);
-      const franja = mesh(capsula(0.07, 0.34), mCab, 0.04, 0.3, 0.24, cabeca); franja.rotation.z = Math.PI / 2 + 0.18; franja.rotation.y = 0.08; franja.scale.set(1, 1, 0.7);
-      if (estilo === 1) { const nuca = mesh(esfera(0.39, Math.PI * 0.3, Math.PI * 0.45), mCab, 0, 0.0, -0.06, cabeca); nuca.scale.set(1.04, 1.1, 1); }
-      if (estilo === 2) { mesh(esfera(0.15), mCab, 0, 0.36, -0.22, cabeca); }
-      // olhos: [grupoEsq, brilhoEsq, grupoDir, brilhoDir] -- par = olho inteiro (escala/piscar), impar = brilho
-      const olhos = [], sobr = [];
-      const mBranco = MP('#FFFFFF', { rough: 0.3 }), mIris = MP('#3B2A20', { rough: 0.25 }), mPup = MP('#0C0C0C', { rough: 0.2 }), mBrilho = MP('#FFFFFF', { emis: '#FFFFFF' });
+      const nariz = mesh(esfera(0.055), MP(cPele.clone().multiplyScalar(0.94).getStyle()), 0, -0.05, 0.36, cabeca); nariz.scale.set(1, 0.9, 0.8);
+      [-1, 1].forEach((s) => { const b = mesh(new T.CircleGeometry(0.06, 20), MP('#FF7A8A', { op: 0.32 }), s * 0.2, -0.1, 0.33, cabeca); b.rotation.y = s * 0.45; });
+      // cabelo com volume: calota + franja + mechas laterais; estilo 1 longo, 2 coque, 3 cacheado
+      const estilo = Math.floor(r() * 4);
+      const calota = mesh(esfera(0.398, 0, Math.PI * (estilo === 1 ? 0.6 : 0.48)), mCab, 0, 0.05, -0.03, cabeca); calota.rotation.x = -0.55;
+      for (let j = 0; j < 5; j++) { const m = mesh(capsula(0.06, 0.12), mCab, -0.2 + j * 0.1, 0.29 - Math.abs(j - 2) * 0.02, 0.25 - Math.abs(j - 2) * 0.03, cabeca); m.rotation.set(1.2, 0, (j - 2) * 0.25); }
+      [-1, 1].forEach((s) => { const m = mesh(esfera(0.12), mCab, s * 0.33, 0.12, -0.05, cabeca); m.scale.set(0.6, 1.1, 1); });
+      if (estilo === 1) { const nuca = mesh(esfera(0.39, Math.PI * 0.3, Math.PI * 0.45), mCab, 0, -0.02, -0.06, cabeca); nuca.scale.set(1.05, 1.15, 1); }
+      if (estilo === 2) { mesh(esfera(0.15), mCab, 0, 0.36, -0.22, cabeca); mesh(new T.TorusGeometry(0.1, 0.025, 6, 16), MP('#E8473C'), 0, 0.3, -0.2, cabeca).rotation.x = 1; }
+      if (estilo === 3) for (let j = 0; j < 9; j++) { const a = (j / 9) * Math.PI * 2; mesh(esfera(0.11), mCab, Math.cos(a) * 0.3, 0.2 + Math.sin(j * 1.7) * 0.05, Math.sin(a) * 0.3 - 0.05, cabeca); }
+      // olhos com palpebra: [grupoEsq, brilhoEsq, grupoDir, brilhoDir]
+      const olhos = [], sobr = [], palp = [];
+      const mBranco = MP('#FFFFFF'), mIris = MP(['#3B2A20', '#2E5E8C', '#3E6B3A'][Math.floor(r() * 3)]), mPup = MP('#0C0C0C'), mBrilho = MP('#FFFFFF', { emis: '#FFFFFF' });
       [-0.13, 0.13].forEach((x) => {
         const og = new T.Group(); og.position.set(x, 0.05, 0.315); cabeca.add(og);
         const br = mesh(esfera(0.075), mBranco, 0, 0, 0, og); br.scale.set(0.85, 1.05, 0.5);
-        mesh(esfera(0.047), mIris, 0, -0.005, 0.03, og).scale.set(1, 1, 0.45);
-        mesh(esfera(0.026), mPup, 0, -0.005, 0.045, og).scale.set(1, 1, 0.4);
+        const iris = new T.Group(); og.add(iris); og.userData.iris = iris;
+        mesh(esfera(0.047), mIris, 0, -0.005, 0.03, iris).scale.set(1, 1, 0.45);
+        mesh(esfera(0.026), mPup, 0, -0.005, 0.045, iris).scale.set(1, 1, 0.4);
         olhos.push(og);
         const b = mesh(esfera(0.014), mBrilho, x + 0.018, 0.075, 0.37, cabeca); olhos.push(b);
-        const s = mesh(capsula(0.016, 0.085), mCab, x, 0.17, 0.33, cabeca); s.rotation.z = Math.PI / 2 + (x < 0 ? -0.12 : 0.12); sobr.push(s);
+        const pl = mesh(esfera(0.08, 0, Math.PI / 2), mPele, x, 0.06, 0.315, cabeca); pl.scale.set(0.9, 1, 0.62); pl.rotation.x = 0.1; palp.push(pl);
+        const s = mesh(capsula(0.017, 0.085), mCab, x, 0.17, 0.33, cabeca); s.rotation.z = Math.PI / 2 + (x < 0 ? -0.12 : 0.12); sobr.push(s);
       });
-      const mBoca = MP('#7A2B2B', { rough: 0.5 });
+      const mBoca = MP('#7A2B2B');
       const bocaRiso = mesh(new T.TorusGeometry(0.075, 0.02, 10, 24, Math.PI), mBoca, 0, -0.15, 0.33, cabeca); bocaRiso.rotation.z = Math.PI;
       const bocaO = new T.Group(); bocaO.position.set(0, -0.17, 0.33); cabeca.add(bocaO);
       mesh(esfera(0.06), mBoca, 0, 0, 0, bocaO).scale.set(0.85, 1.1, 0.35);
-      mesh(esfera(0.03), MP('#E86A6A'), 0, -0.025, 0.012, bocaO).scale.set(1.2, 0.7, 0.3);   // lingua
+      mesh(esfera(0.03), MP('#E86A6A'), 0, -0.025, 0.012, bocaO).scale.set(1.2, 0.7, 0.3);
+      mesh(new T.BoxGeometry(0.07, 0.018, 0.01), MP('#FFFFFF'), 0, 0.045, 0.02, bocaO);   // dentes de cima
       const bocaReta = mesh(capsula(0.016, 0.09), mBoca, 0, -0.15, 0.34, cabeca); bocaReta.rotation.z = Math.PI / 2;
-      // membros: pivo no ombro/quadril; 0,1 = bracos, 2,3 = pernas
-      const membros = [];
-      [[-0.44, 1.6, 'b'], [0.44, 1.6, 'b'], [-0.16, 0.86, 'p'], [0.16, 0.86, 'p']].forEach(([x, y, tipo]) => {
+      // bracos: ombro -> (manga + braco) -> COTOVELO -> (antebraco + mao); pernas: quadril -> coxa -> JOELHO -> canela + sapato
+      const membros = [], cot = [], joe = [];
+      [[-0.47, 1.6, 'b'], [0.47, 1.6, 'b'], [-0.16, 0.86, 'p'], [0.16, 0.86, 'p']].forEach(([x, y, tipo]) => {
         const piv = new T.Group(); piv.position.set(x, y, 0);
+        const s = Math.sign(x);
         if (tipo === 'b') {
-          const s = Math.sign(x);
-          mesh(esfera(0.13), mRoupa, 0, 0, 0, piv).scale.set(1, 1, 0.9);              // ombro
-          const manga = mesh(capsula(0.11, 0.2), mRoupa, 0, -0.17, 0, piv);
-          mesh(capsula(0.085, 0.36), mPele, 0, -0.42, 0, piv);                        // antebraco
-          const mao = mesh(esfera(0.105), mPele, 0, -0.68, 0.01, piv); mao.scale.set(0.9, 1.05, 0.75);
-          const pol = mesh(capsula(0.035, 0.06), mPele, -s * 0.07, -0.64, 0.05, piv); pol.rotation.z = s * 0.6;
-          manga.scale.set(1.05, 1, 1);
+          mesh(esfera(0.125), mRoupa, 0, 0, 0, piv).scale.set(1, 1, 0.9);
+          mesh(capsula(0.105, 0.14), mRoupa, 0, -0.13, 0, piv);
+          mesh(new T.TorusGeometry(0.1, 0.022, 6, 18), mEscuro, 0, -0.22, 0, piv).rotation.x = Math.PI / 2;   // punho da manga
+          mesh(capsula(0.08, 0.12), mPele, 0, -0.3, 0, piv);
+          const c2 = new T.Group(); c2.position.y = -0.38; piv.add(c2);
+          mesh(esfera(0.082), mPele, 0, 0, 0, c2);
+          mesh(capsula(0.076, 0.18), mPele, 0, -0.14, 0, c2);
+          const mao = new T.Group(); mao.position.y = -0.32; c2.add(mao);
+          mesh(esfera(0.098), mPele, 0, -0.02, 0.01, mao).scale.set(0.95, 1.05, 0.72);
+          const ded = mesh(capsula(0.05, 0.07), mPele, 0, -0.1, 0.02, mao); ded.scale.set(1.6, 1, 0.9);
+          const pol = mesh(capsula(0.033, 0.06), mPele, -s * 0.075, -0.0, 0.05, mao); pol.rotation.z = s * 0.7;
+          cot.push(c2);
         } else {
-          mesh(capsula(0.13, 0.36), mCalca, 0, -0.26, 0, piv);                        // coxa+canela (calca)
-          mesh(new T.CylinderGeometry(0.1, 0.1, 0.08, 18), MP('#F4F4F4'), 0, -0.6, 0, piv);   // meia
-          const sap = mesh(esfera(0.14), mSapato, 0, -0.72, 0.07, piv); sap.scale.set(0.95, 0.6, 1.45);
-          const sola = mesh(esfera(0.14, Math.PI * 0.5, Math.PI * 0.5), MP('#EDEDED'), 0, -0.735, 0.07, piv); sola.scale.set(0.97, 0.45, 1.48);
+          mesh(capsula(0.13, 0.2), mCalca, 0, -0.2, 0, piv);
+          const c2 = new T.Group(); c2.position.y = -0.4; piv.add(c2);
+          mesh(esfera(0.125), mCalca, 0, 0, 0, c2);
+          mesh(capsula(0.118, 0.14), mCalca, 0, -0.13, 0, c2);
+          mesh(new T.CylinderGeometry(0.1, 0.1, 0.07, 18), MP('#F4F4F4'), 0, -0.3, 0, c2);
+          const sap = mesh(esfera(0.14), mSapato, 0, -0.39, 0.07, c2); sap.scale.set(0.95, 0.6, 1.45);
+          const sola = mesh(esfera(0.14, Math.PI * 0.5, Math.PI * 0.5), MP('#EDEDED'), 0, -0.405, 0.07, c2); sola.scale.set(0.97, 0.45, 1.48);
+          mesh(new T.BoxGeometry(0.1, 0.012, 0.03), MP('#EDEDED'), 0, -0.33, 0.19, c2).rotation.x = 0.5;   // cadarco
+          joe.push(c2);
         }
         corpo.add(piv); membros.push(piv);
       });
-      const suor = []; for (let k = 0; k < 3; k++) { const s = mesh(esfera(0.055), MP('#7CC7FF', { rough: 0.15 }), 0, 0, 0, cabeca); s.scale.set(0.8, 1.2, 0.8); s.visible = false; suor.push(s); }
+      // o tronco carrega os ombros: braco acompanha a respiracao e a inclinacao
+      membros.slice(0, 2).forEach((b) => { tronco.attach(b); });
+      const suor = []; for (let k = 0; k < 3; k++) { const s = mesh(esfera(0.055), MP('#7CC7FF'), 0, 0, 0, cabeca); s.scale.set(0.8, 1.2, 0.8); s.visible = false; suor.push(s); }
       g.traverse((o) => { if (o.isMesh) o.castShadow = true; });
-      g.userData = { corpo, cabeca, membros, olhos, sobr, bocaRiso, bocaO, bocaReta, suor, fase: r() * 10 };
+      g.userData = { corpo, tronco, cabeca, membros, cot, joe, olhos, palp, sobr, bocaRiso, bocaO, bocaReta, suor, fase: r() * 10, mao: r() < 0.5 ? 0 : 1 };
       return sombra(g);
     }
-    // POSES: cada modo diz ombros (x frente/tras, z abre), quadril, corpo, cabeca e boca.
-    function posar(p, modo, t, k) {
-      const u = p.userData, m = u.membros, tf = t + u.fase;
+    // POSES v5: ombro (x frente/tras, z abre), COTOVELO (dobra para a frente), quadril, JOELHO; e por baixo de tudo
+    // o MOVIMENTO DE BASE (respira, troca o peso, olha em volta, gesticula). `fala` 0..1 = a narracao esta falando agora.
+    function posar(p, modo, t, k, fala) {
+      const u = p.userData, m = u.membros, tf = t + u.fase, cot = u.cot || [], joe = u.joe || [];
       const rot = (q, x, z) => { q.rotation.x = x; q.rotation.z = z || 0; };
-      let boca = 'riso', olhoS = 1, bob = 0, inclina = 0, cabX = Math.sin(tf * 0.9) * 0.05, cabZ = Math.sin(tf * 1.3) * 0.06, tremor = 0, agach = 1;
-      const anda = (vel, amp) => { const a = tf * vel; rot(m[0], Math.sin(a) * amp, 0.08); rot(m[1], -Math.sin(a) * amp, -0.08); rot(m[2], -Math.sin(a) * amp); rot(m[3], Math.sin(a) * amp); bob = Math.abs(Math.sin(a)) * 0.12 * amp; };
+      const dobra = (q, a) => { if (q) q.rotation.x = -a; };            // cotovelo: antebraco para a frente
+      const flex = (q, a) => { if (q) q.rotation.x = a; };              // joelho: canela para tras
+      let boca = 'riso', olhoS = 1, bob = 0, inclina = 0, cabX = Math.sin(tf * 0.9) * 0.05, cabZ = Math.sin(tf * 1.3) * 0.05, tremor = 0, agach = 1;
+      let cabY = 0.35 * Math.sin(tf * 0.37) * Math.sin(tf * 0.11 + 1);   // olha em volta devagar
+      // base: bracos soltos com cotovelo levemente dobrado e balanco; joelhos quase retos
+      let cE = 0.22 + 0.06 * Math.sin(tf * 1.1), cD = 0.22 + 0.06 * Math.sin(tf * 1.1 + 1), jE = 0.04, jD = 0.04;
+      const peso = Math.sin(tf * 0.8);                                   // troca o peso de perna
+      const anda = (vel, amp) => { const a = tf * vel; rot(m[0], Math.sin(a) * amp, 0.1); rot(m[1], -Math.sin(a) * amp, -0.1); rot(m[2], -Math.sin(a) * amp); rot(m[3], Math.sin(a) * amp);
+        jE = Math.max(0, Math.sin(a)) * amp * 1.3 + 0.05; jD = Math.max(0, -Math.sin(a)) * amp * 1.3 + 0.05; cE = cD = 0.35 + amp * 0.7; bob = Math.abs(Math.sin(a)) * 0.1 * amp; cabY *= 0.3; };
       switch (modo) {
         case 'anda': anda(6, 0.6); break;
-        case 'corre': anda(11, 1.05); inclina = 0.25; boca = 'O'; break;
-        case 'surpreso': rot(m[0], 0, 2.5 + Math.sin(tf * 9) * 0.12); rot(m[1], 0, -2.5 - Math.sin(tf * 9) * 0.12); rot(m[2], 0); rot(m[3], 0); boca = 'O'; olhoS = 1.35; bob = Math.max(0, U.mola(k * 3, 10) - 0.9) * 0.6; break;
-        case 'frio': rot(m[0], -0.9, -0.9); rot(m[1], -0.9, 0.9); rot(m[2], 0); rot(m[3], 0); tremor = 0.035; boca = 'reta'; agach = 0.95; break;
-        case 'calor': rot(m[0], 0.1, 0.15); rot(m[1], -2.3 + Math.sin(tf * 14) * 0.35, -0.4); rot(m[2], 0); rot(m[3], 0); boca = 'O'; u.suor.forEach((s, j) => { s.visible = true; const q = (tf * 0.9 + j / 3) % 1; s.position.set(-0.35 + j * 0.35, 0.3 - q * 0.9, 0.3); }); break;
-        case 'aponta': rot(m[0], 0, 0.1); rot(m[1], -1.45, -0.25); rot(m[2], 0); rot(m[3], 0); cabX = -0.15; boca = 'O'; break;
-        case 'olha_cima': rot(m[0], 0, 0.15); rot(m[1], 0, -0.15); rot(m[2], 0); rot(m[3], 0); cabX = -0.55; boca = 'O'; olhoS = 1.2; break;
-        case 'comemora': { const s = Math.abs(Math.sin(tf * 7)); rot(m[0], 0, 2.7 + s * 0.2); rot(m[1], 0, -2.7 - s * 0.2); rot(m[2], 0); rot(m[3], 0); bob = s * 0.35; break; }
-        case 'flutua': rot(m[0], 0.3, 1.2 + Math.sin(tf) * 0.2); rot(m[1], -0.3, -1.2 - Math.sin(tf) * 0.2); rot(m[2], 0.4, 0.3); rot(m[3], -0.3, -0.3); boca = 'O'; break;
-        case 'sufoca': rot(m[0], -2.0, -0.6); rot(m[1], -2.0, 0.6); rot(m[2], 0); rot(m[3], 0); boca = 'O'; inclina = Math.sin(tf * 3) * 0.12; agach = 0.94; break;
-        case 'medo': rot(m[0], -0.4, 2.85); rot(m[1], -0.4, -2.85); rot(m[2], 0.2); rot(m[3], -0.2); boca = 'O'; tremor = 0.025; agach = 0.9; olhoS = 1.3; break;
-        case 'nada': rot(m[0], 0.5 + Math.sin(tf * 4) * 0.4, 0.6); rot(m[1], -0.5 - Math.sin(tf * 4) * 0.4, -0.6); rot(m[2], Math.sin(tf * 4) * 0.4); rot(m[3], -Math.sin(tf * 4) * 0.4); boca = 'O'; break;
-        default: rot(m[0], Math.sin(tf * 1.4) * 0.05, 0.1); rot(m[1], -Math.sin(tf * 1.4) * 0.05, -0.1); rot(m[2], 0); rot(m[3], 0);
+        case 'corre': anda(11, 1.0); cE = cD = 1.5; inclina = 0.22; boca = 'O'; break;
+        case 'surpreso': rot(m[0], -0.2, 1.1 + Math.sin(tf * 9) * 0.08); rot(m[1], -0.2, -1.1 - Math.sin(tf * 9) * 0.08); cE = cD = 1.2; rot(m[2], 0); rot(m[3], 0); boca = 'O'; olhoS = 1.3; bob = Math.max(0, U.mola(k * 3, 10) - 0.9) * 0.6; cabY *= 0.2; break;
+        case 'frio': rot(m[0], -0.5, -0.35); rot(m[1], -0.5, 0.35); cE = cD = 1.9; rot(m[2], 0); rot(m[3], 0); jE = jD = 0.12; tremor = 0.03; boca = 'reta'; agach = 0.96; cabY *= 0.3; break;
+        case 'calor': rot(m[0], 0.05, 0.2); rot(m[1], -1.2 + Math.sin(tf * 14) * 0.25, -0.35); cD = 1.6; rot(m[2], 0); rot(m[3], 0); boca = 'O';
+          u.suor.forEach((s, j) => { s.visible = true; const q = (tf * 0.9 + j / 3) % 1; s.position.set(-0.35 + j * 0.35, 0.3 - q * 0.9, 0.3); }); break;
+        case 'aponta': rot(m[0], 0, 0.15); rot(m[1], -1.45, -0.2); cD = 0.05; rot(m[2], 0); rot(m[3], 0); cabX = -0.1; cabY = 0.15; boca = 'O'; break;
+        case 'olha_cima': rot(m[0], 0, 0.15); rot(m[1], -0.25, -0.15); cD = 0.9; rot(m[2], 0); rot(m[3], 0); cabX = -0.5; cabY *= 0.3; boca = 'O'; olhoS = 1.2; break;
+        case 'comemora': { const s = Math.abs(Math.sin(tf * 7)); rot(m[0], 0, 2.5 + s * 0.2); rot(m[1], 0, -2.5 - s * 0.2); cE = cD = 0.3; rot(m[2], 0); rot(m[3], 0); jE = jD = s * 0.4; bob = s * 0.3; break; }
+        case 'flutua': rot(m[0], 0.3, 1.2 + Math.sin(tf) * 0.2); rot(m[1], -0.3, -1.2 - Math.sin(tf) * 0.2); rot(m[2], 0.4, 0.25); rot(m[3], -0.3, -0.25); jE = 0.6; jD = 0.3; boca = 'O'; break;
+        case 'sufoca': rot(m[0], -0.9, -0.25); rot(m[1], -0.9, 0.25); cE = cD = 2.0; rot(m[2], 0); rot(m[3], 0); boca = 'O'; inclina = Math.sin(tf * 3) * 0.12; agach = 0.95; jE = jD = 0.2; break;
+        case 'medo': rot(m[0], -0.6, 0.5); rot(m[1], -0.6, -0.5); cE = cD = 2.1; rot(m[2], 0.15); rot(m[3], -0.15); jE = jD = 0.35; boca = 'O'; tremor = 0.02; agach = 0.92; olhoS = 1.3; cabY *= 0.4; break;
+        case 'nada': rot(m[0], 0.5 + Math.sin(tf * 4) * 0.4, 0.6); rot(m[1], -0.5 - Math.sin(tf * 4) * 0.4, -0.6); cE = cD = 0.5; rot(m[2], Math.sin(tf * 4) * 0.4); rot(m[3], -Math.sin(tf * 4) * 0.4); jE = 0.3 + Math.sin(tf * 4) * 0.2; jD = 0.3 - Math.sin(tf * 4) * 0.2; boca = 'O'; break;
+        default: {
+          // PARADO nao e' estatico: troca o peso e, quando a narracao fala, a mao da vez GESTICULA
+          rot(m[0], Math.sin(tf * 1.4) * 0.05, 0.12); rot(m[1], -Math.sin(tf * 1.4) * 0.05, -0.12); rot(m[2], 0, -0.03 * peso); rot(m[3], 0, -0.03 * peso);
+          jE = 0.04 + Math.max(0, peso) * 0.12; jD = 0.04 + Math.max(0, -peso) * 0.12;
+          if (fala > 0) { const b = u.mao, gesto = Math.sin(tf * 2.3) * 0.5 + 0.5;
+            rot(m[b], -0.55 - gesto * 0.35, (b ? -1 : 1) * (0.25 + gesto * 0.15)); if (b) cD = 1.3 + Math.sin(tf * 4.1) * 0.25; else cE = 1.3 + Math.sin(tf * 4.1) * 0.25; }
+        }
       }
       if (modo !== 'calor') u.suor.forEach((s) => { s.visible = false; });
-      u.corpo.position.y = bob; u.corpo.rotation.x = inclina; u.corpo.scale.y = agach * (1 + Math.sin(tf * 2.2) * 0.012);
-      u.corpo.position.x = tremor ? Math.sin(tf * 60) * tremor : 0;
-      u.cabeca.rotation.x = cabX; u.cabeca.rotation.z = cabZ;
-      // piscar: 0,12 s a cada ~3,7 s
-      const pisca = ((tf % 3.7) < 0.12) ? 0.12 : 1;
-      u.olhos.forEach((o, j) => { if (j % 2 === 0) o.scale.set(olhoS, olhoS * pisca, olhoS); else o.visible = pisca === 1; });
-      u.bocaRiso.visible = boca === 'riso'; u.bocaO.visible = boca === 'O'; u.bocaReta.visible = boca === 'reta';
-      // v4: sobrancelha expressa -- sobe no susto/medo (olho grande), franze no frio/sufoco (boca reta), relaxa no resto
+      dobra(cot[0], cE); dobra(cot[1], cD); flex(joe[0], jE); flex(joe[1], jD);
+      // abaixa o corpo o quanto os joelhos dobram (o pe nao afunda no chao)
+      const dobraJ = Math.min(jE, jD), desce = 0.4 * (1 - Math.cos(dobraJ)) * 0.9;
+      u.corpo.position.y = bob - desce; u.corpo.rotation.x = inclina; u.corpo.scale.y = agach;
+      u.corpo.position.x = (tremor ? Math.sin(tf * 60) * tremor : 0) + (modo === 'parado' || !modo ? peso * 0.025 : 0);
+      u.corpo.rotation.z = modo === 'parado' || !modo ? -peso * 0.025 : 0;
+      if (u.tronco) { const resp = Math.sin(tf * 2.2); u.tronco.scale.set(1 + resp * 0.012, 1 + resp * 0.018, 1 + resp * 0.02); }
+      u.cabeca.rotation.x = cabX; u.cabeca.rotation.z = cabZ; u.cabeca.rotation.y = cabY;
+      // olhos acompanham a cabeca (as pupilas olham antes); piscar fecha a PALPEBRA
+      const pisca = ((tf % 3.7) < 0.13);
+      u.olhos.forEach((o, j) => { if (j % 2 === 0) { o.scale.setScalar(olhoS); if (o.userData.iris) o.userData.iris.position.x = cabY * 0.04; } else o.visible = !pisca; });
+      if (u.palp) u.palp.forEach((pl) => { pl.rotation.x = pisca ? 1.45 : 0.1 - (olhoS - 1) * 0.6; });
+      // boca: quando a narracao fala, abre e fecha no ritmo das silabas
+      const falaAgora = fala > 0 && boca !== 'O';
+      u.bocaRiso.visible = boca === 'riso' && !falaAgora; u.bocaO.visible = boca === 'O' || falaAgora; u.bocaReta.visible = boca === 'reta' && !falaAgora;
+      u.bocaO.scale.set(1, falaAgora ? 0.35 + 0.65 * Math.abs(Math.sin(tf * 13)) : 1, 1);
       if (u.sobr) u.sobr.forEach((s, j) => { const lado = j ? 1 : -1, susto = olhoS > 1.15, tenso = boca === 'reta';
-        s.position.y = 0.17 + (susto ? 0.045 : boca === 'O' ? 0.02 : 0); s.rotation.z = Math.PI / 2 + lado * (susto ? -0.28 : tenso ? 0.32 : 0.12); });
+        s.position.y = 0.17 + (susto ? 0.045 : boca === 'O' ? 0.02 : 0) + (falaAgora ? 0.01 * Math.sin(tf * 3) : 0); s.rotation.z = Math.PI / 2 + lado * (susto ? -0.28 : tenso ? 0.32 : 0.12); });
     }
+    // a narracao esta falando em t? (boca e gesto do protagonista)
+    const PAL = Array.isArray(spec.palavras) ? spec.palavras : [];
+    function falaEm(t) { let lo = 0, hi = PAL.length - 1; while (lo <= hi) { const mid = (lo + hi) >> 1, w = PAL[mid]; if (t < w.ini) hi = mid - 1; else if (t > w.fim) lo = mid + 1; else return 1; } return 0; }
 
     // ------------------------------------------------------------- cenarios
     // Cada cena e' um DIORAMA: um disco de terra flutuando no ceu, com borda de
@@ -529,7 +575,7 @@
     function animarCriados(o, k, t) {
       (o.criados || []).forEach((g) => {
         const u = g.userData.criado; let px = u.base.x, py = u.base.y, pz = u.base.z, rx = u.giro.x, ry = u.giro.y, rz = u.giro.z, s = u.esc, vis = true;
-        if (g.userData.ehPessoa) posar(g, (MODO[o.acao] || ['parado'])[0], t, k);   // v3: a pessoa criada pela IA tambem se mexe
+        if (g.userData.ehPessoa) posar(g, (MODO[o.acao] || ['parado'])[0], t, k, falaEm(t));   // v3: a pessoa criada pela IA tambem se mexe
         u.anim.forEach((a) => {
           const de = num(a.de, 0, 1, 0), ate = Math.max(de + 0.01, num(a.ate, 0, 1, 1)), q = U.suave((k - de) / (ate - de));
           if (a.mover) { const m = vet(a.mover, -40, 40, [0, 0, 0]); px += m[0] * q; py += m[1] * q; pz += m[2] * q; }
@@ -900,7 +946,7 @@
       const [mh, mf] = MODO[acao] || ['parado', 'parado'];
       o.gente.forEach((p, j) => {
         const u = p.userData, modo = j === 0 ? mh : mf;
-        posar(p, modo, t, k);
+        posar(p, modo, t, k, j === 0 ? falaEm(t) : 0);
         let y = u.y0 || 0, x = u.x0, z = u.z0;
         if (modo === 'anda' || modo === 'corre') {
           // andar EM VOLTA da praca: quem anda nao atravessa o mundo nem sai do quadro
@@ -996,6 +1042,90 @@
       if (nivel >= 5) { const a = 0.18 + 0.12 * Math.sin(t * 6); const g = c.createRadialGradient(W / 2, H / 2, H * 0.32, W / 2, H / 2, H * 0.7); g.addColorStop(0, 'rgba(232,71,60,0)'); g.addColorStop(1, 'rgba(232,71,60,' + a.toFixed(3) + ')'); c.fillStyle = g; c.fillRect(0, 0, W, H); }
       else if (nivel >= 3) { c.fillStyle = 'rgba(255,120,40,' + (0.035 * (nivel - 2)).toFixed(3) + ')'; c.fillRect(0, 0, W, H); }
     }
+    // ---------------------------------------------------------------- esquema
+    // 14/11 (dono: "na agua salgada ainda temos muito do mesmo; crie esquemas para explicar o que ele esta falando de
+    // forma visual, e cada entrada de informacao tem efeito sonoro"). `cena.esquema` (do roteiro):
+    //   {tipo:'passos', itens:[{icone, texto}]}      2-3 icones ligados por setas (causa -> efeito)
+    //   {tipo:'barras', itens:[{texto, valor}], unidade?, sem_valor?}   comparacao que cresce
+    //   {tipo:'medidor', texto, valor, max?, unidade?}                    ponteiro que sobe
+    // Cada item entra em ini + 0,35 + j*0,55 s (o som de cada entrada sai em montar_web.eventos_sonoros, mesmo tempo).
+    const ESQ_T0 = 0.35, ESQ_DT = 0.55;
+    const ICONES_ESQ = {
+      gota: (g) => { g.beginPath(); g.moveTo(0, -0.85); g.bezierCurveTo(0.55, -0.15, 0.62, 0.2, 0.55, 0.38); g.arc(0, 0.32, 0.56, 0.1, Math.PI - 0.1); g.bezierCurveTo(-0.62, 0.2, -0.55, -0.15, 0, -0.85); g.fill(); },
+      sal: (g) => { [[-0.35, 0.25], [0.3, 0.3], [0, -0.2], [-0.45, -0.35], [0.45, -0.25]].forEach(([x, y], j) => { g.save(); g.translate(x, y); g.rotate(j * 0.5); g.fillRect(-0.18, -0.18, 0.36, 0.36); g.restore(); }); },
+      copo: (g) => { g.beginPath(); g.moveTo(-0.5, -0.7); g.lineTo(0.5, -0.7); g.lineTo(0.38, 0.75); g.lineTo(-0.38, 0.75); g.closePath(); g.globalAlpha = 0.35; g.fill(); g.globalAlpha = 1; g.beginPath(); g.moveTo(-0.45, -0.1); g.lineTo(0.45, -0.1); g.lineTo(0.38, 0.75); g.lineTo(-0.38, 0.75); g.closePath(); g.fill(); },
+      rim: (g) => { [-1, 1].forEach((s) => { g.beginPath(); g.ellipse(s * 0.38, 0, 0.3, 0.55, 0, 0, Math.PI * 2); g.fill(); }); },
+      sol: (g) => { g.beginPath(); g.arc(0, 0, 0.42, 0, Math.PI * 2); g.fill(); g.lineWidth = 0.14; for (let j = 0; j < 8; j++) { const a = j * Math.PI / 4; g.beginPath(); g.moveTo(Math.cos(a) * 0.58, Math.sin(a) * 0.58); g.lineTo(Math.cos(a) * 0.85, Math.sin(a) * 0.85); g.stroke(); } },
+      fogo: (g) => { g.beginPath(); g.moveTo(0, -0.9); g.bezierCurveTo(0.5, -0.3, 0.7, 0.1, 0.5, 0.5); g.quadraticCurveTo(0.2, 0.85, 0, 0.85); g.quadraticCurveTo(-0.2, 0.85, -0.5, 0.5); g.bezierCurveTo(-0.7, 0.1, -0.3, -0.2, -0.15, -0.45); g.bezierCurveTo(-0.05, -0.2, 0.1, -0.45, 0, -0.9); g.fill(); },
+      nuvem: (g) => { [[-0.4, 0.15, 0.32], [0, -0.1, 0.42], [0.42, 0.15, 0.32], [0, 0.25, 0.35]].forEach(([x, y, r]) => { g.beginPath(); g.arc(x, y, r, 0, Math.PI * 2); g.fill(); }); },
+      pessoa: (g) => { g.beginPath(); g.arc(0, -0.52, 0.28, 0, Math.PI * 2); g.fill(); g.beginPath(); g.moveTo(-0.5, 0.85); g.quadraticCurveTo(-0.5, -0.15, 0, -0.15); g.quadraticCurveTo(0.5, -0.15, 0.5, 0.85); g.closePath(); g.fill(); },
+      alerta: (g) => { g.beginPath(); g.moveTo(0, -0.85); g.lineTo(0.85, 0.7); g.lineTo(-0.85, 0.7); g.closePath(); g.fill(); g.fillStyle = '#FFFFFF'; g.fillRect(-0.08, -0.35, 0.16, 0.6); g.beginPath(); g.arc(0, 0.45, 0.1, 0, Math.PI * 2); g.fill(); },
+      relogio: (g) => { g.lineWidth = 0.16; g.beginPath(); g.arc(0, 0, 0.72, 0, Math.PI * 2); g.stroke(); g.beginPath(); g.moveTo(0, 0); g.lineTo(0, -0.45); g.moveTo(0, 0); g.lineTo(0.32, 0.12); g.stroke(); },
+      check: (g) => { g.lineWidth = 0.26; g.lineCap = 'round'; g.beginPath(); g.moveTo(-0.6, 0.05); g.lineTo(-0.15, 0.5); g.lineTo(0.65, -0.45); g.stroke(); },
+      x: (g) => { g.lineWidth = 0.26; g.lineCap = 'round'; g.beginPath(); g.moveTo(-0.55, -0.55); g.lineTo(0.55, 0.55); g.moveTo(0.55, -0.55); g.lineTo(-0.55, 0.55); g.stroke(); },
+      seta_cima: (g) => { g.beginPath(); g.moveTo(0, -0.85); g.lineTo(0.7, 0); g.lineTo(0.25, 0); g.lineTo(0.25, 0.8); g.lineTo(-0.25, 0.8); g.lineTo(-0.25, 0); g.lineTo(-0.7, 0); g.closePath(); g.fill(); },
+      seta_baixo: (g) => { g.save(); g.rotate(Math.PI); ICONES_ESQ.seta_cima(g); g.restore(); },
+      onda: (g) => { g.lineWidth = 0.18; g.lineCap = 'round'; [-0.35, 0.05, 0.45].forEach((y) => { g.beginPath(); for (let x = -0.8; x <= 0.8; x += 0.05) g.lineTo(x, y + Math.sin(x * 6) * 0.12); g.stroke(); }); },
+      graos: (g) => { for (let j = 0; j < 14; j++) { const a = j * 2.4, r = 0.18 + (j % 4) * 0.17; g.beginPath(); g.arc(Math.cos(a) * r, Math.sin(a) * r, 0.11, 0, Math.PI * 2); g.fill(); } },
+      casa: (g) => { g.beginPath(); g.moveTo(0, -0.8); g.lineTo(0.8, -0.1); g.lineTo(0.6, -0.1); g.lineTo(0.6, 0.75); g.lineTo(-0.6, 0.75); g.lineTo(-0.6, -0.1); g.lineTo(-0.8, -0.1); g.closePath(); g.fill(); g.fillStyle = '#FFFFFF'; g.fillRect(-0.15, 0.25, 0.3, 0.5); },
+      raio: (g) => { g.beginPath(); g.moveTo(0.2, -0.9); g.lineTo(-0.45, 0.1); g.lineTo(-0.02, 0.1); g.lineTo(-0.2, 0.9); g.lineTo(0.5, -0.15); g.lineTo(0.05, -0.15); g.closePath(); g.fill(); },
+    };
+    const COR_ICONE = { gota: '#2E86DE', sal: '#9AA5B1', copo: '#2E86DE', rim: '#C0392B', sol: '#F39C12', fogo: '#E8473C', nuvem: '#95A5A6', pessoa: '#3E7CB1', alerta: '#E8473C',
+      relogio: '#1B1B1B', check: '#27AE60', x: '#E8473C', seta_cima: '#27AE60', seta_baixo: '#E8473C', onda: '#2E86DE', graos: '#C49A5E', casa: '#8E6CCF', raio: '#F2B705' };
+    function esquema(cn, t) {
+      const e = cn.esquema; if (!e || typeof e !== 'object') return false;
+      const local = t - cn.ini, D = cn.fim - cn.ini; if (local < ESQ_T0 - 0.05) return true;
+      const sai = U.clamp((local - (D - 0.25)) / 0.25, 0, 1);
+      const y0 = (spec.titulo && t < 3.3) ? 640 : 400;
+      c.save(); c.globalAlpha = 1 - sai;
+      const itens = (Array.isArray(e.itens) ? e.itens : []).slice(0, 3);
+      const caixa = (w, h) => { U.rr(c, W / 2 - w / 2, y0 - h / 2, w, h, 34); c.fillStyle = 'rgba(255,255,255,0.93)'; c.fill(); c.lineWidth = 6; c.strokeStyle = '#1B1B1B'; c.stroke(); };
+      const fonte = (px) => { c.font = px + 'px "Lilita One", sans-serif'; c.textAlign = 'center'; c.textBaseline = 'middle'; };
+      if (e.tipo === 'barras' && itens.length) {
+        const h = 70 + itens.length * 92; caixa(W * 0.84, h);
+        const vmax = Math.max(...itens.map((it) => Math.abs(Number(it.valor) || 0)), 1e-9);
+        itens.forEach((it, j) => {
+          const q = U.saida(U.clamp((local - ESQ_T0 - j * ESQ_DT) / 0.6, 0, 1)); if (q <= 0) return;
+          const y = y0 - h / 2 + 62 + j * 92, x0 = W / 2 - W * 0.84 / 2 + 40, Lmax = W * 0.84 - 80;
+          fonte(40); c.textAlign = 'left'; c.fillStyle = '#1B1B1B'; c.fillText(String(it.texto || '').toUpperCase().slice(0, 30), x0, y - 22, Lmax);
+          const L = Math.max(8, Lmax * (Math.abs(Number(it.valor) || 0) / vmax) * q);
+          U.rr(c, x0, y, Lmax, 30, 15); c.fillStyle = 'rgba(0,0,0,0.12)'; c.fill();
+          U.rr(c, x0, y, L, 30, 15); c.fillStyle = j === 0 ? '#E8473C' : '#2E86DE'; c.fill();
+          if (!e.sem_valor) { const v = (Number(it.valor) || 0) * q; fonte(36); c.textAlign = 'right'; c.fillStyle = '#1B1B1B';
+            c.fillText((Math.abs(v) >= 10 ? Math.round(v) : v.toFixed(1)).toString().replace('.', ',') + (e.unidade ? ' ' + e.unidade : ''), x0 + Lmax, y - 22); }
+        });
+      } else if (e.tipo === 'medidor') {
+        caixa(W * 0.62, 250);
+        const q = U.saida(U.clamp((local - ESQ_T0) / 1.0, 0, 1)), vmax = Number(e.max) || 100, v = U.clamp((Number(e.valor) || 0) / vmax, 0, 1) * q;
+        const cx = W / 2, cy = y0 + 22, R = 100;
+        c.lineWidth = 34; c.lineCap = 'round';
+        c.beginPath(); c.arc(cx, cy, R, Math.PI, 2 * Math.PI); c.strokeStyle = 'rgba(0,0,0,0.12)'; c.stroke();
+        const gr = c.createLinearGradient(cx - R, 0, cx + R, 0); gr.addColorStop(0, '#5DBB63'); gr.addColorStop(0.5, '#FFD23F'); gr.addColorStop(1, '#E8473C');
+        c.beginPath(); c.arc(cx, cy, R, Math.PI, Math.PI + Math.PI * Math.max(0.001, v)); c.strokeStyle = gr; c.stroke();
+        const a = Math.PI + Math.PI * v; c.lineWidth = 8; c.strokeStyle = '#1B1B1B'; c.beginPath(); c.moveTo(cx, cy); c.lineTo(cx + Math.cos(a) * (R - 10), cy + Math.sin(a) * (R - 10)); c.stroke();
+        c.beginPath(); c.arc(cx, cy, 14, 0, Math.PI * 2); c.fillStyle = '#1B1B1B'; c.fill();
+        fonte(42); c.fillStyle = '#1B1B1B'; c.fillText(String(e.texto || '').toUpperCase().slice(0, 28), cx, y0 - 100, W * 0.56);
+        fonte(50); c.fillText(Math.round((Number(e.valor) || 0) * q) + (e.unidade ? ' ' + e.unidade : '%'), cx, cy + 62);
+      } else if (itens.length) {
+        const n = itens.length, w = W * 0.86, h = 250, passo = w / n; caixa(w, h);
+        itens.forEach((it, j) => {
+          const tj = local - ESQ_T0 - j * ESQ_DT; if (tj < 0) return;
+          const s = U.mola(tj, 10), cx = W / 2 - w / 2 + passo * (j + 0.5), cy = y0 - 30;
+          if (j > 0) { const ax = cx - passo / 2, q = U.saida(U.clamp(tj / 0.25, 0, 1)); c.save(); c.translate(ax - 26 + 10 * q, cy); c.fillStyle = '#1B1B1B';
+            c.beginPath(); c.moveTo(-14, -16); c.lineTo(14, 0); c.lineTo(-14, 16); c.closePath(); c.globalAlpha *= q; c.fill(); c.restore(); }
+          c.save(); c.translate(cx, cy); c.scale(s, s);
+          c.beginPath(); c.arc(0, 0, 70, 0, Math.PI * 2); c.fillStyle = '#F3F5F8'; c.fill(); c.lineWidth = 5; c.strokeStyle = '#1B1B1B'; c.stroke();
+          const ic = ICONES_ESQ[it.icone] || ICONES_ESQ.alerta, cor = COR_ICONE[it.icone] || '#1B1B1B';
+          c.save(); c.scale(46, 46); c.fillStyle = c.strokeStyle = cor; c.lineWidth = 0.15; ic(c); c.restore();
+          c.restore();
+          c.save(); c.globalAlpha *= U.clamp(tj / 0.2, 0, 1); fonte(n > 2 ? 34 : 40); c.fillStyle = '#1B1B1B';
+          const linhas = U.linhas(c, String(it.texto || '').toUpperCase().slice(0, 34), passo - 24).slice(0, 2);
+          linhas.forEach((l, q) => c.fillText(l, cx, y0 + 70 + q * 36 - (linhas.length - 1) * 10, passo - 20)); c.restore();
+        });
+      }
+      c.restore();
+      return true;
+    }
     // O CARTAO DO NUMERO: conta de 0 ate o valor em 0,7 s, com mola na entrada.
     function cartaoNumero(cn, t) {
       const txt = cn.hudV2; if (!txt) return;
@@ -1036,7 +1166,7 @@
       tinta(cenas[i], k);
       perigo(i, t, local);
       seloTempo(cn, t);
-      cartaoNumero(cn, t);
+      if (!esquema(cn, t)) cartaoNumero(cn, t);   // com esquema, o numero ja esta nele
       U.cartaz(c, spec, t, { fonte: '84px "Lilita One", sans-serif', y: 170, fundo: '#FFD23F', borda: '#1B1B1B', cor: '#1B1B1B', altura_linha: 100, dur: 3.0 });
       U.legenda(c, spec, t, { fonte: '104px "Lilita One", sans-serif', y: H * 0.70, cor: '#FFFFFF', cor_ativa: '#FFD23F', contorno: 18, caixa: true, por_vez: 3 });
     }

@@ -283,6 +283,23 @@ def _clique():
     return _fade(estalo * 0.8 + blip * 0.45, ms=2)
 
 
+
+def _tique():
+    """14/11 (dono: "o timbre do toque esta muito alto, pode fazer gente pular o video"): o cronometro do quiz usava o
+    clique de interface (estalo acima de 2,8 kHz + blip de 1,9 kHz) uma vez por segundo. Este e' um "toc" de bloco de
+    madeira: grave (620/980 Hz), curto e macio, sem agudo."""
+    t = _t(0.09)
+    corpo = np.sin(2 * np.pi * 620 * t) * _exp(t, 0.018) + 0.35 * np.sin(2 * np.pi * 980 * t) * _exp(t, 0.01)
+    ataque = _passa_baixa(_ruido(len(t), 7), 1800) * _exp(t, 0.003) * 0.25
+    return _fade((corpo + ataque) * 0.8, ms=3)
+
+
+def _tique_tenso():
+    """Os 3 ultimos segundos do nivel: o mesmo toc, um pouco mais grave e com um baque leve (coracao), sem ficar agudo."""
+    t = _t(0.14)
+    corpo = np.sin(2 * np.pi * 520 * t) * _exp(t, 0.022) + 0.3 * np.sin(2 * np.pi * 85 * t) * _exp(t, 0.05)
+    return _fade(corpo * 0.9, ms=3)
+
 def _digitar():
     """Rajada de toques: mexendo no aplicativo, digitando a senha. Um
     clique solto lê como defeito de áudio; a rajada lê como alguém
@@ -411,7 +428,7 @@ CATALOGO = {
     "passo": _passo,
     "tremido": _tremido,
     # som de coisa
-    "clique": _clique, "toque": _clique,
+    "clique": _clique, "toque": _clique, "tique": _tique, "tique_tenso": _tique_tenso,
     "digitar": _digitar, "teclado": _digitar,
     "notificacao": _notificacao, "blim": _notificacao,
     "chaves": _chaves, "tilintar": _chaves,
@@ -429,6 +446,7 @@ CATALOGO = {
 # baque de uma queda tem que assustar, o pop de um dedo apontando não pode
 # tirar o ouvido da fala. Um lugar só para calibrar.
 GANHO_BASE = {
+    "tique": 0.30, "tique_tenso": 0.42,
     "susto": 1.00, "thud": 1.00, "boing": 0.85, "whoosh": 0.70,
     "rimshot": 0.95, "erro": 0.80, "plim": 0.70,
     "pop": 0.40, "tremido": 0.35, "passo": 0.30,
