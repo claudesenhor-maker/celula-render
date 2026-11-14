@@ -21,21 +21,29 @@ def gerar():
  if ' '.join(falas)!=texto:raise ValueError('As falas não correspondem ao texto completo')
  raiz=Path('estilo-copy-voz');raiz.mkdir(exist_ok=True);partes=raiz/'partes';partes.mkdir(exist_ok=True)
  cfg={'motor':'chatterbox','voice':'pt-BR-FranciscaNeural','lingua':'pt','ref_url':REF,'exaggeration':.40,'cfg_weight':.45,'temperature':.65}
+ # 14/11 (dono: "audio muito picado, nao e fluido como o exemplo"): era UMA sintese por frase + corte seco 0,12 s
+ # depois da ultima palavra -- a entonacao recomecava a cada frase. Agora: trechos de ate ~260 caracteres (2-4 frases,
+ # a entonacao corre dentro deles) e emenda com respiro natural de 0,22 s e fade curto, nunca corte seco.
  velocidade=1.06;marcas=[];inicio=0;logs=[]
- for i,fala in enumerate(falas):
-  p=partes/f'{i:02}.wav';mm=_sintetizar_local(fala,cfg,str(p),motor='chatterbox')
+ trechos=[];atual=''
+ for fala in falas:
+  if atual and len(atual)+1+len(fala)>260:trechos.append(atual);atual=fala
+  else:atual=(atual+' '+fala).strip()
+ if atual:trechos.append(atual)
+ for i,trecho in enumerate(trechos):
+  p=partes/f'{i:02}.wav';mm=_sintetizar_local(trecho,cfg,str(p),motor='chatterbox')
   fim=max((m['fim_s'] for m in mm),default=0)
-  if fim<=0:raise ValueError('Plano sem palavras alinhadas')
-  corte=min(duracao(p),fim+.12);out=partes/f'{i:02}-corte.wav'
-  subprocess.run(['ffmpeg','-v','error','-i',str(p),'-t',str(corte),'-ar','24000','-ac','1','-y',str(out)],check=True)
+  if fim<=0:raise ValueError('Trecho sem palavras alinhadas')
+  corte=min(duracao(p),fim+.22);out=partes/f'{i:02}-corte.wav'
+  subprocess.run(['ffmpeg','-v','error','-i',str(p),'-t',str(corte),'-af',f'afade=t=in:st=0:d=0.015,afade=t=out:st={max(0,corte-0.06):.3f}:d=0.06','-ar','24000','-ac','1','-y',str(out)],check=True)
   ds=duracao(out)
   marcas.extend({'text':m['palavra'],'offset':round((inicio+m['inicio_s'])/velocidade*10000000),'duration':round((m['fim_s']-m['inicio_s'])/velocidade*10000000)} for m in mm)
-  logs.append({'plano':i,'duracao_s':ds,'fim_alinhado_s':fim});inicio+=ds
-  print('Chatterbox plano',i+1,'/',len(falas),'s',round(ds,2),flush=True)
- (raiz/'concat.txt').write_text(''.join("file '"+str((partes/f'{i:02}-corte.wav').resolve())+"'\n" for i in range(len(falas))))
+  logs.append({'trecho':i,'caracteres':len(trecho),'duracao_s':ds,'fim_alinhado_s':fim});inicio+=ds
+  print('Chatterbox trecho',i+1,'/',len(trechos),'s',round(ds,2),flush=True)
+ (raiz/'concat.txt').write_text(''.join("file '"+str((partes/f'{i:02}-corte.wav').resolve())+"'\n" for i in range(len(trechos))))
  subprocess.run(['ffmpeg','-v','error','-f','concat','-safe','0','-i',str(raiz/'concat.txt'),'-af',f'atempo={velocidade}','-c:a','libmp3lame','-b:a','160k','-y',str(raiz/'voz-continua.mp3')],check=True)
  (raiz/'palavras.json').write_text(json.dumps(marcas,ensure_ascii=False))
- (raiz/'proveniencia.json').write_text(json.dumps({'motor':'chatterbox','idioma':'pt','referencia':REF,'origem':'Banco de vozes do projeto (banco_vozes pt/S4M4JhZIzYGUlDsYIOow, Elena Vinter, aprovada nota 10); clone Chatterbox local, sem custo','texto_sha256':hashlib.sha256(texto.encode()).hexdigest(),'velocidade':velocidade,'metodo':'por-plano-com-corte-apos-ultima-palavra','planos':logs},ensure_ascii=False,indent=2))
+ (raiz/'proveniencia.json').write_text(json.dumps({'motor':'chatterbox','idioma':'pt','referencia':REF,'origem':'Banco de vozes do projeto (banco_vozes pt/S4M4JhZIzYGUlDsYIOow, Elena Vinter, aprovada nota 10); clone Chatterbox local, sem custo','texto_sha256':hashlib.sha256(texto.encode()).hexdigest(),'velocidade':velocidade,'metodo':'trechos-de-260-caracteres-com-respiro-e-fade','planos':logs},ensure_ascii=False,indent=2))
  import shutil
  shutil.rmtree(partes);(raiz/'concat.txt').unlink()
  print('Narração gerada; palavras:',len(marcas),flush=True)
