@@ -307,7 +307,7 @@
     const PM = {};
     const MP = (cor, o) => {
       o = o || {}; const k = cor + JSON.stringify(o);
-      if (!PM[k]) PM[k] = new T.MeshLambertMaterial({ color: cor, emissive: o.emis || '#000000', transparent: !!o.op, opacity: o.op || 1, depthWrite: !o.op });
+      if (!PM[k]) PM[k] = new T.MeshPhongMaterial({ color: cor, emissive: o.emis || '#000000', specular: '#2A2A2A', shininess: 22, transparent: !!o.op, opacity: o.op || 1, depthWrite: !o.op });   // v9: brilho suave de boneco (era Lambert chapado + contorno preto)
       return PM[k];
     };
     const GP = {};
@@ -404,9 +404,6 @@
       const suor = []; for (let k = 0; k < 3; k++) { const s = mesh(esfera(0.055), MP('#7CC7FF'), 0, 0, 0, cabeca); s.scale.set(0.8, 1.2, 0.8); s.visible = false; suor.push(s); }
       // v6 (14/11, dono: "melhore a qualidade do personagem"): CONTORNO de desenho animado -- casco invertido escuro em
       // cada peca visivel (olho, boca e brilho ficam sem: ja' sao detalhes de contorno)
-      const cascos = []; g.traverse((o) => { if (!o.isMesh || !o.geometry || o.userData.semContorno) return; if (!o.geometry.boundingSphere) o.geometry.computeBoundingSphere();
-        const r0 = o.geometry.boundingSphere.radius * Math.max(o.scale.x, o.scale.y, o.scale.z); if (r0 < 0.045) return; cascos.push([o, r0]); });
-      cascos.forEach(([o, r0]) => { const h = new T.Mesh(o.geometry, MAT_CONTORNO); h.userData.liso = true; h.userData.semContorno = true; h.scale.setScalar(1 + 0.034 / r0); o.add(h); });
       g.traverse((o) => { if (o.isMesh) o.castShadow = true; });
       g.userData = { corpo, tronco, cabeca, membros, cot, joe, olhos, palp, sobr, bocaRiso, bocaO, bocaReta, suor, fase: r() * 10, mao: r() < 0.5 ? 0 : 1 };
       return sombra(g);
@@ -1231,6 +1228,119 @@
       const ls = U.linhas(g, String(txt || '').toUpperCase(), 330).slice(0, 3), w = Math.max(...ls.map((l) => g.measureText(l).width)) + 50, h = ls.length * 58 + 34;
       U.rr(g, -10, -h / 2, w, h, 26); g.fillStyle = cor || '#FFD23F'; g.fill(); g.fillStyle = '#111'; ls.forEach((l, q) => g.fillText(l, 15, -h / 2 + 46 + q * 58)); g.restore();
     }
+    // ---------------------------------------------------------------------------------------------------------------
+    // CORPO v3 (14/11 noite, dono: "a explicacao esta ruim, os orgaos sao um monte de bolinha sem ligacao, melhore o
+    // esquema do corpo"). Antes: silhueta pequena no terco de cima + elipses soltas. Agora: BUSTO GRANDE (cabeca ao
+    // quadril, ~1050 px) com os SISTEMAS LIGADOS -- boca > esofago > estomago > intestino; coracao > aorta > arterias
+    // renais > rins > ureteres > bexiga > saida -- e o FLUXO correndo por dentro dos tubos (gotas e graos de sal), o
+    // estomago e a bexiga enchendo, o rim trabalhando. Tudo calculado de t (sem estado).
+    const KC = 1.25, CX3 = 360, Y3 = 235;
+    const PC = (x, y) => [CX3 + x * KC, Y3 + y * KC];
+    const CAM = {
+      entrada: [[300, 20], [200, 95], [90, 140], [0, 150]],
+      esofago: [[0, 150], [0, 215], [0, 330], [8, 385], [22, 410]],
+      intestino: [[30, 505], [-40, 520], [-88, 560], [-70, 610], [10, 612], [80, 618], [92, 662], [30, 690], [-60, 684], [-86, 722], [-30, 752], [40, 748]],
+      absorve: [[60, 470], [20, 480], [-6, 470]],
+      aorta: [[-30, 345], [-8, 380], [-4, 450], [-2, 560], [0, 700]],
+      renalE: [[-2, 548], [-70, 548], [-118, 556]], renalD: [[-2, 548], [70, 548], [118, 556]],
+      ureterE: [[-124, 600], [-112, 690], [-60, 760], [-26, 780]], ureterD: [[124, 600], [112, 690], [60, 760], [26, 780]],
+      saida: [[0, 826], [0, 880], [0, 960]],
+    };
+    const ORG3 = { boca: [0, 150], cerebro: [0, 70], estomago: [62, 448], sangue: [-4, 450], coracao: [-38, 322], pulmao: [92, 320], rins: [140, 556], bexiga: [0, 792], pele: [-228, 420], intestino: [0, 650] };
+    function noCaminho(pts, q) {   // ponto a fracao q (0..1) do comprimento
+      let tot = 0; const ds = []; for (let k = 1; k < pts.length; k++) { const d = Math.hypot(pts[k][0] - pts[k - 1][0], pts[k][1] - pts[k - 1][1]); ds.push(d); tot += d; }
+      let al = U.clamp(q, 0, 1) * tot; for (let k = 0; k < ds.length; k++) { if (al <= ds[k] || k === ds.length - 1) { const f = ds[k] ? U.clamp(al / ds[k], 0, 1) : 0; return PC(U.lerp(pts[k][0], pts[k + 1][0], f), U.lerp(pts[k][1], pts[k + 1][1], f)); } al -= ds[k]; }
+      return PC(pts[0][0], pts[0][1]);
+    }
+    function tubo(g, pts, larg, cor, aceso) {   // tubo com parede: traco escuro largo + miolo
+      g.save(); g.lineCap = 'round'; g.lineJoin = 'round';
+      const tr = () => { g.beginPath(); pts.forEach((p, k) => { const [x, y] = PC(p[0], p[1]); if (k) g.lineTo(x, y); else g.moveTo(x, y); }); g.stroke(); };
+      g.lineWidth = larg * KC + 8; g.strokeStyle = aceso ? 'rgba(255,255,255,0.95)' : 'rgba(160,200,255,0.4)'; tr();
+      g.lineWidth = larg * KC; g.strokeStyle = aceso ? cor : '#1B3A58'; tr(); g.restore();
+    }
+    function fluxo(g, pts, local, n, tipo, vel, tam, fase) {   // particulas dentro do tubo
+      for (let k = 0; k < n; k++) { const q = (((local * (vel || 0.5) + (fase || 0) + k / n) % 1) + 1) % 1, [x, y] = noCaminho(pts, q), a = Math.min(1, Math.sin(q * Math.PI) * 2.2);
+        g.save(); g.translate(x + Math.sin(q * 20 + k * 2.1) * 3, y); g.globalAlpha = a;
+        if (tipo === 'sal') { g.rotate(q * 9 + k); g.fillStyle = '#FFFFFF'; const s = tam || 11; g.fillRect(-s / 2, -s / 2, s, s); g.lineWidth = 2; g.strokeStyle = '#8FA3B5'; g.strokeRect(-s / 2, -s / 2, s, s); }
+        else { g.scale(tam || 13, tam || 13); g.fillStyle = tipo === 'urina' ? '#FFE066' : '#59B8FF'; ICONES_ESQ.gota(g); }
+        g.restore(); }
+    }
+    function forma(g, fn, cor, aceso, t, cx, cy) {   // orgao: preenchido quando aceso (pulsa), contorno claro sempre
+      const [x, y] = PC(cx, cy), pul = aceso ? 1 + 0.045 * Math.sin(t * 8) : 1;
+      g.save(); g.translate(x, y); g.scale(KC * pul, KC * pul); g.beginPath(); fn(g);
+      g.fillStyle = aceso ? cor : 'rgba(120,170,230,0.14)'; g.fill(); g.lineWidth = 5 / KC; g.strokeStyle = aceso ? '#FFFFFF' : 'rgba(160,200,255,0.55)'; g.stroke(); g.restore();
+    }
+    const F3 = {
+      estomago: (g) => { g.moveTo(-40, -38); g.bezierCurveTo(-20, -62, 45, -55, 52, -8); g.bezierCurveTo(58, 40, 10, 66, -28, 56); g.bezierCurveTo(-44, 52, -40, 36, -26, 34); g.bezierCurveTo(4, 30, 6, -4, -22, -14); g.bezierCurveTo(-36, -20, -46, -28, -40, -38); g.closePath(); },
+      rim: (s) => (g) => { g.moveTo(s * -14, -44); g.bezierCurveTo(s * 34, -52, s * 40, 44, s * -10, 46); g.bezierCurveTo(s * -30, 46, s * -30, 22, s * -14, 14); g.bezierCurveTo(s * -4, 6, s * -4, -8, s * -14, -16); g.bezierCurveTo(s * -30, -24, s * -30, -42, s * -14, -44); g.closePath(); },
+      bexiga: (g) => { g.moveTo(0, -36); g.bezierCurveTo(52, -36, 58, 30, 0, 38); g.bezierCurveTo(-58, 30, -52, -36, 0, -36); g.closePath(); },
+      coracao: (g) => { g.moveTo(0, 40); g.bezierCurveTo(-70, -6, -38, -58, 0, -24); g.bezierCurveTo(38, -58, 70, -6, 0, 40); g.closePath(); },
+      pulmao: (s) => (g) => { g.moveTo(s * 18, -100); g.bezierCurveTo(s * 80, -90, s * 96, 40, s * 78, 96); g.bezierCurveTo(s * 50, 112, s * 22, 92, s * 22, 60); g.bezierCurveTo(s * 20, 10, s * 8, -60, s * 18, -100); g.closePath(); },
+      cerebro: (g) => { g.moveTo(-58, 6); g.bezierCurveTo(-66, -40, -20, -58, 0, -44); g.bezierCurveTo(24, -60, 68, -38, 58, 4); g.bezierCurveTo(60, 30, 20, 36, 0, 28); g.bezierCurveTo(-22, 36, -56, 30, -58, 6); g.closePath(); },
+    };
+    const BUSTO = U.camada(W, H, (g) => {   // corpo translucido: cabeca, pescoco, ombros, bracos ate' o cotovelo, tronco ate' o quadril (some em degrade)
+      const m = (x, y) => g.moveTo(...PC(x, y)), l = (x, y) => g.lineTo(...PC(x, y)), b = (a, b2, c2, d, e, f) => { const p1 = PC(a, b2), p2 = PC(c2, d), p3 = PC(e, f); g.bezierCurveTo(p1[0], p1[1], p2[0], p2[1], p3[0], p3[1]); };
+      const corpo = () => { g.beginPath(); m(-34, 172); l(-36, 214); b(-80, 236, -190, 232, -226, 270); b(-262, 310, -262, 420, -268, 640); l(-204, 640); b(-200, 520, -196, 420, -184, 352); b(-180, 460, -150, 560, -162, 650); b(-176, 730, -196, 800, -196, 900);
+        l(196, 900); b(196, 800, 176, 730, 162, 650); b(150, 560, 180, 460, 184, 352); b(196, 420, 200, 520, 204, 640); l(268, 640); b(262, 420, 262, 310, 226, 270); b(190, 232, 80, 236, 36, 214); l(34, 172); g.closePath(); };
+      const gr = g.createLinearGradient(0, Y3, 0, Y3 + 900 * KC); gr.addColorStop(0, 'rgba(110,170,255,0.22)'); gr.addColorStop(0.8, 'rgba(110,170,255,0.2)'); gr.addColorStop(1, 'rgba(110,170,255,0)');
+      g.fillStyle = gr; corpo(); g.fill();
+      const [hx, hy] = PC(0, 92); g.beginPath(); g.ellipse(hx, hy, 84 * KC, 96 * KC, 0, 0, Math.PI * 2); g.fill();
+      const gs = g.createLinearGradient(0, Y3, 0, Y3 + 900 * KC); gs.addColorStop(0, '#8EC1FF'); gs.addColorStop(0.82, '#8EC1FF'); gs.addColorStop(1, 'rgba(142,193,255,0)');
+      g.strokeStyle = gs; g.lineWidth = 7; g.lineJoin = 'round'; corpo(); g.stroke(); g.beginPath(); g.ellipse(hx, hy, 84 * KC, 96 * KC, 0, 0, Math.PI * 2); g.stroke();
+      // costelas e coluna, bem de leve: dao leitura de "por dentro"
+      g.strokeStyle = 'rgba(160,200,255,0.16)'; g.lineWidth = 5; for (let k = 0; k < 6; k++) { [-1, 1].forEach((s) => { g.beginPath(); m(s * 8, 262 + k * 30); b(s * 70, 250 + k * 30, s * 150, 268 + k * 30, s * 168, 300 + k * 30); g.stroke(); }); }
+    });
+    function etiqueta3(g, txt, x, y, ax, ay, s, cor) {
+      g.save(); g.lineWidth = 5; g.strokeStyle = '#FFFFFF'; g.beginPath(); g.moveTo(ax, ay); g.lineTo(x - 14, y); g.stroke(); g.beginPath(); g.arc(ax, ay, 10, 0, Math.PI * 2); g.fillStyle = '#FFFFFF'; g.fill();
+      g.translate(x, y); g.scale(s, s); g.font = '46px "Lilita One", sans-serif'; g.textAlign = 'left'; g.textBaseline = 'middle';
+      const ls = U.linhas(g, String(txt || '').toUpperCase(), 262).slice(0, 3), w = Math.max(...ls.map((q) => g.measureText(q).width)) + 44, h = ls.length * 52 + 30;
+      U.rr(g, -8, -h / 2, w, h, 24); g.fillStyle = cor || '#FFD23F'; g.fill(); g.lineWidth = 5; g.strokeStyle = '#111111'; g.stroke(); g.fillStyle = '#111111'; ls.forEach((q, k) => g.fillText(q, 14, -h / 2 + 42 + k * 52)); g.restore(); return h;
+    }
+    function corpoV3(e, itens, tj, local, t) {
+      const on = (nome) => { let q = -1; itens.forEach((it, j) => { if (it.alvo === nome && tj(j) >= 0) q = Math.max(q, tj(j)); }); return q; };
+      const A = {}; Object.keys(ORG3).forEach((k) => { A[k] = on(k); });
+      const sai = itens.some((it, j) => it.fluxo === 'sai' && tj(j) >= 0), entra = itens.some((it, j) => it.fluxo === 'entra' && tj(j) >= 0);
+      const digest = A.boca >= 0 || A.estomago >= 0, sang = A.sangue >= 0 || A.rins >= 0 || A.coracao >= 0, urin = A.rins >= 0 || A.bexiga >= 0;
+      c.drawImage(BUSTO, 0, 0);
+      forma(c, F3.cerebro, '#FFB3C7', A.cerebro >= 0, t, 0, 66);
+      [-1, 1].forEach((s) => forma(c, F3.pulmao(s), '#FF9FB0', A.pulmao >= 0, t, 0, 330));
+      // sistema circulatorio (atras): aorta + arterias renais
+      tubo(c, CAM.aorta, 15, '#E8394B', sang); tubo(c, CAM.renalE, 11, '#E8394B', sang); tubo(c, CAM.renalD, 11, '#E8394B', sang);
+      forma(c, F3.coracao, '#FF4A5E', sang, t * (sang ? 1 : 0), -38, 322);
+      // sistema urinario: rins > ureteres > bexiga > saida
+      tubo(c, CAM.ureterE, 8, '#F2C230', urin); tubo(c, CAM.ureterD, 8, '#F2C230', urin); tubo(c, CAM.saida.slice(0, 2), 9, '#F2C230', sai);
+      [-1, 1].forEach((s) => forma(c, F3.rim(-s), '#C8553D', A.rins >= 0, t + s, s * 140, 556));
+      // sistema digestivo (na frente): esofago > estomago > intestino
+      tubo(c, CAM.intestino, 20, '#E89A7A', digest && A.estomago >= 0); tubo(c, CAM.esofago, 15, '#E89A7A', digest);
+      forma(c, F3.estomago, '#F0A23E', A.estomago >= 0, t, 62, 448);
+      forma(c, F3.bexiga, '#F2C230', A.bexiga >= 0, t, 0, 792);
+      { const [bx, by] = PC(0, 150); c.save(); c.beginPath(); c.ellipse(bx, by, 30 * KC, (A.boca >= 0 ? 15 + 4 * Math.sin(t * 7) : 9) * KC, 0, 0, Math.PI * 2); c.fillStyle = A.boca >= 0 ? '#C8323F' : 'rgba(120,170,230,0.2)'; c.fill(); c.lineWidth = 5; c.strokeStyle = A.boca >= 0 ? '#FFFFFF' : 'rgba(160,200,255,0.55)'; c.stroke(); c.restore(); }
+      // nivel enchendo: estomago e bexiga
+      const nivel = (fn, cx, cy, q, cor, h) => { if (q <= 0) return; const [x, y] = PC(cx, cy); c.save(); c.translate(x, y); c.scale(KC, KC); c.beginPath(); fn(c); c.clip(); const k = U.saida(U.clamp(q / 1.4, 0, 1)), y0 = h - 2 * h * 0.78 * k;
+        c.beginPath(); c.moveTo(-80, 80); c.lineTo(-80, y0); for (let xx = -80; xx <= 80; xx += 10) c.lineTo(xx, y0 + Math.sin(xx * 0.12 + t * 5) * 3); c.lineTo(80, 80); c.closePath(); c.fillStyle = cor; c.fill(); c.restore(); };
+      nivel(F3.estomago, 62, 448, A.estomago, 'rgba(60,150,255,0.85)', 60); nivel(F3.bexiga, 0, 792, A.bexiga, 'rgba(255,240,150,0.9)', 38);
+      // fluxos
+      if (A.boca >= 0 || entra) { fluxo(c, CAM.entrada, local, 6, 'gota', 0.7, 15); fluxo(c, CAM.entrada, local, 4, 'sal', 0.7, 12, 0.13); }
+      if (digest) { fluxo(c, CAM.esofago, local, 5, 'gota', 0.6, 11); fluxo(c, CAM.esofago, local, 3, 'sal', 0.6, 10, 0.17); }
+      if (A.estomago >= 0) { const r = U.rng('salest'); for (let k = 0; k < 9; k++) { const [x, y] = PC(40 + r() * 50, 430 + r() * 50 + Math.sin(t * 2 + k) * 6); c.save(); c.globalAlpha = U.clamp(A.estomago * 1.5 - k * 0.12, 0, 1); c.translate(x, y); c.rotate(t + k); c.fillStyle = '#FFFFFF'; c.fillRect(-6, -6, 12, 12); c.restore(); } }
+      if (A.sangue >= 0) { fluxo(c, CAM.absorve, local, 4, 'sal', 0.9, 10); fluxo(c, CAM.aorta, local, 7, 'sal', 0.45, 10, 0.2); }
+      if (A.rins >= 0) { fluxo(c, CAM.renalE, local, 4, 'sal', 0.8, 9); fluxo(c, CAM.renalD, local, 4, 'sal', 0.8, 9, 0.3); fluxo(c, CAM.renalE, local, 3, 'gota', 0.8, 9, 0.5); fluxo(c, CAM.renalD, local, 3, 'gota', 0.8, 9, 0.8);
+        [-1, 1].forEach((s) => { const [x, y] = PC(s * 140, 556); c.save(); c.translate(x, y); c.rotate(t * 2.5 * s); c.strokeStyle = '#FFD23F'; c.lineWidth = 6; c.setLineDash([16, 14]); c.beginPath(); c.arc(0, 0, 66 * KC, 0, Math.PI * 2); c.stroke(); c.restore(); }); }
+      if (urin && (A.bexiga >= 0 || A.rins >= 0.6)) { fluxo(c, CAM.ureterE, local, 4, 'urina', 0.7, 9); fluxo(c, CAM.ureterD, local, 4, 'urina', 0.7, 9, 0.4); }
+      if (sai) fluxo(c, CAM.saida, local, 6, 'gota', 0.9, 15);
+      if (A.pele >= 0) { const r = U.rng('suor3'); for (let k = 0; k < 10; k++) { const lado = k % 2 ? 1 : -1, y0 = 300 + r() * 300, q = (local * 0.6 + r()) % 1, [x, y] = PC(lado * (232 + q * 70), y0 + q * 40); c.save(); c.globalAlpha = Math.sin(q * Math.PI); c.translate(x, y); c.scale(14, 14); c.fillStyle = '#59B8FF'; ICONES_ESQ.gota(c); c.restore(); } }
+      // etiquetas na coluna da direita, na altura do orgao, sem encostar uma na outra
+      let yAnt = e.balanco ? 330 : 230;
+      const vis = itens.map((it, j) => ({ it, j, q: tj(j), p: PC(...(ORG3[it.alvo] || ORG3.estomago)) })).sort((a, b) => a.p[1] - b.p[1]);
+      vis.forEach((v) => { const y = Math.max(yAnt + 200, Math.min(1150, v.p[1])); yAnt = y; if (v.q < 0) return;
+        const alvoX = v.it.alvo === 'rins' ? v.p[0] + 30 : v.it.alvo === 'pele' ? PC(232, 0)[0] : v.p[0] + 26;
+        etiqueta3(c, v.it.texto, 640, y, alvoX, v.p[1], U.mola(v.q, 10), v.it.fluxo === 'sai' ? '#7FD0FF' : '#FFD23F'); });
+      if (e.balanco) { const q = tj(itens.length); if (q > 0) { const s = U.saida(U.clamp(q / 0.6, 0, 1)), r2 = Number(e.balanco.razao) || 1.3, L = 250;
+        c.save(); c.translate(640, 330); c.font = '40px "Lilita One", sans-serif'; c.textAlign = 'left'; c.textBaseline = 'middle';
+        [[e.balanco.entra || 'ENTRA', 1 / r2, '#3DDC84'], [e.balanco.sai || 'SAI', 1, '#FF5A3C']].forEach(([txt, f, cor], k) => {
+          c.fillStyle = '#FFFFFF'; c.fillText(String(txt).toUpperCase(), 0, k * 76 - 24); U.rr(c, 0, k * 76, L, 28, 14); c.fillStyle = 'rgba(255,255,255,0.15)'; c.fill();
+          U.rr(c, 0, k * 76, Math.max(10, L * f * s), 28, 14); c.fillStyle = cor; c.fill(); }); c.restore(); } }
+    }
     // 14/11 (dono: "na tela de explicacao faca algo mais interativo e com mais sentido, explicando a explosao em si, nao
     // apenas bolinhas com um desenho e uma seta"). REACAO: simulacao num corte do comodo. `esquema`:
     //   {tipo:'reacao', fases:[{f:'nuvem'|'superficie'|'oxigenio'|'ignicao'|'pressao', texto}], particula?:'#E8D9B5'}
@@ -1302,22 +1412,7 @@
       const fonte = (px) => { c.font = px + 'px "Lilita One", sans-serif'; c.textAlign = 'center'; c.textBaseline = 'middle'; };
       if (e.tipo === 'reacao') { reacao(e, local, D, t); return true; }
       if (e.tipo === 'corpo') {
-        silhueta(c);
-        const acesos = new Set(itens.filter((it, j) => tj(j) >= 0).map((it) => it.alvo));
-        Object.keys(ORG).forEach((o) => { if (o !== 'pele' && o !== 'sangue') orgao(c, o, acesos.has(o), t); });
-        ['sangue', 'pele'].forEach((o) => { if (acesos.has(o)) orgao(c, o, true, t); });
-        itens.forEach((it, j) => { const q = tj(j); if (q < 0) return;
-          const [ox, oy] = ORG[it.alvo] || ORG.estomago, x = CX_C + ox, y = Y_C + oy, s = U.mola(q, 10);
-          if (it.fluxo === 'entra') particulas(c, [x + 260, y - 160], [CX_C, Y_C + 125], local, it.icone === 'sal' ? 'sal' : 'gota', 7);
-          if (it.fluxo === 'entra' && it.icone !== 'sal') particulas(c, [x + 300, y - 120], [CX_C, Y_C + 125], local + 0.5, 'sal', 4);
-          if (it.fluxo === 'sai') particulas(c, [x, y + 20], [x - 60, Y_C + 1020], local, 'gota', 8);
-          if (it.alvo === 'estomago' || it.alvo === 'sangue') particulas(c, [CX_C, Y_C + 160], [x, y], local, 'sal', 5);
-          etiqueta(c, it.texto, W - 400, Y_C + 60 + j * 230, x + (ox > 0 ? 60 : 30), y, s, it.fluxo === 'sai' ? '#7FD0FF' : '#FFD23F'); });
-        if (e.balanco) { const q = tj(itens.length); if (q > 0) { const s = U.saida(U.clamp(q / 0.6, 0, 1)), r2 = Number(e.balanco.razao) || 1.3, L = 360;
-          c.save(); c.translate(W - 410, 1210); fonte(40); c.textAlign = 'left';
-          [[e.balanco.entra || 'ENTRA', 1 / r2, '#3DDC84'], [e.balanco.sai || 'SAI', 1, '#FF5A3C']].forEach(([txt, f, cor], k) => {
-            c.fillStyle = '#FFF'; c.fillText(String(txt).toUpperCase(), 0, k * 80 - 22); U.rr(c, 0, k * 80, L, 30, 15); c.fillStyle = 'rgba(255,255,255,0.15)'; c.fill();
-            U.rr(c, 0, k * 80, Math.max(10, L * f * s), 30, 15); c.fillStyle = cor; c.fill(); }); c.restore(); } }
+        corpoV3(e, itens, tj, local, t);
       } else if (e.tipo === 'barras' && itens.length) {
         const vmax = Math.max(...itens.map((it) => Math.abs(Number(it.valor) || 0)), 1e-9), L = W - 200;
         itens.forEach((it, j) => { const q = U.saida(U.clamp(tj(j) / 0.7, 0, 1)); if (q <= 0) return; const y = 560 + j * 230, x0 = 100;

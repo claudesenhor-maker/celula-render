@@ -28,17 +28,41 @@
     // formas lisas e materiais de comum3d.js; ceu com nuvens; modelos prontos
     // com o detalhe que faz cada coisa ser reconhecida de longe.
     const T3 = !!window.U3;
-    if (T3) U3.estudio(R, sc, T, { exposicao: 1.1 });
+    if (T3) U3.estudio(R, sc, T, { exposicao: 0.86 });
     const FB = { caixa: () => new T.BoxGeometry(1, 1, 1), esfera: () => new T.IcosahedronGeometry(0.5, 2), cone: () => new T.ConeGeometry(0.5, 1, 9),
       cilindro: () => new T.CylinderGeometry(0.5, 0.5, 1, 14), icosa: () => new T.IcosahedronGeometry(0.5, 0), toro: () => new T.TorusGeometry(0.4, 0.12, 8, 20),
       piramide: () => new T.ConeGeometry(0.6, 1, 4) };
     const F = Object.assign(FB, T3 ? U3.formas(T) : {});
-    const M = (cor, tipo) => (T3 ? U3.material(T, cor, tipo || 'plastico') : new T.MeshStandardMaterial({ color: cor, roughness: 0.75, metalness: 0.05, flatShading: true }));
+    // v9 (14/11 noite, dono: "ja foi solicitado melhorar os detalhes dos objetos e ainda nao foi feito"). TRES causas no motor,
+    // nao nos modelos: (1) o material 'vidro' e' 68% transparente -- janela escura sobre a lataria SUMIA (onibus liso, casa
+    // sem janela, Empire State branco); aqui vidro e' OPACO e brilhante. (2) 'metal' (metalness 0,9) refletia a sala branca e
+    // lavava a cor da pintura; lataria agora e' tinta. (3) exposicao 1,1 + sol 1,5 estouravam o claro (tudo pastel).
+    const M0 = (cor, tipo) => (T3 ? U3.material(T, cor, tipo || 'plastico') : new T.MeshStandardMaterial({ color: cor, roughness: 0.75, metalness: 0.05, flatShading: true }));
+    const M = (cor, tipo) => {
+      if (!T3) return M0(cor, tipo);
+      if (tipo === 'vidro') { const m = new T.MeshStandardMaterial({ color: cor, roughness: 0.12, metalness: 0.35, envMap: U3._env, envMapIntensity: 0.55 }); m.color.convertSRGBToLinear(); return m; }
+      if (tipo === 'metal') { const m = U3.material(T, cor, 'plastico'); m.roughness = 0.4; m.metalness = 0.18; m.envMap = U3._env; m.envMapIntensity = 0.35; return m; }
+      return M0(cor, tipo);
+    };
+    // FACHADA: textura de parede com grade de janelas (algumas acesas), para predio que antes era bloco liso
+    const _fach = new Map();
+    function fachada(parede, cols, lins, opc) {
+      const o = opc || {}, key = [parede, cols, lins, o.vidro || '', o.faixa ? 1 : 0].join('|'); if (_fach.has(key)) return _fach.get(key);
+      const cw = 22, ch = 26, cv = document.createElement('canvas'); cv.width = cols * cw; cv.height = lins * ch; const g = cv.getContext('2d'), r = U.rng('fach' + key);
+      g.fillStyle = parede; g.fillRect(0, 0, cv.width, cv.height);
+      for (let y = 0; y < lins; y++) for (let x = 0; x < cols; x++) {
+        const q = r(); g.fillStyle = o.vidro ? (q > 0.8 ? '#CFE6F5' : q > 0.4 ? o.vidro : '#4E7391') : (q > 0.72 ? '#FFE9A8' : q > 0.3 ? '#31465C' : '#47627C');
+        if (o.faixa) g.fillRect(x * cw, y * ch + 5, cw, ch - 9); else g.fillRect(x * cw + 5, y * ch + 5, cw - 9, ch - 9);
+      }
+      g.fillStyle = 'rgba(0,0,0,0.16)'; for (let y = 0; y < lins; y++) g.fillRect(0, y * ch, cv.width, 2);
+      const t = new T.CanvasTexture(cv); if (T3) t.encoding = T.sRGBEncoding; t.anisotropy = 4; _fach.set(key, t); return t;
+    }
+    const comFachada = (m, parede, cols, lins, opc) => { const mt = new T.MeshStandardMaterial({ map: fachada(parede, cols, lins, opc), roughness: opc && opc.vidro ? 0.2 : 0.7, metalness: opc && opc.vidro ? 0.3 : 0, envMap: opc && opc.vidro ? U3._env : null, envMapIntensity: 0.5 }); m.material = mt; return m; };
     // ceu e chao
     sc.background = T3 ? U3.ceu(T, 11) : new T.Color('#9CCBF2');
-    sc.add(new T.HemisphereLight('#ffffff', '#6b7a5a', T3 ? 0.55 : 0.75));
-    const sol = new T.DirectionalLight('#FFF6E8', T3 ? 1.5 : 0.8); sol.position.set(0.5, 1, 0.8); sc.add(sol); sc.add(sol.target);
-    if (T3) { sol.castShadow = true; sol.shadow.mapSize.set(1024, 1024); sol.shadow.bias = -0.0008; }
+    sc.add(new T.HemisphereLight('#ffffff', '#6b7a5a', T3 ? 0.5 : 0.75));
+    const sol = new T.DirectionalLight('#FFF6E8', T3 ? 1.25 : 0.8); sol.position.set(0.5, 1, 0.8); sc.add(sol); sc.add(sol.target);
+    if (T3) { sol.castShadow = true; sol.shadow.mapSize.set(2048, 2048); sol.shadow.bias = -0.0006; sol.shadow.normalBias = 0.02; }
     // janelas acesas do predio (textura)
     function janelas(cor) {
       const cv = document.createElement('canvas'); cv.width = 64; cv.height = 256; const g = cv.getContext('2d'); const r = U.rng(9);
@@ -98,7 +122,7 @@
           add('esfera', cor || '#6BBA70', [0.08, 0.86, -0.03], [0.3, 0.26, 0.3]); break;
         case 'predio': {
           const m = new T.Mesh(F.caixa_viva ? F.caixa_viva() : F.caixa(), T3 ? U3.material(T, '#ffffff', 'ceramica') : M('#A8B8C8'));
-          const tx = janelas(cor || '#8FA3B8'); m.material.map = tx; m.material.needsUpdate = true; m.position.set(0, 0.5, 0); m.scale.set(0.3, 1, 0.3); g.add(m);
+          comFachada(m, cor || '#B9C3CE', 7, 22); m.position.set(0, 0.5, 0); m.scale.set(0.3, 1, 0.3); g.add(m);
           add('caixa', '#6F7C8A', [0, 1.01, 0], [0.32, 0.02, 0.32], null, 'metal'); add('caixa', '#9AA7B4', [0.05, 1.04, 0.04], [0.08, 0.05, 0.08], null, 'metal');
           add('cilindro', '#C8CED4', [-0.06, 1.08, -0.05], [0.006, 0.14, 0.006], null, 'aco'); break; }
         case 'torre':
@@ -201,7 +225,7 @@
           const aco = '#C9D3DC', vidro = '#7FA8C8';
           for (let k = 0; k < 14; k++) { const h0 = k * 0.055, f = 1 - k / 15, w = 0.16 * f + 0.02;
             [0, 120, 240].forEach((ang, j) => { if (k > 9 && j !== k % 3) return; const a = (ang * Math.PI) / 180;
-              add('caixa_viva', k % 2 ? vidro : aco, [Math.sin(a) * w * 0.55, h0 + 0.028, Math.cos(a) * w * 0.55], [w * 0.55, 0.056, w * 1.1], [0, ang, 0], 'vidro'); }); }
+              comFachada(add('caixa_viva', vidro, [Math.sin(a) * w * 0.55, h0 + 0.028, Math.cos(a) * w * 0.55], [w * 0.55, 0.056, w * 1.1], [0, ang, 0], 'vidro'), '#9FB4C6', 6, 5, { vidro: k % 2 ? '#6E9CC0' : '#86AFD0', faixa: true }); }); }
           add('cilindro', aco, [0, 0.4, 0], [0.05, 0.8, 0.05], null, 'metal');
           add('cilindro', aco, [0, 0.86, 0], [0.018, 0.28, 0.018], null, 'metal'); add('cone', aco, [0, 1.0, 0], [0.012, 0.02, 0.012], null, 'metal');
           add('cilindro', '#8C8C8C', [0, 0.005, 0], [0.4, 0.01, 0.4], null, 'concreto'); break; }
@@ -219,8 +243,8 @@
         case 'empire': {   // recuos art deco, faixas de janela e mastro
           const pedra = '#CFC6B4';
           [[0, 0.32, 0.36], [0.32, 0.18, 0.26], [0.5, 0.18, 0.2], [0.68, 0.08, 0.14], [0.76, 0.06, 0.1]].forEach(([y, h, w]) => {
-            add('caixa', pedra, [0, y + h / 2, 0], [w, h, w * 0.8], null, 'ceramica');
-            for (let k = 0; k < 6; k++) add('caixa', '#5E7A96', [-w / 2 + (k + 0.5) * w / 6, y + h / 2, w * 0.4 + 0.002], [w / 14, h * 0.9, 0.004], null, 'vidro'); });
+            comFachada(add('caixa_viva', pedra, [0, y + h / 2, 0], [w, h, w * 0.8], null, 'ceramica'), pedra, Math.max(4, Math.round(w * 40)), Math.max(3, Math.round(h * 90)));
+            add('caixa', '#A89F8C', [0, y + h + 0.003, 0], [w * 1.03, 0.006, w * 0.83], null, 'pedra'); });
           add('cilindro', '#B8B8B8', [0, 0.88, 0], [0.03, 0.08, 0.03], null, 'metal'); add('cilindro', '#B8B8B8', [0, 0.96, 0], [0.008, 0.1, 0.008], null, 'metal'); break; }
         case 'baleia': {   // comprimento = 1 (eixo x): corpo, cabeca, nadadeiras, cauda, sulcos, olho
           const azul = cor || '#5B7A99', ventre = '#C9D3DA';
@@ -293,13 +317,18 @@
           [-1, 1].forEach((sg) => { add('cone', az, [0.12, 0.05, sg * 0.1], [0.05, 0.16, 0.02], [sg * 60, 0, 120]); for (let k = 0; k < 5; k++) add('caixa', '#3E4A55', [0.26 - k * 0.025, 0.12, sg * 0.082], [0.004, 0.06, 0.003]); });
           add('esfera', '#111111', [0.38, 0.14, 0.07], [0.015, 0.015, 0.008]); add('esfera', '#111111', [0.38, 0.14, -0.07], [0.015, 0.015, 0.008]);
           add('caixa', '#F4F4F4', [0.41, 0.085, 0], [0.05, 0.008, 0.08]); break; }
-        case 'dinossauro': {   // T-rex em pe; altura = 1
-          const vd = cor || '#5E8A4A';
-          add('capsula', vd, [0, 0.55, 0], [0.24, 0.5, 0.2], [0, 0, 60]); add('capsula', vd, [-0.38, 0.45, 0], [0.09, 0.5, 0.08], [0, 0, 70]);
-          add('capsula', vd, [0.24, 0.82, 0], [0.12, 0.26, 0.11], [0, 0, -30]); add('caixa', vd, [0.36, 0.95, 0], [0.22, 0.12, 0.12]);
-          add('caixa', '#F4F4F4', [0.42, 0.89, 0], [0.12, 0.012, 0.1]); add('esfera', '#111', [0.33, 0.99, 0.05], [0.015, 0.015, 0.01]);
-          [-1, 1].forEach((sg) => { add('capsula', vd, [0.02, 0.28, sg * 0.08], [0.09, 0.3, 0.09], [0, 0, -15]); add('caixa', '#3E5A30', [0.06, 0.02, sg * 0.08], [0.12, 0.03, 0.06]); add('capsula', vd, [0.2, 0.62, sg * 0.08], [0.025, 0.08, 0.025], [0, 0, -60]); });
-          for (let k = 0; k < 6; k++) add('cone', '#3E5A30', [0.1 - k * 0.09, 0.72 - k * 0.04, 0], [0.03, 0.05, 0.02]); break; }
+        case 'dinossauro': {   // v9 (refeito olhando): T-rex, comprimento = 1 (eixo x): corpo horizontal, cauda afinando, cabecao com mandibula e dentes, pernas fortes, bracinhos
+          const vd = cor || '#6B8F3F', es = '#4F6F2C', ba = '#C9CF9A';
+          add('esfera', vd, [0, 0.38, 0], [0.42, 0.26, 0.2], [0, 0, 8]); add('esfera', ba, [0.02, 0.32, 0], [0.34, 0.16, 0.17], [0, 0, 8]);
+          [[-0.2, 0.37, 0.2], [-0.32, 0.35, 0.15], [-0.42, 0.33, 0.11], [-0.5, 0.31, 0.075], [-0.57, 0.3, 0.045]].forEach(([x, y, w]) => add('esfera', vd, [x, y, 0], [0.16, w, w * 0.8]));
+          add('esfera', vd, [0.2, 0.46, 0], [0.2, 0.2, 0.15], [0, 0, 40]);
+          add('esfera', vd, [0.33, 0.55, 0], [0.24, 0.15, 0.14]); add('caixa', vd, [0.4, 0.56, 0], [0.16, 0.085, 0.11]); add('caixa', es, [0.39, 0.495, 0], [0.15, 0.035, 0.1], [0, 0, -8]);
+          for (let k = 0; k < 6; k++) [-1, 1].forEach((l) => add('cone', '#FFFFFF', [0.335 + k * 0.025, 0.515, l * 0.045], [0.012, 0.028, 0.012], [180, 0, 0], 'ceramica'));
+          [-1, 1].forEach((l) => { add('esfera', '#FFD23F', [0.33, 0.6, l * 0.06], [0.03, 0.03, 0.02]); add('esfera', '#111111', [0.337, 0.6, l * 0.068], [0.015, 0.02, 0.012]); add('caixa', es, [0.33, 0.625, l * 0.055], [0.05, 0.012, 0.03], [0, 0, -14]);
+            add('esfera', vd, [-0.02, 0.3, l * 0.1], [0.17, 0.26, 0.11], [0, 0, 12]); add('cilindro', vd, [0.02, 0.12, l * 0.1], [0.085, 0.22, 0.085], [0, 0, -14]);
+            add('caixa', es, [0.07, 0.018, l * 0.1], [0.13, 0.036, 0.075]); [-1, 0, 1].forEach((u) => add('cone', '#F4EFE2', [0.14, 0.015, l * 0.1 + u * 0.024], [0.012, 0.03, 0.012], [0, 0, -90]));
+            add('cilindro', vd, [0.21, 0.36, l * 0.085], [0.025, 0.08, 0.025], [0, 0, -50]); add('esfera', es, [0.245, 0.33, l * 0.085], [0.025, 0.02, 0.02]); });
+          for (let k = 0; k < 9; k++) add('cone', es, [0.24 - k * 0.085, 0.565 - Math.abs(k - 1.2) * 0.03 - (k > 5 ? (k - 5) * 0.035 : 0), 0], [0.035, 0.05, 0.018]); break; }
         case 'trem': {   // comprimento = 1: locomotiva + 2 vagoes com janelas e rodas
           [[0.33, '#E8473C'], [0, '#3E7CB1'], [-0.33, '#3E7CB1']].forEach(([x, c2], j) => {
             add('caixa', c2, [x, 0.07, 0], [0.31, 0.09, 0.08], null, 'metal'); add('caixa', '#DDE2E6', [x, 0.12, 0], [0.31, 0.012, 0.082], null, 'metal');
@@ -335,14 +364,26 @@
           add('caixa', '#7A4E2E', [0, 0.17, 0.351], [0.16, 0.34, 0.01], null, 'madeira'); add('esfera', '#C9A64A', [0.05, 0.17, 0.36], [0.015, 0.015, 0.015], null, 'metal');
           [-0.28, 0.28].forEach((x) => { add('caixa', '#9CC8E8', [x, 0.36, 0.351], [0.18, 0.16, 0.01], null, 'vidro'); add('caixa', '#FFFFFF', [x, 0.36, 0.355], [0.2, 0.02, 0.012]); add('caixa', '#FFFFFF', [x, 0.36, 0.355], [0.02, 0.18, 0.012]); });
           add('caixa', '#8A5A44', [0.28, 0.9, -0.1], [0.1, 0.25, 0.1], null, 'ceramica'); add('caixa', '#6E9E5A', [0, 0.01, 0.55], [1.3, 0.02, 0.35]); break; }
-        case 'estatua': {   // pedestal + figura de manto com bracos abertos (Cristo) / estatua generica
-          const pedra = cor || '#D8D2C4';
-          add('caixa', '#B8B0A0', [0, 0.08, 0], [0.22, 0.16, 0.22], null, 'concreto'); add('caixa', '#C8C0B0', [0, 0.18, 0], [0.18, 0.04, 0.18], null, 'concreto');
-          add('cone', pedra, [0, 0.44, 0], [0.16, 0.5, 0.12], null, 'concreto'); add('capsula', pedra, [0, 0.66, 0], [0.11, 0.2, 0.08], null, 'concreto');
-          add('capsula', pedra, [0, 0.72, 0], [0.62, 0.05, 0.05], [0, 0, 90], 'concreto');
-          [-1, 1].forEach((s) => add('esfera', pedra, [s * 0.31, 0.72, 0], [0.03, 0.035, 0.03], null, 'concreto'));
-          add('esfera', pedra, [0, 0.83, 0], [0.065, 0.075, 0.065], null, 'concreto');
-          for (let k = 0; k < 6; k++) add('caixa', '#C2BBAA', [-0.06 + k * 0.024, 0.32, 0.07], [0.006, 0.3, 0.01], [0, 0, (k - 2.5) * 2], 'concreto'); break; }
+        case 'estatua': {   // v9 (refeito olhando): Cristo de bracos abertos -- pedestal, manto com pregas, bracos horizontais com mangas, maos, cabeca com cabelo
+          const pedra = cor || '#D8D2C4', so = '#BDB6A6';
+          add('caixa', '#9F9889', [0, 0.05, 0], [0.26, 0.1, 0.26], null, 'pedra'); add('caixa', '#B8B0A0', [0, 0.15, 0], [0.2, 0.1, 0.2], null, 'pedra'); add('caixa', '#C8C0B0', [0, 0.215, 0], [0.16, 0.03, 0.16], null, 'pedra');
+          add('cone', pedra, [0, 0.47, 0], [0.19, 0.5, 0.14], null, 'pedra'); add('cilindro', pedra, [0, 0.66, 0], [0.12, 0.2, 0.09], null, 'pedra');
+          for (let k = 0; k < 7; k++) add('caixa', so, [-0.06 + k * 0.02, 0.4, 0.062 - Math.abs(k - 3) * 0.004], [0.005, 0.34, 0.012], [0, 0, (k - 3) * 2.5], 'pedra');
+          [-1, 1].forEach((l) => { add('cilindro', pedra, [l * 0.19, 0.735, 0], [0.055, 0.3, 0.05], [0, 0, 90], 'pedra'); add('cone', pedra, [l * 0.2, 0.7, 0], [0.24, 0.1, 0.05], [0, 0, 180], 'pedra');
+            add('esfera', pedra, [l * 0.355, 0.735, 0], [0.05, 0.04, 0.03], null, 'pedra'); });
+          add('cilindro', pedra, [0, 0.775, 0], [0.04, 0.04, 0.04], null, 'pedra'); add('esfera', pedra, [0, 0.83, 0], [0.075, 0.09, 0.075], null, 'pedra');
+          add('esfera', so, [0, 0.845, -0.012], [0.085, 0.085, 0.08], null, 'pedra'); add('esfera', so, [0, 0.8, 0.022], [0.05, 0.05, 0.03], null, 'pedra'); break; }
+        case 'elefante': {   // v9: altura = 1; corpo, cabeca, tromba em gomos, orelhas, presas, 4 patas com unhas, rabo, olhos
+          const cz = cor || '#8E8E93', esc = '#77777C', cl = '#A2A2A8';
+          add('esfera', cz, [0, 0.6, 0], [0.98, 0.62, 0.6]); add('esfera', cz, [-0.3, 0.56, 0], [0.5, 0.56, 0.56]); add('esfera', cl, [0.05, 0.42, 0], [0.7, 0.3, 0.5]);
+          add('esfera', cz, [0.5, 0.76, 0], [0.42, 0.44, 0.4]); add('esfera', cz, [0.56, 0.9, 0], [0.26, 0.2, 0.3]);
+          [[0.68, 0.64, 0.16, 28], [0.76, 0.51, 0.14, 16], [0.8, 0.38, 0.12, 6], [0.81, 0.26, 0.105, -4], [0.79, 0.15, 0.09, -20], [0.75, 0.08, 0.08, -50]].forEach(([x, y, w, gz]) => add('cilindro', cz, [x, y, 0], [w, 0.16, w], [0, 0, gz]));
+          [-1, 1].forEach((l) => { add('esfera', esc, [0.36, 0.76, l * 0.23], [0.1, 0.46, 0.36], [l * 12, l * 24, 0]); add('esfera', '#C9A8A0', [0.37, 0.75, l * 0.262], [0.05, 0.34, 0.25], [l * 12, l * 24, 0]);
+            add('cone', '#F4EFE2', [0.72, 0.52, l * 0.12], [0.055, 0.3, 0.055], [0, 0, -125], 'ceramica');
+            add('esfera', '#FFFFFF', [0.66, 0.82, l * 0.165], [0.05, 0.05, 0.03]); add('esfera', '#1A1A1A', [0.675, 0.82, l * 0.178], [0.03, 0.03, 0.02]);
+            [0.3, -0.34].forEach((x) => { add('cilindro', cz, [x, 0.22, l * 0.17], [0.19, 0.46, 0.19]); add('cilindro', esc, [x, 0.025, l * 0.17], [0.21, 0.05, 0.21]);
+              [-1, 0, 1].forEach((u) => add('esfera', '#EDE6D6', [x + 0.095, 0.03, l * 0.17 + u * 0.055], [0.035, 0.04, 0.035])); }); });
+          add('cilindro', esc, [-0.52, 0.5, 0], [0.03, 0.32, 0.03], [0, 0, -16]); add('esfera', '#3A3A3D', [-0.57, 0.33, 0], [0.055, 0.08, 0.055]); break; }
         default: return null;
       }
       return g;
@@ -354,7 +395,7 @@
 [/saturno\s*v\b|saturn\s*v\b/i, 'saturno5'], [/burj/i, 'burj'], [/eiffel/i, 'eiffel'], [/empire state/i, 'empire'],
       [/\b(tierra|terra|earth|planeta tierra)\b/i, 'p_terra'], [/\b(sol|sun|el sol)\b/i, 'p_sol'], [/j[uú]piter/i, 'p_jupiter'], [/netuno|neptuno|neptune/i, 'p_netuno'],
       [/\b(luna|lua|moon)\b/i, 'p_lua'], [/merc[uú]rio|mercury/i, 'p_mercurio'], [/\bmarte\b|\bmars\b/i, 'p_marte'], [/\bsaturno\b|\bsaturn\b/i, 'p_saturno'],
-      [/ballena|baleia|whale/i, 'baleia'], [/titanic|seawise|crucero|transatl|cruise ship|ocean liner/i, 'titanic'], [/boeing|\b747\b|stratolaunch|avi[oó]n de pasajeros|jumbo/i, 'b747'],
+      [/elefante|elephant|mamut|mammoth/i, 'elefante'], [/ballena|baleia|whale/i, 'baleia'], [/titanic|seawise|crucero|transatl|cruise ship|ocean liner/i, 'titanic'], [/boeing|\b747\b|stratolaunch|avi[oó]n de pasajeros|jumbo/i, 'b747'],
       [/everest|olympus mons|ojos del salado|popocat|\bmonte\b|\bmount\b|kilimanjaro|aconcagua/i, 'everest'], [/cristo|estatua|statue|buda|estátua/i, 'estatua'], [/\bcasa\b|\bhouse\b|\bhome\b/i, 'casa']];
     const modeloV7PeloNome = (n) => { for (const [re, m] of PELO_NOME_V7) if (re.test(String(n || ''))) return m; return null; };
     // v3 (13/11): o roteiro descreve o onibus em 2 caixas e o motor tem um modelo pronto bem melhor -- o NOME decide.
@@ -362,6 +403,9 @@
       [/\bcoche|\bcarro|\bcar\b|\bauto\b/i, 'carro'], [/avi[oó]n|avi[aã]o|airplane|\bplane\b|jet\b/i, 'aviao'], [/\bbarco|navio|\bship\b|buque|crucero/i, 'navio'],
       [/cohete|foguete|rocket/i, 'foguete'], [/espejo|espelho|mirror|\bdisco\b|\bdisc\b|\bplato\b|\bprato\b|moneda|moeda|\bcoin\b/i, 'disco'], [/edificio|pr[eé]dio|building|rascacielos|skyscraper/i, 'predio'], [/noria|ferris|roda[- ]gigante|london eye|high roller|ain d[uú]b[aá]i|ain dubai|observation wheel|\brueda\b/i, 'roda_gigante'], [/[aá]rbol|[aá]rvore|\btree\b/i, 'arvore'], [/\bcasa\b|\bhouse\b/i, 'casa']];
     const modeloPeloNome = (n) => { for (const [re, m] of PELO_NOME) if (re.test(String(n || ''))) return m; return null; };
+    let _txS = null;
+    const texSombra = () => { if (_txS) return _txS; const cv = document.createElement('canvas'); cv.width = cv.height = 128; const g2 = cv.getContext('2d'), gr = g2.createRadialGradient(64, 64, 6, 64, 64, 64);
+      gr.addColorStop(0, 'rgba(20,40,10,0.85)'); gr.addColorStop(0.55, 'rgba(20,40,10,0.45)'); gr.addColorStop(1, 'rgba(20,40,10,0)'); g2.fillStyle = gr; g2.fillRect(0, 0, 128, 128); _txS = new T.CanvasTexture(cv); return _txS; };
     const itens = (Array.isArray(spec.itens) ? spec.itens.slice(0, 12) : []).map((it, i) => {
       const tam = num(it.tamanho_m != null ? it.tamanho_m : it.altura_m, 0.001, 2e12, 1), cor = corOk(it.cor, null);   // 14/11: teto ate' o Sol (era 2e7 = 20.000 km)
       let g;
@@ -386,10 +430,12 @@
       const b2 = new T.Box3().setFromObject(g), alt = Math.max(1e-6, b2.max.y - b2.min.y), larg = Math.max(alt * 0.2, b2.max.x - b2.min.x);
       g.traverse((o) => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; } });
       sc.add(g);
-      return { nome: String(it.nome || 'item ' + (i + 1)).slice(0, 26), tam, alt, larg, g, s0: g.scale.clone(), y0: g.position.y, vivo: (pronto || it.modelo) === 'pessoa' };
+      const dzS = Math.max(alt * 0.12, Math.min(b2.max.z - b2.min.z, larg) * 0.75), sm = new T.Mesh(new T.CircleGeometry(0.5, 40), new T.MeshBasicMaterial({ map: texSombra(), transparent: true, depthWrite: false, opacity: 0.55, toneMapped: false, fog: false }));
+      sm.rotation.x = -Math.PI / 2; sm.scale.set(larg * 1.35, dzS * 2.2, 1); sm.renderOrder = 3; sm.userData.sombra = true; sc.add(sm);
+      return { nome: String(it.nome || 'item ' + (i + 1)).slice(0, 26), tam, alt, larg, g, sm, s0: g.scale.clone(), y0: g.position.y, vivo: (pronto || it.modelo) === 'pessoa' };
     });
     // lado a lado, do menor para a direita, com um respiro proporcional
-    let x = 0; itens.forEach((it, i) => { if (i) x += (itens[i - 1].larg + it.larg) * 0.5 + Math.max(itens[i - 1].larg, it.larg) * 0.25; it.x = x; it.g.position.x = x; });
+    let x = 0; itens.forEach((it, i) => { if (i) x += (itens[i - 1].larg + it.larg) * 0.5 + Math.max(itens[i - 1].larg, it.larg) * 0.25; it.x = x; it.g.position.x = x; it.sm.position.set(x + it.larg * 0.08, it.alt * 0.002, 0); });
     const chaoTam = Math.max(10, x * 4 + (itens.length ? itens[itens.length - 1].alt * 20 : 10));
     // CHAO QUE ACOMPANHA O ZOOM (23/10): o disco tem 60x a distancia da camera
     // e a grama repete na mesma proporcao -- de perto parece grama, de longe campo
@@ -399,7 +445,7 @@
     // Cor convertida para linear e fora do tone mapping = a cor que se pediu.
     const corPura = (hex, extra) => Object.assign({ color: new T.Color(hex).convertSRGBToLinear(), fog: false, toneMapped: false }, extra || {});
     const chao = new T.Mesh(new T.CircleGeometry(1, 64), new T.MeshBasicMaterial(corPura('#79B256')));
-    chao.rotation.x = -Math.PI / 2; chao.position.x = x / 2; chao.scale.setScalar(chaoTam); chao.receiveShadow = true; sc.add(chao);
+    chao.rotation.x = -Math.PI / 2; chao.position.x = x / 2; chao.scale.setScalar(chaoTam); sc.add(chao); chao.material.transparent = true;
     const grade = new T.GridHelper(1, 40, new T.Color('#4F8A35').convertSRGBToLinear(), new T.Color('#5E9741').convertSRGBToLinear()); grade.material.toneMapped = false; grade.position.y = 0.0005; grade.material.transparent = true; grade.material.opacity = 0.9; sc.add(grade);
 
     // v4 (14/11, dono: "na comparacao de tamanhos tente ser mais criativo, algo que prenda, mais dinamico, mais movimento
@@ -451,6 +497,10 @@
       espaco.visible = esp > 0.01; estrelas.visible = esp > 0.3; brilhoAtm.visible = esp > 0.01;
       // nuvens somem no espaco
       horizonte.children.forEach((n) => { if (n.userData.v) n.visible = esp < 0.6; });
+      // v9: no espaco nao existe gramado -- o chao, a grade e os tufos somem e os planetas ficam soltos no escuro
+      const terra = 1 - U.clamp((esp - 0.25) / 0.45, 0, 1);
+      chao.material.opacity = terra; chao.visible = terra > 0.01; grade.material.opacity = 0.9 * terra; grade.visible = terra > 0.01; tufos.visible = terra > 0.5;
+      horizonte.children.forEach((n) => { if (n.isMesh && n.geometry && n.geometry.type === 'SphereGeometry' && !n.userData.v && n !== espaco) n.visible = terra > 0.3; });
     };
     const poeira = new T.Mesh(new T.RingGeometry(0.62, 1, 48), new T.MeshBasicMaterial({ color: '#E9DFC8', transparent: true, opacity: 0, depthWrite: false, side: T.DoubleSide }));
     poeira.rotation.x = -Math.PI / 2; sc.add(poeira);
@@ -516,7 +566,8 @@
       cam.position.set(cx + Math.sin(ang) * d * Math.cos(elev) + Math.sin(t * 61) * treme * d, cy * 0.55 + d * Math.sin(elev) + Math.cos(t * 53) * treme * d, Math.cos(ang) * d * Math.cos(elev));
       horizonte.position.set(cam.position.x, 0, cam.position.z); horizonte.scale.setScalar(d);
       horizonte.children.forEach((n) => { if (n.userData.v) n.rotation.z = 0; });
-      horizonte.rotation.y = t * 0.012; fundoDaEscala(d); tufos.position.set(cx, 0, 0); tufos.scale.setScalar(d * 0.5);
+      horizonte.rotation.y = t * 0.012; fundoDaEscala(d);
+      itens.forEach((it, j) => { const e2 = j === a && entra < 1 ? U.clamp(entra * 1.6, 0, 1) : 1; it.sm.material.opacity = 0.55 * e2 * (chao.material.opacity != null ? chao.material.opacity : 1); it.sm.visible = it.sm.material.opacity > 0.01; }); tufos.position.set(cx, 0, 0); tufos.scale.setScalar(d * 0.5);
       if (itens[a]) { const it = itens[a], qp = U.clamp((entra - 0.5) / 0.5, 0, 1);
         poeira.visible = a !== ant && qp > 0 && qp < 1; poeira.position.set(it.x, Math.max(1e-4, d * 0.0006), 0);
         poeira.scale.setScalar(Math.max(it.larg * 0.6, it.alt * 0.3) * (0.55 + qp * 0.8)); poeira.material.opacity = 0.45 * (1 - qp) * (1 - qp); } cam.near = d / 5000; cam.far = d * 2000; cam.updateProjectionMatrix();
@@ -524,38 +575,13 @@
         chao.position.set(cx, 0, 0); chao.scale.setScalar(d * 600);   // v4: com o voo em arco a borda do disco (60x) aparecia como cupula
         grade.position.set(cx, d * 0.0004, 0); grade.scale.setScalar(d * 6);
         nevoa.near=d*25;nevoa.far=d*160;   // v3: a nevoa a 6x lavava o chao de branco
-        sol.position.set(cx + d * 0.7, d * 1.4, d * 1.1); sol.target.position.set(cx, 0, 0);
+        sol.position.set(cx - d * 1.25, d * 1.45, d * 0.5); sol.target.position.set(cx, 0, 0); sol.target.updateMatrixWorld();
         const sh = sol.shadow.camera; sh.left = sh.bottom = -d * 1.2; sh.right = sh.top = d * 1.2; sh.near = d * 0.05; sh.far = d * 5; sh.updateProjectionMatrix();
       }
       cam.lookAt(cx, miraY, 0);
       U3.render(R, sc, cam, spec, t); c.drawImage(gl, 0, 0, W, H);
-      // 14/11 (dono: "nos objetos de grandeza o objeto anterior sempre deve ficar a mostra junto com o atual"): quando o
-      // anterior ocupa < 170 px de altura, uma LUPA mostra ele de perto (mesma luz), com o nome e uma linha ate' onde ele esta.
-      if (a > 0 && itens[a - 1] && !teaser && local > 0.5) {
-        const pv = itens[a - 1], ptp = new T.Vector3(pv.x, pv.alt, 0).project(cam), pbp = new T.Vector3(pv.x, 0, 0).project(cam), hp = Math.abs(ptp.y - pbp.y) * 0.5 * H;
-        if (hp < 60) {
-          const sx = (pbp.x * 0.5 + 0.5) * W, sy = (-pbp.y * 0.5 + 0.5) * H;
-          const P0 = cam.position.clone(), Q0 = cam.quaternion.clone(), n0 = cam.near, f0 = cam.far;
-          const est = [chao.position.clone(), chao.scale.x, grade.position.clone(), grade.scale.x, horizonte.position.clone(), horizonte.scale.x, tufos.position.clone(), tufos.scale.x, nevoa.near, nevoa.far];
-          const vf = (cam.fov * Math.PI) / 180, d2 = Math.max(pv.alt, pv.larg * 0.8) * 1.25 / Math.tan(vf / 2);
-          cam.position.set(pv.x + d2 * 0.3, pv.alt * 0.55 + d2 * 0.12, d2); cam.near = d2 / 5000; cam.far = d2 * 2000; cam.updateProjectionMatrix(); cam.lookAt(pv.x, pv.alt * 0.5, 0);
-          chao.position.set(pv.x, 0, 0); chao.scale.setScalar(d2 * 600); grade.position.set(pv.x, d2 * 0.0004, 0); grade.scale.setScalar(d2 * 6);
-          horizonte.position.set(cam.position.x, 0, cam.position.z); horizonte.scale.setScalar(d2); tufos.position.set(pv.x, 0, 0); tufos.scale.setScalar(d2 * 0.5); nevoa.near = d2 * 25; nevoa.far = d2 * 160;
-          U3.render(R, sc, cam, spec, t);
-          const ent = U.mola(local - 0.5, 9), R2 = 165 * Math.min(1, Math.max(0, ent)), cx = 210, cy = 1090;
-          if (R2 > 2) {
-            c.save(); c.strokeStyle = '#FFFFFF'; c.lineWidth = 5; c.setLineDash([]); c.beginPath(); c.moveTo(cx + R2 * 0.7, cy - R2 * 0.7); c.lineTo(sx, sy); c.stroke();
-            c.beginPath(); c.arc(sx, sy, 10, 0, Math.PI * 2); c.fillStyle = '#FFFFFF'; c.fill();
-            c.beginPath(); c.arc(cx, cy, R2, 0, Math.PI * 2); c.save(); c.clip(); c.drawImage(gl, W / 2 - 360, H / 2 - 360, 720, 720, cx - R2, cy - R2, 2 * R2, 2 * R2); c.restore();
-            c.lineWidth = 10; c.strokeStyle = '#FFD23F'; c.stroke();
-            c.font = '40px "Lilita One", sans-serif'; c.textAlign = 'center'; c.textBaseline = 'middle'; const nm = pv.nome.toUpperCase(), w = Math.min(380, c.measureText(nm).width + 40);
-            U.rr(c, cx - w / 2, cy + R2 - 10, w, 54, 27); c.fillStyle = '#FFD23F'; c.fill(); c.fillStyle = '#1B1B1B'; c.fillText(nm, cx, cy + R2 + 17, w - 24); c.restore();
-          }
-          cam.position.copy(P0); cam.quaternion.copy(Q0); cam.near = n0; cam.far = f0; cam.updateProjectionMatrix(); cam.updateMatrixWorld();
-          chao.position.copy(est[0]); chao.scale.setScalar(est[1]); grade.position.copy(est[2]); grade.scale.setScalar(est[3]); horizonte.position.copy(est[4]); horizonte.scale.setScalar(est[5]);
-          tufos.position.copy(est[6]); tufos.scale.setScalar(est[7]); nevoa.near = est[8]; nevoa.far = est[9];
-        }
-      }
+      // v9 (14/11 noite, dono: "comecaram a aparecer umas bolas estranhas quando o objeto fica muito pequeno, estragando o video"):
+      // a LUPA redonda saiu. O anterior continua no quadro em escala real; a etiqueta dele ganha uma seta ate' o ponto (abaixo).
       // v4: LINHAS DE VELOCIDADE quando o salto de tamanho e' grande (a camera recua por ordens de grandeza)
       if (a !== ant && salto > 0.7 && voo > 0.05) {
         const rv = U.rng('vel' + i), forca = voo * U.clamp(salto / 3, 0.3, 1);
@@ -576,7 +602,7 @@
         const it = itens[j];
         const p = new T.Vector3(it.x, it.alt, 0).project(cam); if (p.z > 1) return;
         const px = (p.x * 0.5 + 0.5) * W, py = (-p.y * 0.5 + 0.5) * H; if (px < -50 || px > W + 50 || py < 0) return;
-        const tamPx = Math.abs(py - (-new T.Vector3(it.x, 0, 0).project(cam).y * 0.5 + 0.5) * H); if (tamPx < 26 && j !== a) return;
+        const tamPx = Math.abs(py - (-new T.Vector3(it.x, 0, 0).project(cam).y * 0.5 + 0.5) * H); const mini = tamPx < 26 && j !== a;
         const conta = j === a && (a !== ant || i === 0) ? U.saida(U.clamp((local - 0.2) / 0.7, 0, 1)) : 1;   // v4: o numero CONTA ate' a medida
         const v = it.tam * conta, real = v >= 1000 ? (v / 1000).toLocaleString('en-US', { maximumFractionDigits: 1 }) + ' km' : v >= 1 ? v.toLocaleString('en-US', { maximumFractionDigits: 1 }) + ' m' : (v * 100).toLocaleString('en-US', { maximumFractionDigits: 1 }) + ' cm';
         const destaque = j === a, ent = destaque ? U.mola(local - 0.15, 10) : 1;
@@ -584,7 +610,8 @@
         c.font = (destaque ? '64px' : '42px') + ' "Lilita One", sans-serif';
         // v3: "AUTOBÚS DE 12 METROS / 12 m" repetia a medida -- se o nome ja traz numero, fica so o nome
         const l1 = it.nome.toUpperCase(), soNome = /\d/.test(it.nome), w1 = Math.min(W - 40, Math.max(c.measureText(l1).width, soNome ? 0 : c.measureText(real).width) + 40), hh = soNome ? (destaque ? 92 : 66) : destaque ? 150 : 104;
-        const bx = U.clamp(px, w1 * 0.58 + 20, W - w1 * 0.58 - 20), by = Math.max(yMin, py - 40);
+        const bx = U.clamp(px, w1 * 0.58 + 20, W - w1 * 0.58 - 20), by = Math.max(yMin, py - (mini ? 78 : 40));
+        if (mini) { c.save(); c.fillStyle = 'rgba(255,255,255,0.92)'; c.beginPath(); c.moveTo(px - 16, by - 2); c.lineTo(px + 16, by - 2); c.lineTo(px, by + 30); c.closePath(); c.fill(); c.restore(); }
         const caixa = [bx - w1 / 2, by - hh, bx + w1 / 2, by];
         if (!destaque && postas.some((r) => caixa[0] < r[2] + 12 && caixa[2] > r[0] - 12 && caixa[1] < r[3] + 12 && caixa[3] > r[1] - 12)) { c.restore(); return; }
         postas.push(caixa);
