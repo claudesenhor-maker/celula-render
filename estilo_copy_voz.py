@@ -132,8 +132,98 @@ def gerar():
  shutil.rmtree(partes)
  print('Narração gerada; palavras:',len(marcas),flush=True)
 
+ACABAMENTO=('aresample=48000,highpass=f=70,aexciter=level_in=1:level_out=1:amount=2.2:drive=6.5:blend=0:freq=5200:ceil=15000,'
+            'treble=g=3.5:f=6500:width_type=q:width=0.7,acompressor=threshold=0.12:ratio=2.5:attack=8:release=120')
+
+def gerar_entonacao():
+ """15/11 (dono: "parar de focar em sentimento e focar na entonação -- fim de frase, interrogação --, fluidez e naturalidade; o
+ sistema de emoção foi reprovado, dá para ver a troca"). UMA referência e os MESMOS parâmetros do começo ao fim (nada troca);
+ trechos longos (a melodia corre por várias frases); cada trecho é gerado até `tentativas` vezes e fica a tentativa em que a
+ melodia combina com a pontuação (voz_entonacao.py); a frase que mesmo assim termina errada ganha uma rampa curta de tom na
+ última palavra; no fim, acabamento em 48 kHz que devolve os agudos (o clonador entrega 24 kHz, som abafado)."""
+ from voz_livre import _sintetizar_local
+ import random, wave, shutil
+ import numpy as np, torch
+ import voz_entonacao as VE, voz_marcacao as VM
+ texto=os.environ['ESTILO_COPY_TEXTO'].strip()
+ falas=AJ.get('falas')
+ if not isinstance(falas,list) or not falas or ' '.join(falas)!=texto:raise ValueError('modo entonacao exige falas que formem o texto')
+ pau=AJ.get('pausas') or [0]*len(falas)
+ if len(pau)!=len(falas) or any(not 0<=float(x)<=1.5 for x in pau):raise ValueError('pausas: uma por fala, 0..1,5 s')
+ falas=[VM.limpar(f) for f in falas]
+ N=int(AJ.get('tentativas',3));velocidade=float(AJ.get('velocidade',1.0))
+ if not 1<=N<=4 or not .85<=velocidade<=1.1:raise ValueError('tentativas 1..4, velocidade 0,85..1,1')
+ cfg={'motor':'chatterbox','voice':'pt-BR-FranciscaNeural','lingua':AJ.get('lingua','pt'),'ref_url':REF,'exaggeration':float(AJ.get('exaggeration',.6)),
+      'cfg_weight':float(AJ.get('cfg_weight',.30)),'temperature':float(AJ.get('temperature',.80))}
+ raiz=Path('estilo-copy-voz');raiz.mkdir(exist_ok=True);partes=raiz/'partes';partes.mkdir(exist_ok=True)
+ trechos=[];atual=[]
+ for f,p in zip(falas,pau):
+  if atual and sum(len(x[0])+1 for x in atual)+len(f)>240:trechos.append(atual);atual=[]
+  atual.append((f,float(p)))
+ if atual:trechos.append(atual)
+ SR=24000
+ def ler(p):
+  return np.frombuffer(subprocess.check_output(['ffmpeg','-v','error','-i',str(p),'-ac','1','-ar',str(SR),'-f','s16le','-']),dtype='<i2').astype('float32')/32768
+ def rampa(x,n_in=360,n_out=1900):
+  x=x.copy();n_in=min(n_in,len(x)//2);n_out=min(n_out,len(x)//2)
+  if n_in:x[:n_in]*=np.linspace(0,1,n_in)
+  if n_out:x[-n_out:]*=np.linspace(1,0,n_out)
+  return x
+ marcas=[];logs=[];saida=[];inicio=0.0;todas=[]
+ for i,itens in enumerate(trechos):
+  trecho=' '.join(f for f,_ in itens);melhor=None;notas=[]
+  for t in range(N):
+   semente=1000+i*17+t*101;torch.manual_seed(semente);np.random.seed(semente);random.seed(semente)
+   p=partes/f'{i:02}-{t}.wav';mm=_sintetizar_local(trecho,cfg,str(p),motor='chatterbox')
+   fim=max((m['fim_s'] for m in mm),default=0)
+   if fim<=0:notas.append(0);continue
+   x=ler(p);resp=.38 if trecho.rstrip().endswith(('?','...','…')) else .26
+   x=rampa(x[:int(min(len(x)/SR,fim+resp)*SR)])
+   res=VE.medir(x,SR,mm);nota=float(np.mean([r['nota'] for r in res])) if res else 0.0
+   spc=fim/max(1,len(trecho))
+   if not .042<=spc<=.115:nota-=.3          # rápido ou arrastado demais: o modelo pulou ou inventou texto
+   if len(mm)!=len(trecho.split()):nota-=.3
+   notas.append(round(nota,3))
+   if melhor is None or nota>melhor[0]:melhor=(nota,x,mm,t)
+   print('trecho',i+1,'/',len(trechos),'tentativa',t+1,'nota',round(nota,3),'s/caractere',round(spc,3),flush=True)
+   if nota>=.8:break
+  if melhor is None:raise ValueError('Trecho sem palavras alinhadas')
+  nota,x,mm,t=melhor;ok=len(mm)==len(trecho.split())
+  fins=[];k=0
+  for f,_ in itens:
+   k+=len(f.split());fins.append(k-1)
+  feitos=[]
+  if ok and AJ.get('rampa',True):x,feitos=VE.corrigir(x,SR,mm,fins)
+  res=VE.medir(x,SR,mm);todas+=res
+  cortes=[];k=0
+  for f,pz in itens[:-1]:
+   k+=len(f.split())
+   if ok and pz>0 and 0<k<len(mm):cortes.append(((mm[k-1]['fim_s']+mm[k]['inicio_s'])/2,pz,k))
+  pedacos=[];ant=0;desloc=[0.0]*len(mm)
+  for tc,pz,k in cortes:
+   a=int(tc*SR)
+   if a-ant<SR//10 or len(x)-a<SR//10:continue
+   pedacos+=[rampa(x[ant:a],240,720),np.zeros(int(pz*SR),dtype='float32')];ant=a
+   for j in range(k,len(mm)):desloc[j]+=pz
+  pedacos.append(rampa(x[ant:],240,0) if pedacos else x[ant:])
+  if itens[-1][1]>0:pedacos.append(np.zeros(int(itens[-1][1]*SR),dtype='float32'))
+  y=np.concatenate(pedacos);saida.append(y);ds=len(y)/SR
+  marcas.extend({'text':m['palavra'],'offset':round((inicio+m['inicio_s']+desloc[j])/velocidade*10000000),'duration':round((m['fim_s']-m['inicio_s'])/velocidade*10000000)} for j,m in enumerate(mm))
+  logs.append({'trecho':i,'caracteres':len(trecho),'tentativas':notas,'escolhida':t+1,'nota_final':round(float(np.mean([r['nota'] for r in res])) if res else 0,3),'rampas':feitos,'duracao_s':round(ds,2)});inicio+=ds
+ bruto=raiz/'bruto.wav'
+ with wave.open(str(bruto),'w') as w:
+  w.setnchannels(1);w.setsampwidth(2);w.setframerate(SR);w.writeframes((np.clip(np.concatenate(saida),-1,1)*32000).astype('<i2').tobytes())
+ af=(f'atempo={velocidade},' if abs(velocidade-1)>.001 else '')+ACABAMENTO
+ subprocess.run(['ffmpeg','-v','error','-i',str(bruto),'-af',af,'-ar','48000','-c:a','libmp3lame','-b:a','192k','-y',str(raiz/'voz-continua.mp3')],check=True)
+ bruto.unlink()
+ (raiz/'palavras.json').write_text(json.dumps(marcas,ensure_ascii=False))
+ (raiz/'entonacao.json').write_text(json.dumps({'resumo':VE.resumo(todas),'frases':todas},ensure_ascii=False,indent=1))
+ (raiz/'proveniencia.json').write_text(json.dumps({'motor':'chatterbox','idioma':cfg['lingua'],'referencia':REF,'origem':'Banco de vozes do projeto; clone Chatterbox local, sem custo','texto_sha256':hashlib.sha256(texto.encode()).hexdigest(),'velocidade':velocidade,'cfg_weight':cfg['cfg_weight'],'temperature':cfg['temperature'],'exaggeration':cfg['exaggeration'],'metodo':'entonacao: uma referencia, trechos longos, ate %d tentativas por trecho escolhidas pela regua de entonacao, rampa de tom no fim das frases erradas, acabamento 48 kHz'%N,'entonacao':VE.resumo(todas),'planos':logs},ensure_ascii=False,indent=2))
+ shutil.rmtree(partes)
+ print('Narração (entonação) gerada; palavras:',len(marcas),'resumo',json.dumps(VE.resumo(todas),ensure_ascii=False),flush=True)
+
 def main():
- if '--sintetizar' in sys.argv:return gerar()
+ if '--sintetizar' in sys.argv:return gerar_entonacao() if AJ.get('modo')=='entonacao' else gerar()
  from voz_livre import _garantir_venv,_py_venv
  _garantir_venv()
  subprocess.run([_py_venv(),__file__,'--sintetizar'],check=True)
