@@ -410,9 +410,50 @@
     }
     // POSES v5: ombro (x frente/tras, z abre), COTOVELO (dobra para a frente), quadril, JOELHO; e por baixo de tudo
     // o MOVIMENTO DE BASE (respira, troca o peso, olha em volta, gesticula). `fala` 0..1 = a narracao esta falando agora.
-    function posar(p, modo, t, k, fala) {
-      // v6: apontar/olhar para cima sao gestos de ENTRADA (35% da cena); depois o boneco volta a atuar e gesticular
-      if ((modo === 'aponta' || modo === 'olha_cima') && k > 0.35) modo = 'parado';
+    // v11 (26/11, dono: "os bonecos fazem movimento sem sentido, explicacoes com pouca interacao"): o PARADO era um rodizio
+    // de 5 poses a cada 2,2 s (aponta para o nada, coca a cabeca, cruza os bracos) e, com a narracao falando, os dois bracos
+    // balancavam em senoide o tempo todo; o corpo girava 0,35 rad de um lado para o outro. Nada disso vinha da frase.
+    // Agora o parado e' ESCUTA (bracos soltos, respira, troca o peso devagar, olha para o que importa) e todo gesto vem de
+    // `ges` = {nome, w 0..1, idade, dir} calculado por `atuar` a partir da frase, das palavras com tempo e do que existe na cena.
+    // aim: ombro (x, z) que aponta o braco (pendurado em -y) para a direcao local d -- Euler XYZ: d = (sen z, -cos z cos x, -cos z sen x)
+    const aim = (q, dx, dy, dz) => { const n = Math.hypot(dx, dy, dz) || 1; dx /= n; dy /= n; dz /= n; const az = Math.asin(U.clamp(dx, -1, 1)); q.rotation.z = az; q.rotation.x = Math.atan2(-dz, -dy); };
+    // modos em que os bracos ja estao ocupados com a acao (correr, nadar, flutuar): o gesto nao entra
+    const SEM_GESTO = { corre: 1, anda: 1, nada: 1, flutua: 1, comemora: 1 };
+    // GESTOS v11: cada um e' uma pose-alvo (direcao de cada braco no corpo, cotovelos, cabeca, inclinacao, rosto).
+    // b[0] = braco direito do boneco (lado -x, esquerda da tela quando ele olha para a camera), b[1] = esquerdo.
+    function gestoPose(g, tf) {
+      const d = g.dir || [0, 0.3, 1], id = g.idade || 0;
+      switch (g.nome) {
+        case 'aponta': {   // braco do lado do alvo estendido ate' ele; cabeca e olhos vao junto
+          const lado = d[0] < 0 ? 0 : 1, b = [null, null]; b[lado] = d; b[1 - lado] = [lado ? -0.15 : 0.15, -1, 0.05];
+          const c = [0.3, 0.3]; c[lado] = 0.06;
+          return { b, c, cabY: U.clamp(Math.atan2(d[0], Math.max(0.05, d[2])), -1.0, 1.0) * 0.8, cabX: U.clamp(-d[1] * 0.55, -0.45, 0.5), olho: 1.1 }; }
+        case 'olha_baixo':   // "se hunden los pies": olha para os proprios pes, bracos abrem para equilibrar
+          return { b: [[-0.6, -0.75 + 0.1 * Math.sin(tf * 3), 0.25], [0.6, -0.75 + 0.1 * Math.sin(tf * 3 + 1.5), 0.25]], c: [0.45, 0.45], cabX: 0.55, cabY: 0, j: 0.15, boca: 'O', olho: 1.25 };
+        case 'puxa': {       // "sacar las piernas": curva o tronco e puxa a perna com as duas maos, em trancos
+          const tranco = Math.max(0, Math.sin(id * 6)) ** 2;
+          return { b: [[-0.22, -0.7, 0.68], [0.22, -0.7, 0.68]], c: [0.7 + 0.4 * tranco, 0.7 + 0.4 * tranco], inclina: 0.32 + 0.12 * tranco, cabX: 0.35, cabY: 0, j: 0.3, bob: 0.06 * tranco, boca: 'reta', tremor: 0.012 }; }
+        case 'susto':        // "cae / golpe / choque": salta para tras com as maos na frente
+          return { b: [[-0.35, 0.05, 0.94], [0.35, 0.05, 0.94]], c: [1.35, 1.35], inclina: -0.2, cabX: -0.12, cabY: 0, j: 0.25, bob: 0.22 * Math.max(0, 1 - id / 0.35), boca: 'O', olho: 1.35, tremor: 0.01 };
+        case 'protege':      // calor / fogo / explosao: antebraco na frente do rosto, vira a cara
+          return { b: [[-0.45, -0.7, -0.35], [-0.2, 0.1, 0.97]], c: [0.4, 2.0], inclina: -0.16, cabX: 0.12, cabY: -0.45, j: 0.18, boca: 'reta', olho: 0.85 };
+        case 'treme':        // frio: abraca o proprio corpo e treme
+          return { b: [[0.05, -0.55, 0.83], [-0.05, -0.55, 0.83]], c: [2.0, 2.0], cabX: 0.18, j: 0.12, boca: 'reta', tremor: 0.03 };
+        case 'pensa':        // "¿que cambia?": mao no queixo, olha para cima
+          return { b: [[0.25, -0.88, 0.4], [0.18, -0.5, 0.85]], c: [1.6, 2.55], cabX: -0.2, cabY: 0.15, cabZ: 0.14, olho: 1.05 };
+        case 'pergunta':     // a pergunta do fim: encolhe os ombros com as palmas para cima
+          return { b: [[-0.62, -0.68, 0.4], [0.62, -0.68, 0.4]], c: [1.35, 1.35], cabZ: 0.18 * Math.sin(Math.min(1, id * 2) * Math.PI / 2), cabX: -0.05, olho: 1.15, boca: 'reta' };
+        case 'comemora': {   // final positivo: bracos para cima, pulinho
+          const s = Math.abs(Math.sin(id * 7));
+          return { b: [[-0.5, 0.86, 0.12], [0.5, 0.86, 0.12]], c: [0.35, 0.35], cabX: -0.15, j: s * 0.3, bob: s * 0.22 }; }
+        case 'conta':        // o numero da frase: mao aberta para a frente, como quem explica "3 metros"
+          return { b: [null, [0.3, -0.35, 0.89]], c: [null, 0.9 + 0.12 * Math.sin(id * 9) * Math.max(0, 1 - id)], cabX: 0.05, olho: 1.05 };
+      }
+      return {};
+    }
+    function posar(p, modo, t, k, fala, ges) {
+      if (modo === 'olha_cima' && k > 0.35) modo = 'parado';
+      if (modo === 'aponta') modo = 'parado';   /* v11: apontar so' como gesto com alvo (ges) */
       const u = p.userData, m = u.membros, tf = t + u.fase, cot = u.cot || [], joe = u.joe || [];
       const rot = (q, x, z) => { q.rotation.x = x; q.rotation.z = z || 0; };
       const dobra = (q, a) => { if (q) q.rotation.x = -a; };            // cotovelo: antebraco para a frente
@@ -438,31 +479,39 @@
         case 'sufoca': rot(m[0], -0.9, -0.25); rot(m[1], -0.9, 0.25); cE = cD = 2.0; rot(m[2], 0); rot(m[3], 0); boca = 'O'; inclina = Math.sin(tf * 3) * 0.12; agach = 0.95; jE = jD = 0.2; break;
         case 'medo': rot(m[0], -0.6, 0.5); rot(m[1], -0.6, -0.5); cE = cD = 2.1; rot(m[2], 0.15); rot(m[3], -0.15); jE = jD = 0.35; boca = 'O'; tremor = 0.02; agach = 0.92; olhoS = 1.3; cabY *= 0.4; break;
         case 'nada': rot(m[0], 0.5 + Math.sin(tf * 4) * 0.4, 0.6); rot(m[1], -0.5 - Math.sin(tf * 4) * 0.4, -0.6); cE = cD = 0.5; rot(m[2], Math.sin(tf * 4) * 0.4); rot(m[3], -Math.sin(tf * 4) * 0.4); jE = 0.3 + Math.sin(tf * 4) * 0.2; jD = 0.3 - Math.sin(tf * 4) * 0.2; boca = 'O'; break;
+        case 'afunda': {   // v11: preso na areia -- bracos abertos na altura do quadril se equilibrando, olha para baixo, puxa de vez em quando
+          const luta = Math.max(0, Math.sin(tf * 2.3)) ** 3;
+          aim(m[0], -0.75, -0.55 + 0.12 * Math.sin(tf * 1.7), 0.3); aim(m[1], 0.75, -0.55 + 0.12 * Math.sin(tf * 1.7 + 2), 0.3); cE = cD = 0.35;
+          rot(m[2], 0); rot(m[3], 0); jE = jD = 0.08; cabX = 0.32 + 0.06 * luta; cabY = 0.25 * Math.sin(tf * 0.5); inclina = 0.12 + 0.1 * luta; boca = 'reta'; olhoS = 1.1; break; }
         default: {
-          // v6 (dono: "muitas articulacoes, pouco movimento percebido"): PARADO vira ATUACAO -- a cada ~2,2 s o boneco passa
-          // por um gesto (gesticula, maos na cintura, coca a cabeca, aponta, cruza os bracos), com transicao suave; troca o
-          // peso de perna com amplitude visivel. Falando: cabeca acena no ritmo e os DOIS bracos gesticulam.
-          const POSES = [ // [ombroE x, z, ombroD x, z, cotE, cotD, cabX, cabY]
-            [-0.45, 0.35, -0.6, -0.4, 1.3, 1.5, 0.05, 0.25], [0.1, 0.55, 0.1, -0.55, 1.9, 1.9, -0.05, -0.2], [0.05, 0.15, -2.4, -0.5, 0.3, 2.3, 0.12, 0.15],
-            [0.05, 0.15, -1.45, -0.15, 0.3, 0.1, -0.05, 0.35], [-0.6, 0.25, -0.6, -0.25, 2.2, 2.2, 0.02, -0.15]];
-          const ph = tf / 2.2, i0 = Math.floor(ph) % POSES.length, i1 = (i0 + 1) % POSES.length, w = U.suave(U.clamp((ph % 1 - 0.7) / 0.3, 0, 1));
-          const P = POSES[i0].map((v, q) => v + (POSES[i1][q] - v) * w);
-          rot(m[0], P[0], P[1]); rot(m[1], P[2], P[3]); cE = P[4]; cD = P[5]; cabX = P[6] + Math.sin(tf * 0.9) * 0.04; cabY = P[7];
-          rot(m[2], 0, -0.06 * peso); rot(m[3], 0, -0.06 * peso);
-          jE = 0.05 + Math.max(0, peso) * 0.25; jD = 0.05 + Math.max(0, -peso) * 0.25; bob = Math.abs(Math.sin(tf * 1.6)) * 0.03;
-          if (fala > 0) { const g1 = Math.sin(tf * 3.1), g2 = Math.sin(tf * 2.4 + 1.3);
-            rot(m[0], -0.6 - 0.35 * g1, 0.3 + 0.2 * g2); rot(m[1], -0.6 - 0.35 * g2, -0.3 - 0.2 * g1); cE = 1.4 + 0.4 * g2; cD = 1.4 + 0.4 * g1;
-            cabX = 0.08 * Math.sin(tf * 7) + 0.04; cabY *= 0.5; bob = Math.abs(Math.sin(tf * 3.5)) * 0.05; }
+          // v11: ESCUTA -- bracos soltos ao lado do corpo, cotovelo quase reto, respira; troca o peso devagar; a cabeca acena
+          // de leve no ritmo da fala (sem bracos balancando a toa). Os gestos de verdade vem de `ges`.
+          aim(m[0], -0.16, -1, 0.1); aim(m[1], 0.16, -1, 0.1); cE = 0.38 + 0.04 * Math.sin(tf * 2.2); cD = 0.38 + 0.04 * Math.sin(tf * 2.2 + 0.5);
+          cabX = 0.03 * Math.sin(tf * 0.7); cabY = 0.12 * Math.sin(tf * 0.31);
+          rot(m[2], 0, -0.03 * peso); rot(m[3], 0, -0.03 * peso);
+          jE = 0.05 + Math.max(0, peso) * 0.1; jD = 0.05 + Math.max(0, -peso) * 0.1; bob = 0;
+          if (fala > 0) { cabX += 0.035 * Math.sin(tf * 6.5); cabY *= 0.5; }
         }
+      }
+      // ---- v11: o GESTO da frase por cima da pose de base (mistura pelo envelope w)
+      if (ges && ges.w > 0.001 && !SEM_GESTO[modo]) {
+        const G = gestoPose(ges, tf);
+        const w = ges.w, L = (a, b) => a + (b - a) * w;
+        if (G.b) G.b.forEach((d, j) => { if (!d) return; const q = m[j], x0 = q.rotation.x, z0 = q.rotation.z; aim(q, d[0], d[1], d[2]); q.rotation.x = L(x0, q.rotation.x); q.rotation.z = L(z0, q.rotation.z); });
+        if (G.c) { if (G.c[0] != null) cE = L(cE, G.c[0]); if (G.c[1] != null) cD = L(cD, G.c[1]); }
+        if (G.cabX != null) cabX = L(cabX, G.cabX); if (G.cabY != null) cabY = L(cabY, G.cabY); if (G.cabZ != null) cabZ = L(cabZ, G.cabZ);
+        if (G.inclina != null) inclina = L(inclina, G.inclina); if (G.j != null) { jE = L(jE, G.j); jD = L(jD, G.j); }
+        if (G.bob) bob += G.bob * w; if (G.tremor) tremor = Math.max(tremor, G.tremor * w);
+        if (w > 0.5) { if (G.boca) boca = G.boca; if (G.olho) olhoS = G.olho; }
       }
       if (modo !== 'calor') u.suor.forEach((s) => { s.visible = false; });
       dobra(cot[0], cE); dobra(cot[1], cD); flex(joe[0], jE); flex(joe[1], jD);
       // abaixa o corpo o quanto os joelhos dobram (o pe nao afunda no chao)
       const dobraJ = Math.min(jE, jD), desce = 0.4 * (1 - Math.cos(dobraJ)) * 0.9;
       u.corpo.position.y = bob - desce; u.corpo.rotation.x = inclina; u.corpo.scale.y = agach;
-      u.corpo.position.x = (tremor ? Math.sin(tf * 60) * tremor : 0) + (modo === 'parado' || !modo ? peso * 0.06 : 0);
-      u.corpo.rotation.z = modo === 'parado' || !modo ? -peso * 0.05 : 0;
-      if (modo === 'parado' || !modo) u.corpo.rotation.y = 0.35 * Math.sin(tf * 0.45);   // vira o corpo devagar (olha os outros)
+      u.corpo.position.x = (tremor ? Math.sin(tf * 60) * tremor : 0) + (modo === 'parado' || !modo ? peso * 0.03 : 0);
+      u.corpo.rotation.z = modo === 'parado' || !modo ? -peso * 0.02 : 0;
+      u.corpo.rotation.y = 0;   /* v11: o corpo nao gira mais de um lado para o outro sem motivo */
       if (u.tronco) { const resp = Math.sin(tf * 2.2); u.tronco.scale.set(1 + resp * 0.012, 1 + resp * 0.018, 1 + resp * 0.02); }
       u.cabeca.rotation.x = cabX; u.cabeca.rotation.z = cabZ; u.cabeca.rotation.y = cabY;
       // olhos acompanham a cabeca (as pupilas olham antes); piscar fecha a PALPEBRA
@@ -591,10 +640,12 @@
       });
       if (o.criados.length) console.log('[lowpoly] cena ' + idx + ': ' + o.criados.length + ' objeto(s) criado(s) pela IA');
     }
-    function animarCriados(o, k, t) {
+    function animarCriados(o, k, t, cn, local) {
       (o.criados || []).forEach((g) => {
         const u = g.userData.criado; let px = u.base.x, py = u.base.y, pz = u.base.z, rx = u.giro.x, ry = u.giro.y, rz = u.giro.z, s = u.esc, vis = true;
-        if (g.userData.ehPessoa) posar(g, (MODO[o.acao] || ['parado'])[0], t, k, falaEm(t));   // v3: a pessoa criada pela IA tambem se mexe
+        const frente = g === o.prot && o.esqInset;
+        if (frente) ry = deFrente(px, pz);
+        if (g.userData.ehPessoa) atuar(g, o, cn, t, k, local, g === o.prot, (MODO[o.acao] || ['parado'])[g === o.prot ? 0 : 1], px, py, pz, ry);   /* v3: a pessoa criada pela IA tambem se mexe; v11: atua pela frase */
         u.anim.forEach((a) => {
           const de = num(a.de, 0, 1, 0), ate = Math.max(de + 0.01, num(a.ate, 0, 1, 1)), q = U.suave((k - de) / (ate - de));
           if (a.mover) { const m = vet(a.mover, -40, 40, [0, 0, 0]); px += m[0] * q; py += m[1] * q; pz += m[2] * q; }
@@ -907,6 +958,17 @@
       }
       Object.values(fx).forEach((f) => { if (f.isPoints || f.isLineSegments) sc.add(f); });
       montarCriados(cn, idx, o, r);
+      // v11: quem atua (protagonista ou a pessoa criada pela IA), para onde ele aponta (o objeto da cena) e o infografico com o boneco no canto
+      o.prot = o.gente[0] || o.criados.find((g) => g.userData.ehPessoa) || null;
+      o.afunda = !!(o.poca && o.prot);
+      const alvoC = o.criados.find((g) => !g.userData.ehPessoa);
+      if (alvoC) { alvoC.updateMatrixWorld(true); o.alvo = new T.Box3().setFromObject(alvoC).getCenter(new T.Vector3()); }
+      else if (o.vulcao) o.alvo = o.vulcao.position.clone().add(new T.Vector3(0, 3, 0));
+      const es = cn.esquema;
+      if (es && typeof es === 'object' && !globo && o.prot) {
+        const ni = Math.min(4, Array.isArray(es.itens) ? es.itens.length : 0);
+        if (es.tipo !== 'reacao' && es.tipo !== 'corpo' && !(es.tipo === 'barras' && ni > 3) && (es.tipo === 'medidor' || ni > 0)) o.esqInset = { n: es.tipo === 'medidor' ? 1 : ni, tipo: es.tipo };
+      }
       facetar(sc);
       return o;
     }
@@ -921,9 +983,76 @@
       noite_eterna: ['olha_cima', 'olha_cima'], gravidade_zero: ['flutua', 'flutua'], multidao: ['anda', 'anda'], seca: ['aponta', 'olha_cima'],
       chove: ['parado', 'corre'], estiagem: ['calor', 'calor'], erupcao: ['aponta', 'corre'], impacto: ['olha_cima', 'medo'], vento: ['medo', 'medo'],
       incendio: ['medo', 'corre'], derrete: ['calor', 'aponta'], sem_ar: ['sufoca', 'sufoca'], murcha: ['calor', 'parado'], brota: ['comemora', 'comemora'],
-      mostra: ['aponta', 'parado'], compara: ['aponta', 'olha_cima'], explode: ['medo', 'medo'], aurora: ['olha_cima', 'comemora'], amanhece: ['comemora', 'comemora'],
+      mostra: ['parado', 'parado'], compara: ['parado', 'olha_cima'], explode: ['medo', 'medo'], aurora: ['olha_cima', 'comemora'], amanhece: ['comemora', 'comemora'],
       lua_perto: ['olha_cima', 'aponta'], sol_cresce: ['calor', 'olha_cima'], orbita: ['parado', 'parado'],
     };
+
+    // ---------------------------------------------------------- ATUACAO v11
+    // O gesto do protagonista vem da FRASE, no tempo da PALAVRA (spec.palavras): "se hunden tus pies" -> olha para os pes no
+    // "hunden"; "sacar las piernas" -> puxa a perna; "cae / golpe" -> susto; "calor / fuego / explota" -> protege o rosto;
+    // "frio" -> treme; "¿que cambia?" -> mao no queixo; numero com cartao na tela -> aponta o cartao, sem cartao -> mao aberta
+    // explicando; "esto / aqui / mira" ou cena com objeto criado -> aponta o objeto; pergunta da ultima cena -> encolhe os
+    // ombros; final positivo -> comemora; infografico -> aponta cada item quando ele entra. Sem nada disso: escuta.
+    const SEM_ACENTO = (w) => String(w || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]/g, '');
+    const G_PISTAS = [
+      ['puxa', /^(sacar|saca|sacas|extraer|extrae|tirar|tira|jalar|arrancar|liberar|pull|puxar|soltar)/],
+      ['olha_baixo', /^(hund|afund|trag|engol|engul|sink|sank|swallow)|^(pie|pies|pierna|piernas|pe|pes|perna|pernas|feet|foot|leg|legs|suelo|chao|floor|ground|abajo|down)$/],
+      ['protege', /^(calor|calient|quem|fuego|llama|fogo|quent|queim|chama|heat|hot$|fire|flame|burn|arde|explot|explos|revient|revent|boom|blast|incend)/],
+      ['susto', /^(golpe|choque|choca|impact|cae$|caes$|caen$|caer$|caig|cai$|caem$|crash|hit$|aplast|romp|quiebr|muerd|estrell|derrumb)/],
+      ['treme', /^(frio|fria|hielo|congel|helad|cold|ice$|freez|gelo|gelad|nieve|neve)/],
+    ];
+    const G_POS = /^(salva|salvo|salvar|sobreviv|vives|safe|surviv|ganas|gana|frena|frenaron|frenan)/;
+    const G_DEM = /^(esto|esta|este|eso|esa|ese|aqui|ahi|alli|mira|isso|isto|esse|essa|ali|olha|this|that|here|there|look)$/;
+    function planoGestos(o, cn) {
+      if (o.gestos) return o.gestos;
+      const L = [], D = Math.max(0.6, cn.fim - cn.ini), ultima = cn === spec.cenas[spec.cenas.length - 1];
+      const add = (nome, ini, dur, alvo) => { ini = U.clamp(ini, 0.05, D - 0.3); const pv = L[L.length - 1]; if (pv && ini < pv.fim - 0.1) return; L.push({ nome, ini, fim: Math.min(D + 0.3, ini + dur), alvo }); };
+      if (o.esqInset) add('aponta', ESQ_T0 - 0.2, o.esqInset.n * ESQ_DT + 0.9, 'lista');
+      PAL.filter((w) => w.ini >= cn.ini - 0.02 && w.ini < cn.fim - 0.15).forEach((w) => {
+        const raw = String(w.palavra || ''), n = SEM_ACENTO(raw), li = w.ini - cn.ini - 0.12;
+        if (!n) return;
+        if (ultima && /\?\s*$/.test(raw)) return add('pergunta', li, 9, null);
+        if (ultima && G_POS.test(n)) return add('comemora', li, 1.6, null);
+        if (/^\s*¿/.test(raw) && !ultima) return add('pensa', li, 1.5, null);
+        if (/\d/.test(n)) { const card = cn.hudV2 && !o.esqInset; return add(card ? 'aponta' : 'conta', li, 1.3, card ? 'cima' : null); }
+        for (const [g, re] of G_PISTAS) if (re.test(n)) return add(g, li, g === 'puxa' ? 1.9 : 1.4, null);
+        if (o.alvo && G_DEM.test(n)) return add('aponta', li, 1.3, 'obj');
+      });
+      // objeto criado na cena e nada acontecendo na entrada: aponta para ele logo que a cena abre
+      if (o.alvo && !o.esqInset && !(L[0] && L[0].ini < 1.7)) L.unshift({ nome: 'aponta', ini: 0.2, fim: L[0] ? Math.min(1.6, L[0].ini - 0.1) : 1.6, alvo: 'obj' });
+      o.gestos = L; return L;
+    }
+    function gestoEm(o, cn, local) {
+      let best = null, bw = 0;
+      for (const g of planoGestos(o, cn)) {
+        if (local < g.ini || local > g.fim) continue;
+        const w = U.suave(U.clamp((local - g.ini) / 0.22, 0, 1)) * (1 - U.suave(U.clamp((local - (g.fim - 0.35)) / 0.35, 0, 1)));
+        if (w > bw) { bw = w; best = g; }
+      }
+      return best ? { nome: best.nome, w: bw, idade: local - best.ini, alvo: best.alvo } : null;
+    }
+    // direcao do alvo no corpo do boneco: o objeto (mundo 3D), o cartao do numero (alto da tela) ou o item do infografico
+    // (o boneco fica no canto de cima a direita: os itens estao para baixo e para a esquerda da tela)
+    function dirAlvo(o, alvo, local, px, py, pz, ry) {
+      const fx0 = cam.position.x - px, fz0 = cam.position.z - pz, fn = Math.hypot(fx0, fz0) || 1, fx = fx0 / fn, fz = fz0 / fn, rx = fz, rz = -fx;
+      let wx, wy, wz;
+      if (alvo === 'obj' && o.alvo) { wx = o.alvo.x - px; wy = o.alvo.y - (py + 1.6); wz = o.alvo.z - pz; }
+      else if (alvo === 'cima') { wx = fx * 0.3 + rx * 0.45; wy = 0.85; wz = fz * 0.3 + rz * 0.45; }
+      else if (alvo === 'lista') { const q = U.clamp((local - ESQ_T0) / ESQ_DT, 0, Math.max(0, o.esqInset.n - 1)); wx = fx * 0.45 - rx * 0.8; wy = -0.4 - 0.25 * q; wz = fz * 0.45 - rz * 0.8; }
+      else return [0, 0.3, 1];
+      const c = Math.cos(ry), s = Math.sin(ry);
+      return [wx * c - wz * s, wy, wx * s + wz * c];
+    }
+    const deFrente = (x, z) => Math.atan2(cam.position.x - x, cam.position.z - z);   // rotacao y que vira o boneco para a camera
+    function atuar(p, o, cn, t, k, local, prot, modo, bx, by, bz, ry) {
+      let ges = null;
+      if (prot) {
+        if (modo === 'parado' && o.afunda) modo = 'afunda';
+        ges = gestoEm(o, cn, local);
+        if (ges) ges.dir = dirAlvo(o, ges.alvo, local, bx, by, bz, ry);
+      }
+      posar(p, modo, t, k, prot ? falaEm(t) : 0, ges);
+    }
 
     // NO CEU, NO QUADRO: sol, lua grande, aurora e o asteroide vem de onde a
     // camera esta olhando (a camera gira; um astro com posicao fixa saia do
@@ -963,6 +1092,7 @@
       if (!o.globo && (acao === 'cresce') ) alvoY += U.saida(k) * 2.5;
       if (!o.globo && (acao === 'noite_eterna' || acao === 'aurora' || acao === 'lua_perto' || acao === 'impacto' || acao === 'chuva_meteoros' || acao === 'sol_cresce')) { alt *= 0.55; alvoY = 4 + 2 * U.suave(k); }
       if (o.interior) { dist = Math.min(dist, 9.5); alt = Math.min(alt, 4.2); ang = U.clamp(ang, -0.45, 0.6); alvoY = 1.4; }   // cozinha: dentro do comodo
+      if (o.esqInset) { ang = 0.25 + 0.08 * Math.sin(t * 0.3); dist = 8.5; alt = 2.6; alvoY = 1.3; }   /* v11: infografico -- plano de corpo inteiro do boneco para o quadrinho do canto */
       // empurrao de entrada: a cena chega 10% mais perto e assenta (substitui o flash)
       dist *= 1 - 0.1 * (1 - U.saida(U.clamp(local / 0.5, 0, 1)));
       // 14/11 (dono: imagens nao centralizadas): a camera girava em volta de (0,0) e o protagonista fica em z=1,6 -- com o giro
@@ -1059,7 +1189,8 @@
       const [mh, mf] = MODO[acao] || ['parado', 'parado'];
       o.gente.forEach((p, j) => {
         const u = p.userData, modo = j === 0 ? mh : mf;
-        posar(p, modo, t, k, j === 0 ? falaEm(t) : 0);
+        if (j === 0 && modo !== 'anda' && modo !== 'corre') p.rotation.y = o.esqInset ? deFrente(u.x0, u.z0) : 0;   /* v11: sem balanco de corpo; no infografico olha para a camera */
+        atuar(p, o, cn, t, k, local, j === 0, modo, u.x0, u.y0 || 0, u.z0, p.rotation.y);
         let y = u.y0 || 0, x = u.x0, z = u.z0;
         if (modo === 'anda' || modo === 'corre') {
           // andar EM VOLTA da praca: quem anda nao atravessa o mundo nem sai do quadro
@@ -1067,10 +1198,10 @@
           x = Math.cos(a) * d; z = 1 + Math.sin(a) * d * 0.7; p.rotation.y = -a + (modo === 'corre' ? 0 : 0);
           p.rotation.y = Math.atan2(-Math.sin(a) * d, Math.cos(a) * d * 0.7);
           y = o.terreno ? o.terreno.userData.alt(x, z) : 0;
-        } else if (j === 0) p.rotation.y = 0.15 * Math.sin(t * 0.4);
+        }
         if (acao === 'cresce' && j === 0) p.scale.setScalar(U.lerp(1, 3.2, U.saida(k)));
         if (acao === 'encolhe' && j === 0) p.scale.setScalar(U.lerp(1, 0.22, U.saida(k)));
-        if (acao === 'gravidade_zero') { y += U.saida(k) * (2.2 + j * 0.5); p.rotation.x = t * 0.4 * (j % 2 ? 1 : -1); p.rotation.z = t * 0.25; }
+        if (acao === 'gravidade_zero') { y += U.saida(k) * (2.2 + j * 0.5); p.rotation.x = 0.3 * Math.sin(t * 0.7 + j) * U.saida(k); p.rotation.z = 0.22 * Math.sin(t * 0.5 + j * 2) * U.saida(k); }   /* v11: balanca no ar (girava sem parar) */
         if (acao === 'para_de_girar' && k > 0.3) { x += (k - 0.3) * 3.2; p.rotation.z = -0.6 * U.saida((k - 0.3) / 0.7); }
         if (acao === 'vento') { x += Math.sin(t * 3 + j) * 0.05 + 0.25; p.rotation.z = -0.25; }
         if (acao === 'inunda' && o.agua) y = Math.max(y, o.agua.userData.nivel - 1.4);
@@ -1112,7 +1243,7 @@
       }
       if (fx.poeira) { const a = fx.poeira.geometry.attributes.position; for (let j = 0; j < a.count; j++) { const x0 = (rr() - 0.5) * 20, y0 = rr() * 8, z0 = (rr() - 0.5) * 14; a.setXYZ(j, ((x0 + local * 1.2 + 10) % 20) - 10, y0 + Math.sin(t + j) * 0.3, z0); } a.needsUpdate = true; fx.poeira.material.opacity = 0.55 * U.suave(k * 2); }
       if (fx.flutua) { const a = fx.flutua.geometry.attributes.position; for (let j = 0; j < a.count; j++) { const x0 = (rr() - 0.5) * 12, z0 = (rr() - 0.5) * 10, f = rr(); a.setXYZ(j, x0 + Math.sin(t * 0.5 + j) * 0.5, U.saida(k) * (1 + f * 6) + 0.2, z0); } a.needsUpdate = true; }
-      animarCriados(o, k, t);
+      animarCriados(o, k, t, cn, local);
       // a ultima coisa do 3D: o desenho
       U3.render(R, o.sc, cam, spec, t);
     }
@@ -1222,7 +1353,7 @@
       else if (nome === 'pele') { g.lineWidth = aceso ? 10 : 4; g.strokeStyle = aceso ? '#4FA8FF' : 'rgba(255,255,255,0.25)'; g.beginPath(); g.arc(140, -40, 90, Math.PI * 0.6, Math.PI * 1.4); g.stroke(); }
       g.restore(); return [x, y];
     }
-    function fluxoParticulas2D(g, de, ate, local, tipo, n) {   // fluxo animado (posicoes calculadas de t, sem estado)
+    function particulas(g, de, ate, local, tipo, n) {   // fluxo animado (posicoes calculadas de t, sem estado)
       for (let k = 0; k < n; k++) { const q = ((local * 0.9 + k / n) % 1), x = U.lerp(de[0], ate[0], q) + Math.sin(q * 9 + k) * 12, y = U.lerp(de[1], ate[1], q);
         g.save(); g.translate(x, y); g.scale(14, 14); g.globalAlpha = Math.sin(q * Math.PI); g.fillStyle = tipo === 'sal' ? '#F2F5F8' : '#4FA8FF'; (ICONES_ESQ[tipo] || ICONES_ESQ.gota)(g); g.restore(); }
     }
@@ -1405,7 +1536,26 @@
         U.rr(c, -w / 2, -h / 2, w, h, 30); c.fillStyle = '#FFD23F'; c.fill(); c.fillStyle = '#111'; ls.forEach((l, k) => c.fillText(l, 0, -h / 2 + 48 + k * 66)); c.restore(); }
       if (frente >= 0) { c.save(); c.font = '46px "Lilita One", sans-serif'; c.textAlign = 'left'; c.fillStyle = '#FFB13B'; c.fillText((/^pt/i.test(spec.idioma || '') ? 'EM CHAMAS: ' : /^es/i.test(spec.idioma || '') ? 'EN LLAMAS: ' : 'ON FIRE: ') + ardendo + ' / ' + PART.length, RQ.x0, RQ.y1 + 70); c.restore(); }
     }
-    function esquema(cn, t) {
+    // v11 (dono: "explicacoes com pouca interacao"): no infografico o mundo 3D sumia e o boneco junto. Agora o boneco fica num
+    // quadrinho no canto de cima, de corpo inteiro, APONTANDO cada item no momento em que ele entra (e reagindo as palavras).
+    const INS = { w: 300, h: 350, x: W - 300 - 34, y: 84 };
+    const INSET = document.createElement('canvas'); INSET.width = INS.w * 2; INSET.height = INS.h * 2;
+    const _pe = new T.Vector3(), _ca = new T.Vector3();
+    function capturarInset(o) {
+      const p = o.prot; if (!p) return;
+      p.updateMatrixWorld(true); _pe.set(0, 0, 0); _ca.set(0, 2.6, 0); p.localToWorld(_pe); p.localToWorld(_ca); _pe.project(cam); _ca.project(cam);
+      const yPe = (1 - _pe.y) / 2 * H, yCa = (1 - _ca.y) / 2 * H, xC = (_pe.x + _ca.x) / 4 * W + W / 2;
+      const h = U.clamp((yPe - yCa) * 1.22, 300, H), w = h * INS.w / INS.h, y0 = (yPe + yCa) / 2 - h / 2 - h * 0.04;
+      const g = INSET.getContext('2d'); g.clearRect(0, 0, INSET.width, INSET.height); g.drawImage(gl, xC - w / 2, y0, w, h, 0, 0, INSET.width, INSET.height);
+    }
+    function quadrinho(local) {
+      const s = U.mola(local - 0.2, 9); if (s <= 0.01) return;
+      c.save(); c.translate(INS.x + INS.w / 2, INS.y + INS.h / 2); c.scale(s, s); c.translate(-INS.w / 2, -INS.h / 2);
+      c.shadowColor = 'rgba(0,0,0,0.45)'; c.shadowBlur = 24; U.rr(c, 0, 0, INS.w, INS.h, 34); c.fillStyle = '#FFFFFF'; c.fill(); c.shadowBlur = 0;
+      c.save(); U.rr(c, 7, 7, INS.w - 14, INS.h - 14, 28); c.clip(); c.drawImage(INSET, 7, 7, INS.w - 14, INS.h - 14); c.restore();
+      c.restore();
+    }
+    function esquema(cn, t, o) {
       const e = cn.esquema; if (!e || typeof e !== 'object') return false;
       const local = t - cn.ini, D = cn.fim - cn.ini;
       const ent = U.saida(U.clamp(local / 0.25, 0, 1)), sai = U.clamp((local - (D - 0.2)) / 0.2, 0, 1);
@@ -1442,6 +1592,7 @@
           c.save(); c.globalAlpha = U.clamp(q / 0.25, 0, 1); c.font = '70px "Lilita One", sans-serif'; c.textAlign = 'left'; c.textBaseline = 'middle'; c.fillStyle = '#FFF';
           const ls = U.linhas(c, String(it.texto || '').toUpperCase(), 560).slice(0, 2); ls.forEach((l, k) => c.fillText(l, 400, y + (k - (ls.length - 1) / 2) * 76)); c.restore(); });
       }
+      if (o && o.esqInset) quadrinho(local);
       return true;
     }
     // O CARTAO DO NUMERO: conta de 0 ate o valor em 0,7 s, com mola na entrada.
@@ -1474,6 +1625,7 @@
       const { c: cn, i, k, local } = U.cenaEm(spec, t);
       pose3D(cenas[i], cn, t, k, local);
       c.globalAlpha = 1; c.drawImage(gl, 0, 0, W, H);
+      if (cenas[i].esqInset) capturarInset(cenas[i]);
       // passagem: os primeiros 0,25 s dissolvem a partir do fim da cena anterior
       const PASSA = 0.25;
       if (i > 0 && local < PASSA) {
@@ -1485,7 +1637,7 @@
       const ctaOn = t > (Number(spec.dur_s) || 0) - 2.8;
       if (!ctaOn) perigo(i, t, local);
       seloTempo(cn, t);
-      if (!esquema(cn, t)) cartaoNumero(cn, t);   // com esquema, o numero ja esta nele
+      if (!esquema(cn, t, cenas[i])) cartaoNumero(cn, t);   // com esquema, o numero ja esta nele
       U.cartaz(c, spec, t, { fonte: '84px "Lilita One", sans-serif', y: 170, fundo: '#FFD23F', borda: '#1B1B1B', cor: '#1B1B1B', altura_linha: 100, dur: 3.0 });
       U.ctaFinal(c, spec, t);
       U.legenda(c, spec, t, { fonte: '104px "Lilita One", sans-serif', y: H * 0.70, cor: '#FFFFFF', cor_ativa: '#FFD23F', contorno: 18, caixa: true, por_vez: 3 });
