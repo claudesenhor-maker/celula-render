@@ -448,6 +448,19 @@
     chao.rotation.x = -Math.PI / 2; chao.position.x = x / 2; chao.scale.setScalar(chaoTam); sc.add(chao); chao.material.transparent = true;
     const grade = new T.GridHelper(1, 40, new T.Color('#4F8A35').convertSRGBToLinear(), new T.Color('#5E9741').convertSRGBToLinear()); grade.material.toneMapped = false; grade.position.y = 0.0005; grade.material.transparent = true; grade.material.opacity = 0.9; sc.add(grade);
 
+    // v10 (15/11): o chao era um verde LISO em 60-70% do quadro. Agora um TERRENO pintado (manchas de campo claro/escuro,
+    // faixas de corte, luz mais clara perto dos itens) num disco que acompanha o zoom e some nas bordas -- nao e' a grama
+    // repetida do v2 (virava borrao): sao manchas grandes e suaves, na mesma proporcao de tela em qualquer escala.
+    const terreno = (() => { const cv = document.createElement('canvas'); cv.width = cv.height = 1024; const g = cv.getContext('2d'), rr = U.rng('terreno');
+      for (let k = 0; k < 9; k++) { g.fillStyle = k % 2 ? 'rgba(140,200,100,0.26)' : 'rgba(84,140,58,0.24)'; g.save(); g.translate(512, 512); g.rotate(-0.5); g.fillRect(-800, -720 + k * 160, 1600, 80); g.restore(); }
+      for (let k = 0; k < 70; k++) { const x = rr() * 1024, y = rr() * 1024, r0 = 50 + rr() * 150, cl = rr() < 0.5;
+        const gr = g.createRadialGradient(x, y, 0, x, y, r0); gr.addColorStop(0, cl ? 'rgba(150,208,108,0.7)' : 'rgba(78,134,54,0.62)'); gr.addColorStop(1, cl ? 'rgba(150,208,108,0)' : 'rgba(78,134,54,0)');
+        g.fillStyle = gr; g.save(); g.translate(x, y); g.scale(1.7, 0.75); g.translate(-x, -y); g.beginPath(); g.arc(x, y, r0, 0, Math.PI * 2); g.fill(); g.restore(); }
+      const luz = g.createRadialGradient(512, 512, 0, 512, 512, 300); luz.addColorStop(0, 'rgba(190,232,140,0.42)'); luz.addColorStop(1, 'rgba(190,232,140,0)'); g.fillStyle = luz; g.fillRect(0, 0, 1024, 1024);
+      g.globalCompositeOperation = 'destination-in'; const mk = g.createRadialGradient(512, 512, 250, 512, 512, 512); mk.addColorStop(0, 'rgba(0,0,0,1)'); mk.addColorStop(1, 'rgba(0,0,0,0)'); g.fillStyle = mk; g.fillRect(0, 0, 1024, 1024);
+      const tx = new T.CanvasTexture(cv); tx.encoding = T.sRGBEncoding;
+      const m = new T.Mesh(new T.PlaneGeometry(1, 1), new T.MeshBasicMaterial({ map: tx, transparent: true, depthWrite: false, fog: false, toneMapped: false })); m.rotation.x = -Math.PI / 2; m.renderOrder = 1; sc.add(m); return m; })();
+
     // v4 (14/11, dono: "na comparacao de tamanhos tente ser mais criativo, algo que prenda, mais dinamico, mais movimento
     // e mais detalhes"): HORIZONTE com morros e nuvens em unidade "distancia da camera" -- em qualquer zoom (1 cm ou
     // 1000 km) o fundo tem detalhe e paralaxe, em vez de ceu liso + chao liso.
@@ -499,7 +512,7 @@
       horizonte.children.forEach((n) => { if (n.userData.v) n.visible = esp < 0.6; });
       // v9: no espaco nao existe gramado -- o chao, a grade e os tufos somem e os planetas ficam soltos no escuro
       const terra = 1 - U.clamp((esp - 0.25) / 0.45, 0, 1);
-      chao.material.opacity = terra; chao.visible = terra > 0.01; grade.material.opacity = 0.9 * terra; grade.visible = terra > 0.01; tufos.visible = terra > 0.5;
+      chao.material.opacity = terra; chao.visible = terra > 0.01; terreno.material.opacity = terra; terreno.visible = terra > 0.01; grade.material.opacity = 0.9 * terra; grade.visible = terra > 0.01; tufos.visible = terra > 0.5;
       horizonte.children.forEach((n) => { if (n.isMesh && n.geometry && n.geometry.type === 'SphereGeometry' && !n.userData.v && n !== espaco) n.visible = terra > 0.3; });
     };
     const poeira = new T.Mesh(new T.RingGeometry(0.62, 1, 48), new T.MeshBasicMaterial({ color: '#E9DFC8', transparent: true, opacity: 0, depthWrite: false, side: T.DoubleSide }));
@@ -573,7 +586,7 @@
         poeira.scale.setScalar(Math.max(it.larg * 0.6, it.alt * 0.3) * (0.55 + qp * 0.8)); poeira.material.opacity = 0.45 * (1 - qp) * (1 - qp); } cam.near = d / 5000; cam.far = d * 2000; cam.updateProjectionMatrix();
       if (T3) {
         chao.position.set(cx, 0, 0); chao.scale.setScalar(d * 600);   // v4: com o voo em arco a borda do disco (60x) aparecia como cupula
-        grade.position.set(cx, d * 0.0004, 0); grade.scale.setScalar(d * 6);
+        grade.position.set(cx, d * 0.0004, 0); grade.scale.setScalar(d * 6); terreno.position.set(cx, d * 0.0004, 0); terreno.scale.setScalar(d * 9);
         nevoa.near=d*25;nevoa.far=d*160;   // v3: a nevoa a 6x lavava o chao de branco
         sol.position.set(cx - d * 1.25, d * 1.45, d * 0.5); sol.target.position.set(cx, 0, 0); sol.target.updateMatrixWorld();
         const sh = sol.shadow.camera; sh.left = sh.bottom = -d * 1.2; sh.right = sh.top = d * 1.2; sh.near = d * 0.05; sh.far = d * 5; sh.updateProjectionMatrix();

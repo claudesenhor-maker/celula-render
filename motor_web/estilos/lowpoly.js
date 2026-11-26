@@ -550,8 +550,12 @@
     const num = (v, a, b, p) => { const x = Number(v); return Number.isFinite(x) ? U.clamp(x, a, b) : p; };
     const vet = (v, a, b, p) => [0, 1, 2].map((i) => num(Array.isArray(v) ? v[i] : undefined, a, b, p[i]));
     const corOk = (c, p) => (/^#[0-9a-fA-F]{3,6}$/.test(String(c || '')) ? c : p);
+    // v10 (15/11): o protagonista mudava de rosto/cabelo a CADA cena (o sorteio era por cena) -- loiro, ruivo, mulher de coque no
+    // mesmo video. Agora a primeira pessoa de cada cena e' sempre o MESMO boneco (sorteio pela semente do video).
+    let nPes = 0;
+    const protagonista = () => pessoa(U.rng((spec.semente || 'lp') + ':protagonista'), 1);
     function pecaPronta(nome, r) {
-      return ({ pessoa: () => pessoa(r, 1), arvore: () => arvore('redonda'), pinheiro: () => arvore('pinheiro'), cacto: () => arvore('cacto'),
+      return ({ pessoa: () => (nPes++ === 0 ? protagonista() : pessoa(r, nPes + 1)), arvore: () => arvore('redonda'), pinheiro: () => arvore('pinheiro'), cacto: () => arvore('cacto'),
         casa: () => casa(), predio: () => predio(1.2, 3, 1.2, '#C9B79C', r), carro: () => carro('#E2574C'), nuvem: () => nuvem(r),
         pinguim: () => pinguim(), peixe: () => peixe(), vulcao: () => vulcao(r), gelo: () => gelo() }[nome] || (() => null))();
     }
@@ -746,7 +750,7 @@
     }
 
     function montar(cn, idx) {
-      const sc = new T.Scene(), r = U.rng((spec.semente || 'lp') + ':' + idx);
+      const sc = new T.Scene(), r = U.rng((spec.semente || 'lp') + ':' + idx); nPes = 0;
       const acao = cn.acaoV2, cen = cenarioDaCena(cn);
       const globo = cen === 'planeta' || cen === 'espaco';
       // hora: a do roteiro, senao a que a acao pede
@@ -864,7 +868,7 @@
         const iaCriaPessoa = Array.isArray(cn.criar) && cn.criar.some((d) => d && d.modelo === 'pessoa');
         const n = acao === 'multidao' || acao === 'sem_ar' ? 12 : iaCriaPessoa ? 0 : acao === 'corre' ? 3 : Math.max(1, (cn.atores || ['pessoa']).length) + (cen === 'cidade' ? 2 : 1);
         for (let i = 0; i < Math.min(14, n); i++) {
-          const p = pessoa(r, i);
+          const p = i === 0 && nPes++ === 0 ? protagonista() : pessoa(r, i + 1);
           if (i === 0) p.position.set(0, 0, 1.6);
           else {
             // atras e dos lados (a camera vem da frente) e a 1 m de qualquer outro: nada de gente na frente do protagonista
@@ -947,7 +951,7 @@
       if (!o.globo && !o.interior && D > 3.2 && local > D * 0.52) cam0 = cam0 === 'perto' ? 'orbita' : 'perto';
       if (!o.globo && o.interior && D > 3.2 && local > D * 0.52) cam0 = cam0 === 'perto' ? 'lateral' : 'perto';
       // v3: a camera ficava a 19 m -- gente com 15% da altura do quadro e metade de ceu/mar vazio. Agora ~14 m (25%).
-      let ang = 0.5 * Math.sin(t * 0.21) + k * 0.55, dist = o.globo ? 15.5 : 14.5, alt = o.globo ? 2 : 6.2, alvoY = o.globo ? 0 : 1.5;
+      let ang = 0.5 * Math.sin(t * 0.21) + k * 0.55, dist = o.globo ? 15.5 : 11.2, alt = o.globo ? 2 : 5.2, alvoY = o.globo ? 0 : 1.5;
       if (cam0 === 'orbita') ang += k * 0.9;
       if (cam0 === 'zoom_in') dist *= U.lerp(1.12, 0.62, U.suave(k));
       if (cam0 === 'zoom_out') dist *= U.lerp(0.62, 0.95, U.suave(k));
@@ -1415,10 +1419,10 @@
         corpoV3(e, itens, tj, local, t);
       } else if (e.tipo === 'barras' && itens.length) {
         const vmax = Math.max(...itens.map((it) => Math.abs(Number(it.valor) || 0)), 1e-9), L = W - 200;
-        itens.forEach((it, j) => { const q = U.saida(U.clamp(tj(j) / 0.7, 0, 1)); if (q <= 0) return; const y = 560 + j * 230, x0 = 100;
-          fonte(64); c.textAlign = 'left'; c.fillStyle = '#FFF'; c.fillText(String(it.texto || '').toUpperCase().slice(0, 26), x0, y - 50, L);
-          U.rr(c, x0, y, L, 80, 40); c.fillStyle = 'rgba(255,255,255,0.12)'; c.fill(); U.rr(c, x0, y, Math.max(20, L * (Math.abs(Number(it.valor) || 0) / vmax) * q), 80, 40); c.fillStyle = j === 0 ? '#FF5A3C' : '#4FA8FF'; c.fill();
-          if (!e.sem_valor) { const v = (Number(it.valor) || 0) * q; fonte(60); c.textAlign = 'right'; c.fillStyle = '#FFF'; c.fillText((Math.abs(v) >= 10 ? Math.round(v) : v.toFixed(1)).toString().replace('.', ',') + (e.unidade ? ' ' + e.unidade : ''), x0 + L, y - 50); } });
+        itens.forEach((it, j) => { const q = U.saida(U.clamp(tj(j) / 0.7, 0, 1)); if (q <= 0) return; const y = 790 - (itens.length - 1) * 140 + j * 280, x0 = 100;   /* v10: barras maiores e no meio da faixa livre (ficavam no terco de cima) */
+          fonte(74); c.textAlign = 'left'; c.fillStyle = '#FFF'; c.fillText(String(it.texto || '').toUpperCase().slice(0, 26), x0, y - 62, L * 0.62);
+          U.rr(c, x0, y, L, 116, 58); c.fillStyle = 'rgba(255,255,255,0.12)'; c.fill(); U.rr(c, x0, y, Math.max(60, L * (Math.abs(Number(it.valor) || 0) / vmax) * q), 116, 58); c.fillStyle = j === 0 ? '#FF5A3C' : '#4FA8FF'; c.fill();
+          if (!e.sem_valor) { const v = (Number(it.valor) || 0) * q; fonte(70); c.textAlign = 'right'; c.fillStyle = '#FFD23F'; c.fillText((Math.abs(v) >= 10 ? Math.round(v) : v.toFixed(1)).toString().replace('.', ',') + (e.unidade ? ' ' + e.unidade : ''), x0 + L, y - 62); } });
       } else if (e.tipo === 'medidor') {
         const q = U.saida(U.clamp(tj(0) / 1.0, 0, 1)), vmax = Number(e.max) || 100, v = U.clamp((Number(e.valor) || 0) / vmax, 0, 1) * q, cx = W / 2, cy = 900, R = 300;
         fonte(72); c.fillStyle = '#FFF'; c.fillText(String(e.texto || '').toUpperCase().slice(0, 26), cx, 480, W - 100);

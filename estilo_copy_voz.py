@@ -152,7 +152,7 @@ def gerar_entonacao():
  if len(pau)!=len(falas) or any(not 0<=float(x)<=1.5 for x in pau):raise ValueError('pausas: uma por fala, 0..1,5 s')
  falas=[VM.limpar(f) for f in falas]
  N=int(AJ.get('tentativas',3));velocidade=float(AJ.get('velocidade',1.0))
- if not 1<=N<=4 or not .85<=velocidade<=1.1:raise ValueError('tentativas 1..4, velocidade 0,85..1,1')
+ if not 1<=N<=5 or not .85<=velocidade<=1.1:raise ValueError('tentativas 1..4, velocidade 0,85..1,1')
  cfg={'motor':'chatterbox','voice':'pt-BR-FranciscaNeural','lingua':AJ.get('lingua','pt'),'ref_url':REF,'exaggeration':float(AJ.get('exaggeration',.6)),
       'cfg_weight':float(AJ.get('cfg_weight',.30)),'temperature':float(AJ.get('temperature',.80))}
  raiz=Path('estilo-copy-voz');raiz.mkdir(exist_ok=True);partes=raiz/'partes';partes.mkdir(exist_ok=True)
@@ -170,11 +170,13 @@ def gerar_entonacao():
   if n_out:x[-n_out:]*=np.linspace(1,0,n_out)
   return x
  marcas=[];logs=[];saida=[];inicio=0.0;todas=[]
- for i,itens in enumerate(trechos):
+ FRACO=float(AJ.get('nota_fraca',.72));EXTRA=int(AJ.get('tentativas_extra',2))
+ def tentar(itens,chave,n,ja=0):
+  """gera o trecho até n vezes; devolve (nota, áudio, palavras, nº da tentativa escolhida, notas)."""
   trecho=' '.join(f for f,_ in itens);melhor=None;notas=[]
-  for t in range(N):
-   semente=1000+i*17+t*101;torch.manual_seed(semente);np.random.seed(semente);random.seed(semente)
-   p=partes/f'{i:02}-{t}.wav';mm=_sintetizar_local(trecho,cfg,str(p),motor='chatterbox')
+  for t in range(ja,ja+n):
+   semente=1000+chave*17+t*101;torch.manual_seed(semente);np.random.seed(semente);random.seed(semente)
+   p=partes/f'{chave:04}-{t}.wav';mm=_sintetizar_local(trecho,cfg,str(p),motor='chatterbox')
    fim=max((m['fim_s'] for m in mm),default=0)
    if fim<=0:notas.append(0);continue
    x=ler(p);resp=.38 if trecho.rstrip().endswith(('?','...','…')) else .26
@@ -185,10 +187,36 @@ def gerar_entonacao():
    if len(mm)!=len(trecho.split()):nota-=.3
    notas.append(round(nota,3))
    if melhor is None or nota>melhor[0]:melhor=(nota,x,mm,t)
-   print('trecho',i+1,'/',len(trechos),'tentativa',t+1,'nota',round(nota,3),'s/caractere',round(spc,3),flush=True)
+   print('trecho',chave,'tentativa',t+1,'nota',round(nota,3),'s/caractere',round(spc,3),flush=True)
    if nota>=.8:break
-  if melhor is None:raise ValueError('Trecho sem palavras alinhadas')
-  nota,x,mm,t=melhor;ok=len(mm)==len(trecho.split())
+  return (melhor+(notas,)) if melhor else None
+ def resolver(itens,chave,nivel=0):
+  """bloco fraco (15/11, dono: "tente arrumar esses blocos fracos"): depois das N tentativas insiste mais EXTRA vezes; se ainda
+  ficar fraco e tiver mais de uma fala, gera as duas metades em separado e fica com o que tiver a melhor melodia."""
+  r=tentar(itens,chave,N)
+  if r and r[0]<FRACO and EXTRA>0 and nivel==0:
+   r2=tentar(itens,chave,EXTRA,ja=N)
+   if r2:r=(r2[:4] if r2[0]>r[0] else r[:4])+(r[4]+r2[4],)
+  if (r is None or r[0]<FRACO) and len(itens)>=2 and nivel<1:
+   tot=sum(len(f) for f,_ in itens);ac=0;c=1
+   for j,(f,_) in enumerate(itens[:-1]):
+    ac+=len(f)
+    if ac>=tot/2:c=j+1;break
+   else:c=len(itens)-1
+   ma=resolver(itens[:c],chave*10+1,1);mb=resolver(itens[c:],chave*10+2,1)
+   if ma and mb:
+    na=sum(len(VE.frases(z[2])) for z in ma);nb=sum(len(VE.frases(z[2])) for z in mb)
+    media=(sum(z[0]*len(VE.frases(z[2])) for z in ma+mb))/max(1,na+nb)
+    if r is None or media>r[0]+.04:
+     print('trecho',chave,'dividido: nota',round(media,3),'contra',None if r is None else round(r[0],3),flush=True);return ma+mb
+  return [(r[0],r[1],r[2],itens,r[3],r[4])] if r else None
+ prontos=[]
+ for i,itens in enumerate(trechos):
+  rr=resolver(itens,i+1)
+  if not rr:raise ValueError('Trecho sem palavras alinhadas')
+  prontos+=[(i,)+z for z in rr]
+ for i,nota,x,mm,itens,t,notas in prontos:
+  trecho=' '.join(f for f,_ in itens);ok=len(mm)==len(trecho.split())
   fins=[];k=0
   for f,_ in itens:
    k+=len(f.split());fins.append(k-1)
@@ -209,7 +237,7 @@ def gerar_entonacao():
   if itens[-1][1]>0:pedacos.append(np.zeros(int(itens[-1][1]*SR),dtype='float32'))
   y=np.concatenate(pedacos);saida.append(y);ds=len(y)/SR
   marcas.extend({'text':m['palavra'],'offset':round((inicio+m['inicio_s']+desloc[j])/velocidade*10000000),'duration':round((m['fim_s']-m['inicio_s'])/velocidade*10000000)} for j,m in enumerate(mm))
-  logs.append({'trecho':i,'caracteres':len(trecho),'tentativas':notas,'escolhida':t+1,'nota_final':round(float(np.mean([r['nota'] for r in res])) if res else 0,3),'rampas':feitos,'duracao_s':round(ds,2)});inicio+=ds
+  logs.append({'trecho':i,'caracteres':len(trecho),'tentativas':notas,'escolhida':t+1,'nota_escolhida':round(nota,3),'nota_final':round(float(np.mean([r['nota'] for r in res])) if res else 0,3),'rampas':feitos,'duracao_s':round(ds,2)});inicio+=ds
  bruto=raiz/'bruto.wav'
  with wave.open(str(bruto),'w') as w:
   w.setnchannels(1);w.setsampwidth(2);w.setframerate(SR);w.writeframes((np.clip(np.concatenate(saida),-1,1)*32000).astype('<i2').tobytes())
