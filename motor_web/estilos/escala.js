@@ -424,7 +424,7 @@
       // v3 (13/11): item CHATO (folha, espelho, pista, pegada) deitado no chao vira uma linha invisivel -- a comparacao
       // do titulo some. Ele fica EM PE, inclinado para a camera, como uma placa: a area aparece.
       const b0 = new T.Box3().setFromObject(g), dx0 = b0.max.x - b0.min.x, dy0 = b0.max.y - b0.min.y, dz0 = b0.max.z - b0.min.z;
-      if (dy0 < 0.2 * Math.max(dx0, dz0) && dz0 > 0.3 * dx0) { const pe = new T.Group(); pe.add(g); g.rotation.x = Math.PI / 2 * 0.88; g = pe; g.userData.emPe = true; }
+      if (dy0 < 0.2 * Math.max(dx0, dz0) && dz0 > 0.12 * dx0) {   /* v11 (26/11): 0.3 deixava folha de palmeira (25 x 4 m) deitada -- linha sob a etiqueta */ const pe = new T.Group(); pe.add(g); g.rotation.x = Math.PI / 2 * 0.88; g = pe; g.userData.emPe = true; }
       const b = new T.Box3().setFromObject(g), maior = Math.max(1e-6, b.max.y - b.min.y, b.max.x - b.min.x);
       g.scale.multiplyScalar(tam / maior); g.position.y = -b.min.y * (tam / maior);
       const b2 = new T.Box3().setFromObject(g), alt = Math.max(1e-6, b2.max.y - b2.min.y), larg = Math.max(alt * 0.2, b2.max.x - b2.min.x);
@@ -435,7 +435,7 @@
       return { nome: String(it.nome || 'item ' + (i + 1)).slice(0, 26), tam, alt, larg, g, sm, s0: g.scale.clone(), y0: g.position.y, vivo: (pronto || it.modelo) === 'pessoa' };
     });
     // lado a lado, do menor para a direita, com um respiro proporcional
-    let x = 0; itens.forEach((it, i) => { if (i) x += (itens[i - 1].larg + it.larg) * 0.5 + Math.max(itens[i - 1].larg, it.larg) * 0.25; it.x = x; it.g.position.x = x; it.sm.position.set(x + it.larg * 0.08, it.alt * 0.002, 0); });
+    let x = 0; itens.forEach((it, i) => { if (i) x += (itens[i - 1].larg + it.larg) * 0.5 + Math.max(itens[i - 1].larg, it.larg) * 0.12; it.x = x;   /* v11 (26/11): respiro 0.25->0.12 -- no quadro em pe a fileira larga encolhia os itens */ it.g.position.x = x; it.sm.position.set(x + it.larg * 0.08, it.alt * 0.002, 0); });
     const chaoTam = Math.max(10, x * 4 + (itens.length ? itens[itens.length - 1].alt * 20 : 10));
     // CHAO QUE ACOMPANHA O ZOOM (23/10): o disco tem 60x a distancia da camera
     // e a grama repete na mesma proporcao -- de perto parece grama, de longe campo
@@ -525,9 +525,9 @@
     // o enquadramento que mostra os itens 0..a inteiros: centro e distancia
     function quadroDe(a) {
       if (!itens.length) return { cx: 0, cy: 1, d: 6 };
-      const it = itens[a]; let x0 = Math.max(itens[0].x - itens[0].larg, it.x - Math.max(it.alt * 1.2, it.larg * 0.65)); const x1 = it.x + it.larg * 0.65;
+      const it = itens[a]; let x0 = Math.max(itens[0].x - itens[0].larg, it.x - Math.max(it.alt * 1.2, it.larg * 0.65)); const x1 = it.x + it.larg * 0.6;
       // v3: a comparacao do titulo precisa dos DOIS no quadro -- o item anterior entra sempre
-      if (a > 0) x0 = Math.min(x0, itens[a - 1].x - itens[a - 1].larg * 0.95);
+      if (a > 0) x0 = Math.min(x0, itens[a - 1].x - itens[a - 1].larg * 0.65);   // v11: 0.95 deixava meia largura de folga
       const hfov = 2 * Math.atan(Math.tan((cam.fov * Math.PI) / 360) * cam.aspect), vfov = (cam.fov * Math.PI) / 180;
       // v2 05/11: margens mais justas -- o item da vez ocupa o quadro (antes ~25% da altura)
       // v3: o item ocupa ~55% da altura util (antes 1,3x de folga + metade de baixo do quadro vazia)
