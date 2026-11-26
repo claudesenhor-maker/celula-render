@@ -1353,7 +1353,7 @@
       else if (nome === 'pele') { g.lineWidth = aceso ? 10 : 4; g.strokeStyle = aceso ? '#4FA8FF' : 'rgba(255,255,255,0.25)'; g.beginPath(); g.arc(140, -40, 90, Math.PI * 0.6, Math.PI * 1.4); g.stroke(); }
       g.restore(); return [x, y];
     }
-    function particulas(g, de, ate, local, tipo, n) {   // fluxo animado (posicoes calculadas de t, sem estado)
+    function fluxoParticulas2D(g, de, ate, local, tipo, n) {   // fluxo animado (posicoes calculadas de t, sem estado)
       for (let k = 0; k < n; k++) { const q = ((local * 0.9 + k / n) % 1), x = U.lerp(de[0], ate[0], q) + Math.sin(q * 9 + k) * 12, y = U.lerp(de[1], ate[1], q);
         g.save(); g.translate(x, y); g.scale(14, 14); g.globalAlpha = Math.sin(q * Math.PI); g.fillStyle = tipo === 'sal' ? '#F2F5F8' : '#4FA8FF'; (ICONES_ESQ[tipo] || ICONES_ESQ.gota)(g); g.restore(); }
     }
