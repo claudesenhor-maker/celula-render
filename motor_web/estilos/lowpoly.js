@@ -1538,7 +1538,7 @@
     }
     // v11 (dono: "explicacoes com pouca interacao"): no infografico o mundo 3D sumia e o boneco junto. Agora o boneco fica num
     // quadrinho no canto de cima, de corpo inteiro, APONTANDO cada item no momento em que ele entra (e reagindo as palavras).
-    const INS = { w: 300, h: 350, x: W - 300 - 34, y: 84 };
+    const INS = { w: 290, h: 330, x: W - 290 - 34, y: 74 };
     const INSET = document.createElement('canvas'); INSET.width = INS.w * 2; INSET.height = INS.h * 2;
     const _pe = new T.Vector3(), _ca = new T.Vector3();
     function capturarInset(o) {
