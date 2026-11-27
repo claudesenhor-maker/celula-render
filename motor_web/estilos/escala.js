@@ -80,28 +80,45 @@
           // v4 (14/11, dono: "personagens 3D desfigurados e de baixa qualidade"): era cilindro + caixa de sapato + bola de
           // cabeca com 2 pontinhos. Agora proporcao de boneco simpatico (cabeca ~1/5), maos, sapato arredondado, olho com
           // branco e pupila, sorriso, cabelo com franja, manga e cinto. Unidade: altura = 1.
+          // v12 (26/11, dono: "os bonecos fazem movimento sem sentido"): o corpo ganhou ARTICULACOES (tronco na cintura,
+          // cabeca no pescoco, ombro e cotovelo) para ATUAR -- olhar para cima, recuar, apontar, mao na testa (atuaPessoa).
           const pele = '#E8B996', roupa = '#3E7CB1', calca = '#2F3C55', cab = '#3A2618';
+          const em = (pai, forma, c2, p, sz, giro, mat, piv) => { const m = new T.Mesh((F[forma] || F.caixa)(), M(c2, mat)); m.position.set(p[0] - piv[0], p[1] - piv[1], p[2] - piv[2]); m.scale.set(...sz);
+            if (giro) m.rotation.set(...giro.map((a) => (a * Math.PI) / 180)); pai.add(m); return m; };
+          const grupo = (pai, piv, pivPai) => { const q = new T.Group(); q.position.set(piv[0] - pivPai[0], piv[1] - pivPai[1], piv[2] - pivPai[2]); pai.add(q); return q; };
+          const O = [0, 0, 0], PT = [0, 0.45, 0], PC = [0, 0.77, 0];
           for (const l of [-1, 1]) {
             add('capsula', calca, [l * 0.05, 0.25, 0], [0.085, 0.42, 0.09], null, 'tecido');
             add('esfera', '#1E1E22', [l * 0.05, 0.03, 0.025], [0.085, 0.06, 0.15], null, 'borracha');
-            add('capsula', roupa, [l * 0.15, 0.6, 0], [0.075, 0.2, 0.075], [0, 0, l * 8], 'tecido');
-            add('capsula', pele, [l * 0.168, 0.47, 0.005], [0.058, 0.18, 0.058], [0, 0, l * 5]);
-            add('esfera', pele, [l * 0.175, 0.385, 0.01], [0.06, 0.068, 0.05]);
           }
-          add('capsula', roupa, [0, 0.6, 0], [0.27, 0.34, 0.19], null, 'tecido');
-          add('cilindro', '#22283A', [0, 0.45, 0], [0.25, 0.03, 0.18], null, 'borracha');
-          add('cilindro', pele, [0, 0.765, 0], [0.06, 0.05, 0.06]);
-          add('esfera', pele, [0, 0.88, 0], [0.2, 0.21, 0.19]);
+          const tronco = grupo(g, PT, O);
+          em(tronco, 'capsula', roupa, [0, 0.6, 0], [0.27, 0.34, 0.19], null, 'tecido', PT);
+          em(tronco, 'cilindro', '#22283A', [0, 0.45, 0], [0.25, 0.03, 0.18], null, 'borracha', PT);
+          em(tronco, 'cilindro', pele, [0, 0.765, 0], [0.06, 0.05, 0.06], null, null, PT);
+          const bracos = {};
           for (const l of [-1, 1]) {
-            add('esfera', pele, [l * 0.098, 0.875, 0], [0.03, 0.045, 0.03]);
-            add('esfera', '#FFFFFF', [l * 0.04, 0.9, 0.085], [0.032, 0.038, 0.016], null, 'ceramica');
-            add('esfera', '#1A1410', [l * 0.04, 0.898, 0.093], [0.018, 0.022, 0.01]);
-            add('capsula', cab, [l * 0.042, 0.94, 0.086], [0.012, 0.03, 0.01], [0, 0, 90 + l * 10]);
+            const PO = [l * 0.14, 0.69, 0], PE = [l * 0.163, 0.535, 0.003];
+            const ombro = grupo(tronco, PO, PT);
+            em(ombro, 'capsula', roupa, [l * 0.15, 0.6, 0], [0.075, 0.2, 0.075], [0, 0, l * 8], 'tecido', PO);
+            const cot = grupo(ombro, PE, PO);
+            em(cot, 'capsula', pele, [l * 0.168, 0.47, 0.005], [0.058, 0.18, 0.058], [0, 0, l * 5], null, PE);
+            em(cot, 'esfera', pele, [l * 0.175, 0.385, 0.01], [0.06, 0.068, 0.05], null, null, PE);
+            bracos[l] = { ombro, cot, S: new T.Vector3(PO[0], PO[1] - PT[1], PO[2]), E: new T.Vector3(PE[0], PE[1] - PT[1], PE[2]), H: new T.Vector3(l * 0.175, 0.37 - PT[1], 0.01) };   /* no espaco do tronco */
           }
-          add('esfera', '#D9A07E', [0, 0.873, 0.097], [0.022, 0.02, 0.018]);
-          add('capsula', '#8A2E2E', [0, 0.848, 0.09], [0.011, 0.045, 0.01], [0, 0, 90]);
-          add('meia_esfera', cab, [0, 0.905, -0.012], [0.205, 0.16, 0.2], [-22, 0, 0], 'tecido');
-          add('capsula', cab, [0.015, 0.968, 0.07], [0.03, 0.13, 0.03], [0, 0, 80], 'tecido');
+          const cabeca = grupo(tronco, PC, PT); cabeca.rotation.order = 'YXZ';
+          const ec = (forma, c2, p, sz, giro, mat) => em(cabeca, forma, c2, p, sz, giro, mat, PC);
+          ec('esfera', pele, [0, 0.88, 0], [0.2, 0.21, 0.19]);
+          for (const l of [-1, 1]) {
+            ec('esfera', pele, [l * 0.098, 0.875, 0], [0.03, 0.045, 0.03]);
+            ec('esfera', '#FFFFFF', [l * 0.04, 0.9, 0.085], [0.032, 0.038, 0.016], null, 'ceramica');
+            ec('esfera', '#1A1410', [l * 0.04, 0.898, 0.093], [0.018, 0.022, 0.01]);
+            ec('capsula', cab, [l * 0.042, 0.94, 0.086], [0.012, 0.03, 0.01], [0, 0, 90 + l * 10]);
+          }
+          ec('esfera', '#D9A07E', [0, 0.873, 0.097], [0.022, 0.02, 0.018]);
+          const boca = ec('capsula', '#8A2E2E', [0, 0.848, 0.09], [0.011, 0.045, 0.01], [0, 0, 90]);
+          ec('meia_esfera', cab, [0, 0.905, -0.012], [0.205, 0.16, 0.2], [-22, 0, 0], 'tecido');
+          ec('capsula', cab, [0.015, 0.968, 0.07], [0.03, 0.13, 0.03], [0, 0, 80], 'tecido');
+          g.userData.rig = { tronco, cabeca, bracos, boca };
           break; }
         case 'roda_gigante': {
           // v4 (14/11): a IA descrevia a London Eye como um anel DEITADO num tripe. Modelo pronto: aro em pe, raios,
@@ -429,10 +446,11 @@
       g.scale.multiplyScalar(tam / maior); g.position.y = -b.min.y * (tam / maior);
       const b2 = new T.Box3().setFromObject(g), alt = Math.max(1e-6, b2.max.y - b2.min.y), larg = Math.max(alt * 0.2, b2.max.x - b2.min.x);
       g.traverse((o) => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; } });
+      const rig = g.userData.rig || null; delete g.userData.rig;   /* v12: articulacoes da pessoa (fora do userData: o clone da pilha nao as copia) */
       sc.add(g);
       const dzS = Math.max(alt * 0.12, Math.min(b2.max.z - b2.min.z, larg) * 0.75), sm = new T.Mesh(new T.CircleGeometry(0.5, 40), new T.MeshBasicMaterial({ map: texSombra(), transparent: true, depthWrite: false, opacity: 0.55, toneMapped: false, fog: false }));
       sm.rotation.x = -Math.PI / 2; sm.scale.set(larg * 1.35, dzS * 2.2, 1); sm.renderOrder = 3; sm.userData.sombra = true; sc.add(sm);
-      return { nome: String(it.nome || 'item ' + (i + 1)).slice(0, 26), tam, alt, larg, g, sm, s0: g.scale.clone(), y0: g.position.y, vivo: (pronto || it.modelo) === 'pessoa' };
+      return { nome: String(it.nome || 'item ' + (i + 1)).slice(0, 26), tam, alt, larg, prof: Math.max(1e-6, b2.max.z - b2.min.z), g, sm, s0: g.scale.clone(), y0: g.position.y, vivo: (pronto || it.modelo) === 'pessoa', rig };
     });
     // lado a lado, do menor para a direita, com um respiro proporcional
     let x = 0; itens.forEach((it, i) => { if (i) x += (itens[i - 1].larg + it.larg) * 0.5 + Math.max(itens[i - 1].larg, it.larg) * 0.12; it.x = x;   /* v11 (26/11): respiro 0.25->0.12 -- no quadro em pe a fileira larga encolhia os itens */ it.g.position.x = x; it.sm.position.set(x + it.larg * 0.08, it.alt * 0.002, 0); });
@@ -506,7 +524,7 @@
       const cid = U.clamp((L - 1.2) / 0.5, 0, 1) * (1 - U.clamp((L - 3.4) / 0.5, 0, 1));
       cidade.userData.mats.forEach((m) => { m.opacity = cid; }); cidade.visible = cid > 0.01;
       const esp = U.clamp((L - 4.0) / 1.2, 0, 1);
-      espaco.material.opacity = esp * 0.97; estrelas.material.opacity = U.clamp((esp - 0.3) / 0.5, 0, 1); brilhoAtm.material.opacity = esp * 0.6;
+      espaco.material.opacity = esp * 0.97; estrelas.material.opacity = U.clamp((esp - 0.3) / 0.5, 0, 1); brilhoAtm.material.opacity = 0;   /* v12: abaixo */
       espaco.visible = esp > 0.01; estrelas.visible = esp > 0.3; brilhoAtm.visible = esp > 0.01;
       // nuvens somem no espaco
       horizonte.children.forEach((n) => { if (n.userData.v) n.visible = esp < 0.6; });
@@ -514,6 +532,9 @@
       const terra = 1 - U.clamp((esp - 0.25) / 0.45, 0, 1);
       chao.material.opacity = terra; chao.visible = terra > 0.01; terreno.material.opacity = terra; terreno.visible = terra > 0.01; grade.material.opacity = 0.9 * terra; grade.visible = terra > 0.01; tufos.visible = terra > 0.5;
       horizonte.children.forEach((n) => { if (n.isMesh && n.geometry && n.geometry.type === 'SphereGeometry' && !n.userData.v && n !== espaco) n.visible = terra > 0.3; });
+      /* v12 (26/11): o anel da atmosfera (toro 300x a distancia, 6x abaixo) visto de lado virava uma FAIXA AZUL-CLARA reta atras dos
+         planetas (qp1, Luna/Tierra ~28-33 s). Ele so' faz sentido como brilho na linha do horizonte enquanto ainda ha' chao: some com o chao. */
+      brilhoAtm.material.opacity = esp * 0.6 * terra * terra; brilhoAtm.visible = brilhoAtm.material.opacity > 0.01;
     };
     const poeira = new T.Mesh(new T.RingGeometry(0.62, 1, 48), new T.MeshBasicMaterial({ color: '#E9DFC8', transparent: true, opacity: 0, depthWrite: false, side: T.DoubleSide }));
     poeira.rotation.x = -Math.PI / 2; sc.add(poeira);
@@ -527,16 +548,128 @@
       if (!itens.length) return { cx: 0, cy: 1, d: 6 };
       const it = itens[a]; let x0 = Math.max(itens[0].x - itens[0].larg, it.x - Math.max(it.alt * 1.2, it.larg * 0.65)); const x1 = it.x + it.larg * 0.6;
       // v3: a comparacao do titulo precisa dos DOIS no quadro -- o item anterior entra sempre
-      if (a > 0) x0 = Math.min(x0, itens[a - 1].x - itens[a - 1].larg * 0.65);   // v11: 0.95 deixava meia largura de folga
+      if (a > 0) x0 = Math.min(x0, itens[a - 1].x - itens[a - 1].larg * 0.65 - it.larg * 0.06);   /* v12: + respiro -- o anterior (e a pessoa) nao fica cortado na borda */   // v11: 0.95 deixava meia largura de folga
       const hfov = 2 * Math.atan(Math.tan((cam.fov * Math.PI) / 360) * cam.aspect), vfov = (cam.fov * Math.PI) / 180;
       // v2 05/11: margens mais justas -- o item da vez ocupa o quadro (antes ~25% da altura)
       // v3: o item ocupa ~55% da altura util (antes 1,3x de folga + metade de baixo do quadro vazia)
-      const h = it.alt * 1.15, w = x1 - x0, d = Math.max((w / 2) / Math.tan(hfov / 2) * 0.95, (h / 2) / Math.tan(vfov / 2) * 0.98);
+      const h = it.alt * (a === 0 ? 1.36 : 1.15), w = x1 - x0,   /* v12: o 1o item sozinho (a pessoa) tinha a cabeca cortada -- a mira baixa (0,82) pede mais folga em cima */ d = Math.max((w / 2) / Math.tan(hfov / 2) * 0.95, (h / 2) / Math.tan(vfov / 2) * 0.98);
       return { cx: (x0 + x1) / 2, cy: it.alt * 0.5, d };
     }
     // interpola em LOG (a distancia muda por ordens de grandeza)
     const lerpLog = (a, b, k) => Math.exp(U.lerp(Math.log(a), Math.log(b), k));
 
+    // ---------- v12 (26/11, dono: "os bonecos fazem movimento sem sentido, explicacoes com pouca interacao") ----------
+    // (1) PILHA xN: o item anterior se REPETE ao lado do novo ate' a altura dele (ou em fila, se o novo e' comprido), uma copia
+    //     por vez, com a contagem no topo; quando termina, o selo "xN MAS GRANDE" assenta. E' o "casi cinco personas, una sobre
+    //     otra" do roteiro na imagem. So' quando a conta fecha com a medida real (1,5 a 40 copias, eixo certo).
+    // (2) A PESSOA ATUA: olha para cima para o que esta' caindo, recua quando cai ao lado, aponta o item da vez e poe a mao na
+    //     testa quando o item e' enorme; no resto fica parada (respira), sem girar a toa.
+    const clonar = (g0) => { const ud = []; g0.traverse((o) => { ud.push([o, o.userData]); o.userData = {}; }); const c2 = g0.clone(true); ud.forEach(([o, u]) => { o.userData = u; }); return c2; };
+    const pIdx = itens.findIndex((it) => it.rig);
+    const pilhas = itens.map((it, a) => {
+      if (a === 0 || !spec.cenas.some((cn, i) => idxAlvo(cn, i) === a)) return null;
+      const pv = itens[a - 1], N = it.tam / pv.tam;
+      if (!(N >= 1.5 && N <= 40)) return null;
+      const alto = it.alt >= 0.9 * it.tam, vert = alto && pv.alt >= 0.9 * pv.tam, horiz = !alto && it.larg >= 0.9 * it.tam && pv.larg >= 0.9 * pv.tam;   /* a conta da pilha tem de fechar com a medida do selo */
+      if (!vert && !horiz) return null;
+      const base = vert && !pv.rig;   /* empilha em cima do original (ele conta como 1); a pessoa ganha uma coluna ao lado */
+      const inteiros = Math.floor(N + 1e-6), fant = N - inteiros >= 0.15, nCop = (base ? inteiros - 1 : inteiros) + (fant ? 1 : 0);
+      let xc = pv.x, zc = 0;
+      if (vert && !base) { xc = Math.max(pv.x + pv.larg * 1.05, it.x - it.larg * 0.5 - pv.larg * 0.75);   /* coluna encostada no item novo: a medida fica lado a lado */ if (xc + pv.larg * 0.5 > it.x - it.larg * 0.5) zc = it.prof * 0.5 + pv.prof * 0.8; }
+      if (horiz) zc = it.prof * 0.5 + pv.prof * 0.6;
+      const copias = [];
+      for (let k = 0; k < nCop; k++) {
+        const cg = clonar(pv.g), fantasma = fant && k === nCop - 1; cg.rotation.set(0, 0, 0); cg.scale.copy(pv.s0);
+        if (fantasma) cg.traverse((o) => { if (o.isMesh || o.isLineSegments) { o.material = o.material.clone(); o.material.transparent = true; o.material.opacity = 0.4; o.material.depthWrite = false; o.castShadow = false; } });
+        const pos = vert ? new T.Vector3(xc, pv.y0 + (base ? k + 1 : k) * pv.alt, zc) : new T.Vector3(it.x - it.larg * 0.5 + pv.larg * (k + 0.5), pv.y0, zc);
+        cg.position.copy(pos); cg.visible = false; sc.add(cg); copias.push({ g: cg, pos, fantasma });
+      }
+      return { a, N, vert, base, copias, pv, it, inteiros };
+    });
+    // quando cada copia aparece (s, dentro da cena) -- a mesma conta serve ao 3D e a contagem/selo
+    const tempoPilha = (P) => { const n = P.copias.length, passo = U.clamp(1.3 / n, 0.07, 0.3); return { s0: 0.85, passo, fim: 0.85 + n * passo + 0.15 }; };
+    function posePilhas(i, a, ant, local, teaser) {
+      pilhas.forEach((P) => P && P.copias.forEach((c) => { c.g.visible = false; }));
+      let ativa = null;
+      const P = pilhas[a];
+      if (P && !teaser) {
+        const novo = a !== ant || i === 0, tp = tempoPilha(P); let vis = 0;
+        P.copias.forEach((cp, k) => {
+          const e = novo ? U.clamp((local - (tp.s0 + k * tp.passo)) / 0.3, 0, 1) : 1; if (e <= 0) return;
+          const s1 = Math.max(0.001, Math.min(1.12, U.mola(e * 1.1, 11)));
+          cp.g.visible = true; cp.g.scale.copy(P.pv.s0).multiplyScalar(s1);
+          cp.g.position.set(cp.pos.x, cp.pos.y + (P.vert ? P.pv.alt * 0.9 * Math.pow(1 - e, 2) : 0), cp.pos.z); vis = k + 1;
+        });
+        const und = (P.base ? 1 : 0) + vis, ultimo = vis > 0 ? P.copias[vis - 1] : null;
+        ativa = { P, vis, conta: Math.min(und, P.inteiros), completa: !novo || local >= tp.fim, topo: ultimo ? ultimo.pos : null, tp, novo };
+      }
+      const Q = pilhas[ant];   /* a pilha da cena anterior encolhe na troca */
+      if (Q && a !== ant && local < 0.35) Q.copias.forEach((cp) => { const s1 = 1 - U.suave(local / 0.35); if (s1 <= 0.01) return; cp.g.visible = true; cp.g.scale.copy(Q.pv.s0).multiplyScalar(s1); cp.g.position.copy(cp.pos); });
+      return ativa;
+    }
+    // ---- a pessoa atua (sem estado: a pose sai so' da cena e do tempo local) ----
+    const env = (x, t0, sobe, fica, desce) => U.suave((x - t0) / Math.max(1e-3, sobe)) * (1 - U.suave((x - t0 - sobe - fica) / Math.max(1e-3, desce)));
+    function posePessoa(it, i, local) {
+      const cn = spec.cenas[i], a = idxAlvo(cn, i), ant = i > 0 ? idxAlvo(spec.cenas[i - 1], i - 1) : a, novo = a !== ant || i === 0;
+      const dur = Math.max(1, cn.fim - cn.ini), alvo = itens[a] || it, sx = alvo.x >= it.x ? 1 : -1;
+      const o = { sx, a, yaw: 0, pitch: 0, corpo: 0, inclina: 0, recuo: 0, pulo: 0, susto: 0, aponta: 0, testa: 0, acena: 0, boca: 0 };
+      if (alvo === it) {   /* a cena e' dela ("empieza por ti"): acena para a camera */
+        const t0 = (i === 0 && itens.length > 2) ? 1.45 : 0.6;
+        o.acena = novo ? env(local, t0, 0.25, Math.min(1.6, dur * 0.4), 0.35) : 0; o.pitch = -0.05; return o;
+      }
+      const dx = Math.abs(alvo.x - it.x), cabY = it.alt * 0.88, olhaP = -U.clamp(Math.atan2(alvo.alt * 0.75 - cabY, Math.max(1e-6, dx - alvo.larg * 0.3)), 0, 0.75);
+      const tL = 0.12 + 0.55 * 0.45, aoLado = (dx - alvo.larg * 0.5) / Math.max(alvo.alt, 1e-6) < 0.6 ? 1 : 0.45, enorme = alvo.tam / it.tam >= 6;
+      const segura = U.clamp(dur * 0.3, 0.7, 1.4), tA = novo ? tL + 0.75 : 0.25, tS = tA + 0.25 + segura;
+      o.yaw = sx * 0.55; o.corpo = sx * 0.28; o.pitch = olhaP;
+      if (novo) {
+        const antes = 1 - U.suave((local - tL) / 0.2);   /* enquanto cai, acompanha com o olhar la' de cima */
+        o.pitch = U.lerp(olhaP, -0.7, antes * U.suave(local / 0.15));
+        o.susto = aoLado * env(local, tL, 0.08, 0.45, 0.45); o.recuo = o.susto; o.pulo = env(local, tL, 0.12, 0, 0.2) * aoLado; o.boca = o.susto;
+      }
+      o.aponta = env(local, tA, 0.25, segura, 0.3);
+      /* item ENORME: quando a camera recua, ela poe a mao na testa e olha longe (antes de apontar) e volta a fazer isso no fim */
+      if (enorme) { o.testa = Math.max(novo ? env(local, 0.02, 0.22, tL + 0.35, 0.25) : 0, U.suave((local - tS + 0.15) / 0.35)); o.susto *= 0.5; o.recuo = o.susto; }
+      o.pitch = U.lerp(o.pitch, Math.min(o.pitch, -0.35), o.testa); o.inclina = -0.05 * o.testa;
+      return o;
+    }
+    const mistura = (p, q, k) => { const r = {}; for (const c in q) r[c] = typeof q[c] === 'number' ? U.lerp(p[c], q[c], k) : q[c]; return r; };
+    const _V = (x, y, z) => new T.Vector3(x, y, z);
+    function ikBraco(br, alvo, dica) {
+      const S = br.S, la = br.E.distanceTo(S), lb = br.H.distanceTo(br.E), D = alvo.clone().sub(S), u = D.clone().normalize();
+      const d = U.clamp(D.length(), Math.abs(la - lb) + 1e-4, la + lb - 1e-4), ca = U.clamp((la * la + d * d - lb * lb) / (2 * la * d), -1, 1), sa = Math.sqrt(1 - ca * ca);
+      const v = dica.clone().sub(u.clone().multiplyScalar(dica.dot(u))); if (v.lengthSq() < 1e-8) v.set(0, 0, 1); v.normalize();
+      const E = S.clone().addScaledVector(u, la * ca).addScaledVector(v, la * sa), P = S.clone().addScaledVector(u, d);
+      br.ombro.quaternion.setFromUnitVectors(br.E.clone().sub(S).normalize(), E.clone().sub(S).normalize());
+      br.cot.quaternion.setFromUnitVectors(br.H.clone().sub(br.E).normalize(), P.sub(E).normalize().applyQuaternion(br.ombro.quaternion.clone().invert()));
+    }
+    function atuaPessoa(it, i, local, t) {
+      const rg = it.rig; let o = posePessoa(it, i, local);
+      if (i > 0 && local < 0.35) { const cA = spec.cenas[i - 1]; o = mistura(posePessoa(it, i - 1, cA.fim - cA.ini), o, U.suave(local / 0.35)); }   /* sem pulo na troca de cena */
+      const sx = o.sx, h = it.alt;
+      it.g.position.x = it.x - sx * h * 0.32 * o.recuo; it.g.position.y += h * 0.07 * o.pulo;
+      it.g.rotation.set(0, o.corpo * (1 - 0.6 * o.acena), 0);
+      rg.tronco.rotation.set(-0.12 * o.susto + o.inclina, 0, sx * 0.2 * o.susto); rg.tronco.scale.set(1, 1 + 0.008 * Math.sin(t * 2.3), 1);
+      rg.cabeca.rotation.set(o.pitch + 0.1 * o.susto, o.yaw * (1 - o.acena), 0);
+      rg.boca.scale.set(U.lerp(0.011, 0.03, o.boca), U.lerp(0.045, 0.03, o.boca), 0.012);
+      // braco do lado do item: repouso / aponta / mao na testa / susto / aceno; o outro: repouso / susto
+      it.g.updateMatrixWorld(true);
+      [1, -1].forEach((l) => {
+        const br = rg.bracos[l], doLado = l === sx; const pesos = [], alvos = [], dicas = [];
+        const pA = doLado ? o.aponta : 0, pT = doLado ? o.testa * (1 - pA) : 0, pW = l === 1 ? o.acena : 0, pS = o.susto * (1 - pW);
+        const pR = Math.max(0, 1 - pA - pT - pW - pS);
+        pesos.push(pR); alvos.push(br.H.clone()); dicas.push(_V(l, -0.3, -0.4));
+        if (pA > 0) { const it2 = itens[o.a], w = rg.tronco.localToWorld(br.S.clone()), alvoW = _V(it2.x - sx * it2.larg * 0.25, Math.max(it2.alt * 0.55, w.y), 0);
+          const dl = rg.tronco.worldToLocal(alvoW).sub(br.S); dl.z = Math.max(dl.z, dl.length() * 0.15); dl.normalize(); dl.y = Math.min(dl.y, 0.8); dl.normalize();
+          pesos.push(pA); alvos.push(br.S.clone().addScaledVector(dl, 0.33)); dicas.push(_V(0, -1, -0.3)); }
+        if (pT > 0) { pesos.push(pT); alvos.push(_V(l * 0.02, 0.475, 0.125)); dicas.push(_V(l, 0.4, 0.1)); }
+        if (pW > 0) { pesos.push(pW); alvos.push(_V(l * (0.27 + 0.06 * Math.sin(t * 11)), 0.46, 0.06)); dicas.push(_V(l, -1, 0)); }
+        if (pS > 0) { pesos.push(pS); alvos.push(_V(l * 0.24, 0.42, 0.13)); dicas.push(_V(l, -1, 0)); }
+        const tot = pesos.reduce((s1, x1) => s1 + x1, 0) || 1, alvo = _V(0, 0, 0), dica = _V(0, 0, 0);
+        pesos.forEach((pw, k) => { alvo.addScaledVector(alvos[k], pw / tot); dica.addScaledVector(dicas[k], pw / tot); });
+        ikBraco(br, alvo, dica);
+      });
+    }
+    const fmtM = (v) => (v >= 1000 ? (v / 1000).toLocaleString('en-US', { maximumFractionDigits: 1 }) + ' km' : v >= 1 ? v.toLocaleString('en-US', { maximumFractionDigits: 1 }) + ' m' : (v * 100).toLocaleString('en-US', { maximumFractionDigits: 1 }) + ' cm');
     function quadro(t) {
       const { c: cn, i, k, local } = U.cenaEm(spec, t), a = idxAlvo(cn, i), ant = i > 0 ? idxAlvo(spec.cenas[i - 1], i - 1) : a;
       // 14/11 (dados: perde gente no comeco): GANCHO -- o video abre 0,6 s no MAIOR item, escondido atras de um "?" gigante,
@@ -569,7 +702,9 @@
         it.g.scale.copy(it.s0).multiplyScalar(sEnt); it.g.position.y = it.y0 * sEnt + (j === a && entra < 1 ? it.alt * 1.6 * Math.pow(1 - U.clamp(entra * 2.2, 0, 1), 2) : 0); });
       // 14/11 (dono: "bonecos estaticos"): a pessoa de referencia respira, troca o peso e gira o corpo devagar
       itens.forEach((it) => { const gi = it.g.userData.gira || (it.g.children[0] && it.g.children[0].userData && it.g.children[0].userData.gira); if (gi) gi.rotation.y = t * 0.35; });   // planeta gira
-      itens.forEach((it, j) => { if (!it.vivo) return; it.g.scale.y *= 1 + 0.015 * Math.sin(t * 2.2 + j); it.g.rotation.y = 0.22 * Math.sin(t * 0.7 + j); it.g.rotation.z = 0.025 * Math.sin(t * 0.8 + j); });
+      /* v12 (26/11, dono: "movimento sem sentido"): o giro/balanco a toa saiu -- a pessoa ATUA conforme a cena (atuaPessoa) */
+      itens.forEach((it) => { if (it.rig) atuaPessoa(it, i, local, t); else if (it.vivo) { it.g.rotation.set(0, 0, 0); } });
+      const pilhaQ = posePilhas(i, a, ant, local, teaser);
       const pouso = U.clamp((entra - 0.45) / 0.4, 0, 1), treme = a !== ant && pouso > 0 && pouso < 1 ? (1 - pouso) * 0.012 : 0;
       // v2 05/11: item chato e largo (avião, pista, zona) visto do chão vira uma linha;
       // a câmera sobe em ângulo proporcional a largura/altura e mostra a ÁREA.
@@ -610,7 +745,7 @@
       const comHud = !!(cn.hud && typeof cn.hud !== 'object');
       const yMin = spec.titulo && t < 3.4 ? 620 : comHud ? 590 : 330, postas = [];   // v4: o titulo vem antes do HUD
       // v5 (14/11, dono: "muitos detalhes um em cima do outro"): so' a etiqueta do item da vez e a do anterior
-      const ordem = teaser ? [] : [a, a - 1].filter((j) => j >= 0 && j < itens.length);
+      const ordem = teaser ? [] : [a, a - 1].filter((j) => j >= 0 && j < itens.length && !(j === a - 1 && pilhaQ && pilhaQ.vis > 0));   /* v12: com a pilha no quadro a contagem faz o papel da etiqueta do anterior */
       ordem.forEach((j) => {
         const it = itens[j];
         const p = new T.Vector3(it.x, it.alt, 0).project(cam); if (p.z > 1) return;
@@ -664,16 +799,52 @@
         }
       }
       // v4: SELO "xN" -- quantas vezes o item da vez e' maior (ou menor) que o anterior; gira e assenta com mola
-      if (a > 0 && itens[a] && itens[a - 1] && local > 0.55 && !(spec.titulo && t < 3.3) && t < (Number(spec.dur_s) || 1e9) - 2.8) {
+      const tSelo = pilhaQ && pilhaQ.novo ? pilhaQ.tp.fim : 0.55;   /* v12: com pilha, o selo assenta quando a contagem fecha */
+      if (a > 0 && itens[a] && itens[a - 1] && local > tSelo && !(spec.titulo && t < 3.3) && t < (Number(spec.dur_s) || 1e9) - 2.8) {
         const rz = itens[a].tam / itens[a - 1].tam, maior = rz >= 1, x = maior ? rz : 1 / rz;
         if (x >= 1.5) {
           const fmt = x >= 1e6 ? (x / 1e6).toLocaleString('en-US', { maximumFractionDigits: 1 }) + 'M' : x >= 1e4 ? Math.round(x / 1e3) + 'K' : x >= 10 ? Math.round(x).toLocaleString('en-US') : x.toFixed(1).replace(/\.0$/, '');
           const lg = /^es/i.test(spec.idioma || '') ? (maior ? 'MÁS GRANDE' : 'MÁS PEQUEÑO') : /^pt/i.test(spec.idioma || '') ? (maior ? 'MAIOR' : 'MENOR') : (maior ? 'BIGGER' : 'SMALLER');
-          const sp = U.mola(local - 0.55, 9), gira = (1 - U.clamp((local - 0.55) / 0.35, 0, 1)) * -0.5;
+          const sp = U.mola(local - tSelo, 9), gira = (1 - U.clamp((local - tSelo) / 0.35, 0, 1)) * -0.5;
           c.save(); c.translate(W / 2, H * 0.785); c.rotate(gira); c.scale(sp * 0.8, sp * 0.8); c.textAlign = 'center'; c.textBaseline = 'middle';   // faixa livre abaixo da legenda
           c.font = '118px "Lilita One", sans-serif'; const t1 = '×' + fmt; const w1 = c.measureText(t1).width; c.font = '50px "Lilita One", sans-serif'; const w2 = c.measureText(lg).width;
           const ww = Math.max(w1, w2) + 80; U.rr(c, -ww / 2, -100, ww, 200, 40); c.fillStyle = '#E8473C'; c.fill(); c.lineWidth = 8; c.strokeStyle = '#1B1B1B'; c.stroke();
           c.fillStyle = '#FFFFFF'; c.font = '118px "Lilita One", sans-serif'; c.fillText(t1, 0, -18); c.font = '50px "Lilita One", sans-serif'; c.fillText(lg, 0, 58); c.restore();
+        }
+      }
+      // v12: CONTAGEM da pilha -- um numero no topo da coluna acompanha cada copia que chega (1, 2, 3...)
+      if (pilhaQ && pilhaQ.vis > 0 && pilhaQ.novo && !pilhaQ.completa && pilhaQ.topo) {
+        const P = pilhaQ.P, tp0 = pilhaQ.topo, pt = new T.Vector3(tp0.x + (P.vert ? 0 : P.pv.larg * 0.5), P.vert ? tp0.y - P.pv.y0 + P.pv.alt : P.pv.alt, tp0.z).project(cam);
+        const px = (pt.x * 0.5 + 0.5) * W, py = (-pt.y * 0.5 + 0.5) * H, kk = pilhaQ.P.base ? pilhaQ.vis + 1 : pilhaQ.vis;
+        const tk = pilhaQ.tp.s0 + (pilhaQ.vis - 1) * pilhaQ.tp.passo, pop = U.mola(local - pilhaQ.tp.s0 + 0.02, 12) * (1 + 0.18 * (1 - U.clamp((local - tk) / 0.12, 0, 1)));   /* entra uma vez e pulsa a cada copia */
+        if (pt.z < 1 && px > -40 && px < W + 40) {
+          const txt = kk > P.inteiros ? P.N.toFixed(1).replace(/\.0$/, '') : String(kk), bx = U.clamp(px, 90, W - 90), by = U.clamp(py - 70, cn.hud ? 440 : 360, H * 0.62);
+          c.save(); c.translate(bx, by); c.scale(pop, pop); c.font = '86px "Lilita One", sans-serif'; c.textAlign = 'center'; c.textBaseline = 'middle';
+          const w = Math.max(110, c.measureText(txt).width + 50); U.rr(c, -w / 2, -56, w, 112, 30); c.fillStyle = '#FFFFFF'; c.fill(); c.lineWidth = 6; c.strokeStyle = '#1B1B1B'; c.stroke();
+          c.beginPath(); c.moveTo(-16, 54); c.lineTo(16, 54); c.lineTo(0, 78); c.closePath(); c.fillStyle = '#FFFFFF'; c.fill();
+          c.fillStyle = '#E8473C'; c.fillText(txt, 0, 4); c.restore();
+        }
+      }
+      // v12: tamanhos PARECIDOS (menos de 1,5x): uma linha tracejada na altura do anterior atravessa ate' o novo e a sobra
+      // (ou a falta) fica marcada na cota com o numero -- "sobran 33 m" vira imagem.
+      if (a > 0 && itens[a] && itens[a - 1] && !teaser && local > 0.9 && !(spec.titulo && t < 3.3)) {
+        const it = itens[a], pv = itens[a - 1], rz = it.tam / pv.tam;
+        if (rz >= 1.04 && rz < 1.5 || rz <= 1 / 1.04 && rz > 1 / 1.5) {
+          const pr = (x3, y3) => { const v = new T.Vector3(x3, y3, 0).project(cam); return [(v.x * 0.5 + 0.5) * W, (-v.y * 0.5 + 0.5) * H, v.z]; };
+          const xl = it.x + it.larg * 0.62, [xa, ya] = pr(pv.x - pv.larg * 0.45, pv.alt), [xb, yb, zb] = pr(xl, pv.alt), [, yt] = pr(xl, it.alt);
+          const e = U.saida(U.clamp((local - 0.9) / 0.5, 0, 1));
+          if (zb < 1 && Math.abs(yb - yt) > 18) {
+            c.save(); c.strokeStyle = '#FFD23F'; c.lineWidth = 7; c.shadowColor = 'rgba(0,0,0,0.55)'; c.shadowBlur = 8; c.setLineDash([22, 14]);
+            c.beginPath(); c.moveTo(xa, ya); c.lineTo(xa + (xb - xa) * e, ya + (yb - ya) * e); c.stroke(); c.setLineDash([]);
+            if (e > 0.95) {
+              const k2 = U.saida(U.clamp((local - 1.4) / 0.4, 0, 1)); c.lineWidth = 14; c.beginPath(); c.moveTo(xb, yb); c.lineTo(xb, yb + (yt - yb) * k2); c.stroke();
+              const dif = Math.abs(it.tam - pv.tam), txt = (rz > 1 ? '+' : '−') + fmtM(dif);
+              c.font = '64px "Lilita One", sans-serif'; c.textAlign = 'center'; c.textBaseline = 'middle'; const w = c.measureText(txt).width + 44, pop = U.mola(local - 1.5, 11);
+              const bx = U.clamp(xb - w / 2 - 26, w / 2 + 16, W - w / 2 - 16), by = U.clamp(Math.max(yb, yt) + 62, 400, H * 0.62);   /* abaixo da linha: em cima batia na etiqueta do item */
+              c.translate(bx, by); c.scale(pop, pop); c.shadowBlur = 0; U.rr(c, -w / 2, -44, w, 88, 24); c.fillStyle = '#FFD23F'; c.fill(); c.lineWidth = 5; c.strokeStyle = '#1B1B1B'; c.stroke(); c.fillStyle = '#1B1B1B'; c.fillText(txt, 0, 3);
+            }
+            c.restore();
+          }
         }
       }
       // v3: o HUD aparecia atras do cartaz do titulo -- so' entra depois dele
