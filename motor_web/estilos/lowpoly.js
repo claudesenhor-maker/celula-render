@@ -125,6 +125,33 @@
     espaco: ['#02030C', '#0B1030'],
   };
 
+
+  const CANAL524 = '1b4f4574-77e2-5c30-8245-93f3b00e0407';
+  function feedAtivo524(spec, t) { return spec.cell_id === CANAL524 && t >= 0 && t < 1.2; }
+  function lumFeed524(hex) {
+    const s = hex.replace('#', '');
+    const rgb = (s.length === 3 ? s.split('').map(x => x + x).join('') : s).match(/../g).map(x => parseInt(x, 16) / 255);
+    return rgb.map(v => v <= 0.04045 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4)).reduce((a, v, i) => a + v * [0.2126, 0.7152, 0.0722][i], 0);
+  }
+  function razaoFeed524(a, b) { const x = lumFeed524(a), y = lumFeed524(b); return (Math.max(x, y) + 0.05) / (Math.min(x, y) + 0.05); }
+  function paletaFeed524(cores) {
+    const ordenadas = cores.slice().sort((a, b) => lumFeed524(a) - lumFeed524(b));
+    const cor = ordenadas[Math.floor(ordenadas.length / 2)] || '#cccccc';
+    const fundos = ['#101820', '#eef1f4'];
+    const fundo = fundos.sort((a, b) => razaoFeed524(cor, b) - razaoFeed524(cor, a))[0];
+    return {fundo, contraste: razaoFeed524(cor, fundo), clara: fundo === '#101820'};
+  }
+  function efeitoFeed524(texto, acao) {
+    const t = String(texto).normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+    if (/cable|electric|electr|chispa|faisca|rayo/.test(t)) return 'faisca';
+    if (/presion|pressao|revient|explota|estalla|estornud|hincha|globo|hielo seco/.test(t)) return 'pressao';
+    if (/congel|hielo|gelo|freez|frozen/.test(t) || acao === 'congela') return 'gelo';
+    if (/fuego|fogo|incend|llama|flame|burn/.test(t) || acao === 'incendio') return 'fogo';
+    if (/agua|lluv|rain|water|charco/.test(t) || ['chove', 'inunda', 'derrete'].includes(acao)) return 'agua';
+    if (/rompe|grieta|rachad|quebra/.test(t) || acao === 'tremor') return 'rachadura';
+    return 'movimento';
+  }
+
   function criar(tela, spec, U) {
     const T = window.THREE;
     const c = tela.getContext('2d'), W = spec.w, H = spec.h;
@@ -914,6 +941,93 @@
     spec.cenas.forEach((cn, i) => { cn.acaoV2 = acaoCoerente(cn, i); cn.hudV2 = hudDaCena(cn); cn.tempoV2 = tempoDaCena(cn); });
     const cenas = spec.cenas.map(montar);
 
+    // T524: um insert do objeto real da primeira cena; a camera e fixa por 1,2 s.
+    // A cena original e seus materiais nunca sao alterados.
+    const feed524 = (() => {
+      if (spec.cell_id !== CANAL524) return null;
+      const o = cenas[0], cn = spec.cenas[0];
+      const origem = (o.criados || []).find(g => !g.userData.ehPessoa) || o.globoG || o.gente[0];
+      if (!origem) throw new Error('T524: abertura sem objeto da historia');
+      const materiais = [], cores = [];
+      function copiar(no) {
+        if (no.userData.sombra === 1 || no.isSprite || no.isPoints) return null;
+        const g = no.isMesh ? new T.Mesh(no.geometry, (() => {
+          const m = new T.MeshLambertMaterial({color: no.material.color || '#cccccc', vertexColors: !!no.material.vertexColors, side: T.DoubleSide});
+          materiais.push(m); cores.push('#' + m.color.getHexString()); return m;
+        })()) : new T.Group();
+        g.position.copy(no.position); g.quaternion.copy(no.quaternion); g.scale.copy(no.scale);
+        no.children.forEach(ch => { const cp = copiar(ch); if (cp) g.add(cp); });
+        return g;
+      }
+      const modelo = copiar(origem), sc = new T.Scene(); let objeto = new T.Group();
+      modelo.position.set(0, 0, 0); modelo.scale.setScalar(1); modelo.rotation.x -= 0.12; modelo.rotation.y += 0.22; objeto.add(modelo); sc.add(objeto);
+      sc.add(new T.AmbientLight('#ffffff', 0.9));
+      const luz = new T.DirectionalLight('#ffffff', 0.35); luz.position.set(5, 8, 12); sc.add(luz);
+      // Vertices reais: caixas locais rotacionadas superestimam a silhueta de esferas e cabos.
+      function medir() {
+        objeto.updateMatrixWorld(true); const box = new T.Box3(), v = new T.Vector3();
+        objeto.traverse(n => { if (!n.isMesh) return; const a = n.geometry.attributes.position;
+          for (let j = 0; j < a.count; j++) box.expandByPoint(v.fromBufferAttribute(a, j).applyMatrix4(n.matrixWorld)); });
+        return box;
+      }
+      let caixa = medir(), tam = caixa.getSize(new T.Vector3());
+      // Cabo/objeto horizontal: orientar na vertical evita reduzir o assunto a uma faixa minuscula.
+      if (tam.x > tam.y) { objeto.rotation.z = Math.PI / 2; caixa = medir(); tam = caixa.getSize(new T.Vector3()); }
+      const centro = caixa.getCenter(new T.Vector3()); objeto.position.sub(centro);
+      // Animar em torno do centro visivel, inclusive quando a geometria tem coordenadas muito deslocadas.
+      const raiz = new T.Group(); sc.remove(objeto); raiz.add(objeto); sc.add(raiz); objeto = raiz;
+      const paleta = paletaFeed524(cores);
+      sc.background = new T.Color(paleta.fundo);
+      materiais.forEach(m => {
+        // Cores secundarias tambem ficam no lado legivel da paleta; conserva matiz e geometria.
+        const alvo = new T.Color(paleta.clara ? '#ffffff' : '#000000');
+        for (let j = 0; j < 30 && razaoFeed524('#' + m.color.getHexString(), paleta.fundo) < 4.5; j++) m.color.lerp(alvo, 0.12);
+        if (m.vertexColors) {
+          // O globo usa cores nos vertices; aplica a paleta em copia da geometria.
+          const mesh = []; objeto.traverse(n => { if (n.isMesh && n.material === m) mesh.push(n); });
+          mesh.forEach(n => { n.geometry = n.geometry.clone(); const a = n.geometry.attributes.color;
+            if (a) for (let j = 0; j < a.count; j++) { const col = new T.Color().setRGB(a.getX(j), a.getY(j), a.getZ(j));
+              for (let k = 0; k < 30 && razaoFeed524('#' + col.getHexString(), paleta.fundo) < 4.5; k++) col.lerp(alvo, 0.12);
+              a.setXYZ(j, col.r, col.g, col.b); }
+          });
+        }
+      });
+      const altura = Math.max(tam.y / 0.58, tam.x / ((W / H) * 0.86), 0.01);
+      const camera = new T.OrthographicCamera(-altura * W / H / 2, altura * W / H / 2, altura / 2, -altura / 2, 0.01, 200);
+      camera.position.set(0, 0, tam.z + 15); camera.lookAt(0, 0, 0);
+      const tipo = efeitoFeed524([spec.titulo, cn.texto].join(' '), o.acao);
+      const pos = objeto.position.clone(), giro = objeto.rotation.clone();
+      function desenhar(t) {
+        objeto.position.copy(pos); objeto.rotation.copy(giro); objeto.scale.setScalar(1);
+        // A alteracao fisica ja esta em curso no frame 1, independente do TTS.
+        const fase = t * 7 + 0.4;
+        if (tipo === 'pressao') objeto.scale.setScalar(1 + 0.025 * Math.sin(fase));
+        if (tipo === 'rachadura' || tipo === 'faisca') objeto.position.x += Math.sin(t * 38) * tam.x * 0.008;
+        if (tipo === 'movimento') objeto.rotation.z += 0.12 * Math.sin(fase);
+        R.render(sc, camera); c.globalAlpha = 1; c.drawImage(gl, 0, 0, W, H);
+        const x = W / 2, y = H / 2, ah = tam.y / altura * H, aw = tam.x / altura * H;
+        c.save(); c.translate(x, y); c.lineWidth = Math.max(5, W * 0.009); c.lineCap = 'round';
+        const cor = paleta.clara ? '#ffd16a' : '#174a70'; c.strokeStyle = cor; c.fillStyle = cor;
+        if (tipo === 'agua') for (let j = 0; j < 14; j++) { const q = (t * 1.2 + j / 14) % 1;
+          c.beginPath(); c.ellipse((j % 5 - 2) * aw * 0.18, (q - 0.5) * ah, 7, 20, 0.2, 0, Math.PI * 2); c.fill(); }
+        if (tipo === 'fogo') for (let j = 0; j < 7; j++) { const a = (j - 3) * aw * 0.11, h = ah * (0.12 + 0.04 * Math.sin(t * 19 + j));
+          c.fillStyle = j % 2 ? '#ffb43b' : '#ff592d'; c.beginPath(); c.moveTo(a - 15, ah * 0.35); c.quadraticCurveTo(a - 28, ah * 0.35 - h, a + Math.sin(t * 17 + j) * 18, ah * 0.35 - h * 1.6); c.quadraticCurveTo(a + 30, ah * 0.35 - h, a + 15, ah * 0.35); c.fill(); }
+        if (tipo === 'pressao') for (let j = 0; j < 3; j++) { const q = (t * 1.8 + j / 3 + 0.15) % 1;
+          c.globalAlpha = 0.85 * (1 - q); c.beginPath(); c.ellipse(0, -ah * 0.28, aw * (0.25 + q * 0.4), ah * (0.08 + q * 0.16), 0, Math.PI, Math.PI * 2); c.stroke(); }
+        if (tipo === 'gelo') for (let j = 0; j < 7; j++) { const a = j * 2.4, xx = Math.sin(a) * aw * 0.32, yy = Math.cos(a) * ah * 0.36, s = 14 + 7 * Math.sin(fase + j);
+          c.beginPath(); for (let k = 0; k < 6; k++) { const b = k * Math.PI / 3; c.moveTo(xx, yy); c.lineTo(xx + Math.cos(b) * s, yy + Math.sin(b) * s); } c.stroke(); }
+        if (tipo === 'faisca' || tipo === 'rachadura') for (let j = 0; j < 3; j++) { const xx = (j - 1) * aw * 0.2, dy = Math.sin(t * 23 + j) * 16;
+          c.beginPath(); c.moveTo(xx, -ah * 0.2); c.lineTo(xx + 25 + dy, -ah * 0.05); c.lineTo(xx - 10, ah * 0.08); c.lineTo(xx + dy, ah * 0.28); c.stroke(); }
+        c.restore();
+        // Medicao geometrica e paleta ficam disponiveis ao verificador; nenhum texto tecnico e desenhado.
+        tela.__feed524 = {versao:'lowpoly-feed-t524-v1', altura:ah/H, largura:aw/W, centro:[0.5,0.5], fundo:paleta.fundo,
+          contraste:Math.min(...materiais.map(m => razaoFeed524('#'+m.color.getHexString(),paleta.fundo))), efeito:tipo, tempo:t, cameraFixa:true, titulo:t>=0.5};
+        if (t >= 0.5) U.cartaz(c, spec, t, { fonte:'84px "Lilita One", sans-serif', y:170, fundo:'#FFD23F', borda:'#1B1B1B', cor:'#1B1B1B', altura_linha:100, dur:3.0 });
+      }
+      return {desenhar, dispose:() => { materiais.forEach(m => m.dispose()); objeto.traverse(n => { if (n.isMesh && n.material.vertexColors) n.geometry.dispose(); }); }};
+    })();
+
+
     // MODO de quem age, pela acao (o protagonista) e de quem assiste (figurantes)
     const MODO = {
       anda: ['anda', 'parado'], corre: ['corre', 'corre'], para_de_girar: ['surpreso', 'medo'], congela: ['frio', 'frio'], esquenta: ['calor', 'calor'],
@@ -1471,6 +1585,7 @@
 
     // ---------------------------------------------------------------- quadro
     function quadro(t) {
+      if (feed524 && feedAtivo524(spec, t)) { feed524.desenhar(t); return; }
       const { c: cn, i, k, local } = U.cenaEm(spec, t);
       pose3D(cenas[i], cn, t, k, local);
       c.globalAlpha = 1; c.drawImage(gl, 0, 0, W, H);
@@ -1490,7 +1605,7 @@
       U.ctaFinal(c, spec, t);
       U.legenda(c, spec, t, { fonte: '104px "Lilita One", sans-serif', y: H * 0.70, cor: '#FFFFFF', cor_ativa: '#FFD23F', contorno: 18, caixa: true, por_vez: 3 });
     }
-    return { quadro, dispose: () => { cenas.forEach(o => U3.liberarCena(o.sc)); R.dispose(); R.forceContextLoss(); } };
+    return { quadro, dispose: () => { if (feed524) feed524.dispose(); cenas.forEach(o => U3.liberarCena(o.sc)); R.dispose(); R.forceContextLoss(); } };
   }
   MOTORES.lowpoly = { criar };
 })();
