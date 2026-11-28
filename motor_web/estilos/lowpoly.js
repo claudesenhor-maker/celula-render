@@ -1383,7 +1383,11 @@
     // v5 (14/11, dono: "mais informacao para prender"): NIVEL DE PERIGO que sobe a cada cena (1..5 marcas), com a cor
     // indo do verde ao vermelho; no fim do video, borda vermelha pulsando. A luz da cena esquenta junto.
     const ROT_PERIGO = /^es/i.test(spec.idioma || '') ? 'PELIGRO' : /^pt/i.test(spec.idioma || '') ? 'PERIGO' : 'DANGER';
+    /* 28/11 (dono: medidor sem sentido): o PERIGO so' aparece em video de perigo de verdade -- spec.perigo (true/false) manda;
+       sem o campo, decide pelo texto (titulo + falas) */
+    const TEM_PERIGO = typeof spec.perigo === 'boolean' ? spec.perigo : /peligr|muer|morir|mata|quema|ahog|sobreviv|traga|explot|venen|danger|die|dying|death|dead|kill|deadly|surviv|drown|burn|explod|poison|sink|perig|morre|morte|afog|queim|sobreviv|venen/i.test([spec.titulo || ''].concat((spec.cenas || []).map((x) => x.texto || '')).join(' '));
     function perigo(i, t, local) {
+      if (!TEM_PERIGO) return;
       if (spec.titulo && t < 3.3) return;
       const N = spec.cenas.length, nivel = Math.min(5, 1 + Math.floor((i / Math.max(1, N - 1)) * 4.999)), ant = i > 0 ? Math.min(5, 1 + Math.floor(((i - 1) / Math.max(1, N - 1)) * 4.999)) : nivel;
       const cores = ['#5DBB63', '#B6D93A', '#FFD23F', '#FF9A3C', '#E8473C'];
@@ -1686,7 +1690,7 @@
         itens.forEach((it, j) => { const q = U.saida(U.clamp(tj(j) / 0.7, 0, 1)); if (q <= 0) return; const y = 790 - (itens.length - 1) * 140 + j * 280, x0 = 100;   /* v10: barras maiores e no meio da faixa livre (ficavam no terco de cima) */
           fonte(74); c.textAlign = 'left'; c.fillStyle = '#FFF'; c.fillText(String(it.texto || '').toUpperCase().slice(0, 26), x0, y - 62, L * 0.62);
           U.rr(c, x0, y, L, 116, 58); c.fillStyle = 'rgba(255,255,255,0.12)'; c.fill(); U.rr(c, x0, y, Math.max(60, L * (Math.abs(Number(it.valor) || 0) / vmax) * q), 116, 58); c.fillStyle = j === 0 ? '#FF5A3C' : '#4FA8FF'; c.fill();
-          if (!e.sem_valor) { const v = (Number(it.valor) || 0) * q; fonte(70); c.textAlign = 'right'; c.fillStyle = '#FFD23F'; c.fillText((Math.abs(v) >= 10 ? Math.round(v) : v.toFixed(1)).toString().replace('.', ',') + (e.unidade ? ' ' + e.unidade : ''), x0 + L, y - 62); } });
+          if (!e.sem_valor) { const v = (Number(it.valor) || 0) * q; fonte(70); c.textAlign = 'right'; c.fillStyle = '#FFD23F'; c.fillText((Math.abs(v) >= 10 ? Math.round(v) : v.toFixed(1)).toString().replace('.', /^en/i.test(spec.idioma || '') ? '.' : ',') + (e.unidade ? ' ' + e.unidade : ''), x0 + L, y - 62); } });
       } else if (e.tipo === 'medidor') {
         const q = U.saida(U.clamp(tj(0) / 1.0, 0, 1)), vmax = Number(e.max) || 100, v = U.clamp((Number(e.valor) || 0) / vmax, 0, 1) * q, cx = W / 2, cy = 900, R = 300;
         fonte(72); c.fillStyle = '#FFF'; c.fillText(String(e.texto || '').toUpperCase().slice(0, 26), cx, 480, W - 100);
