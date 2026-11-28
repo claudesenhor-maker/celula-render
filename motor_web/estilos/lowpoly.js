@@ -1009,7 +1009,7 @@
       if (spec.cell_id !== CANAL524) return null;
       const o = cenas[0], cn = spec.cenas[0];
       const origem = (o.criados || []).find(g => !g.userData.ehPessoa) || o.globoG || o.gente[0];
-      if (!origem) throw new Error('T524: abertura sem objeto da historia');
+      if (!origem) return null;   /* 28/11: sem objeto na 1a cena o insert e' pulado -- antes o throw derrubava o render inteiro */
       const materiais = [], cores = [];
       function copiar(no) {
         if (no.userData.sombra === 1 || no.isSprite || no.isPoints) return null;
