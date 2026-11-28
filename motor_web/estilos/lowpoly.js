@@ -120,7 +120,7 @@
     cabelo: ['#3A2A22', '#1E1A18', '#B5652E', '#E8C46A'], calca: '#3B4A63',
   };
   const CEU = { // [topo, horizonte] por hora
-    dia: ['#2C7DD6', '#73BCF3', '#CFEFFF', '#FFF2D6'],   // v6: 4 tons (zenite, ceu, horizonte, brilho quente) entardecer: ['#3D3B7A', '#FF9E6B'], aurora: ['#6D7FD1', '#FFD3A8'], noite: ['#05081C', '#1C2A55'],
+    dia: ['#2C7DD6', '#73BCF3', '#CFEFFF', '#FFF2D6'],   /* v6: 4 tons (zenite, ceu, horizonte, brilho quente); 28/11: o // aqui comentava entardecer/aurora/noite e acao amanhece/aurora/incendio/erupcao derrubava o render */ entardecer: ['#3D3B7A', '#FF9E6B'], aurora: ['#6D7FD1', '#FFD3A8'], noite: ['#05081C', '#1C2A55'],
     tempestade: ['#3E4655', '#8A94A3'], quente: ['#E4572E', '#FFD27A'], frio: ['#9CC9E8', '#F2FAFF'], cinza: ['#7C7C7C', '#C9C2B4'],
     espaco: ['#02030C', '#0B1030'],
   };
